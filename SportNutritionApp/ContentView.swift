@@ -96,7 +96,7 @@ private struct WorkoutDetailView: View {
                     position: workout.nextExercisePosition,
                     isBodyweight: isBodyweight
                 )
-                exercise.workout = workout
+                workout.exercises.append(exercise)
                 modelContext.insert(exercise)
             }
         }
