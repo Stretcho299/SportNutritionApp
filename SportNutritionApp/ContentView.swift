@@ -64,6 +64,8 @@ private struct WorkoutDetailView: View {
     @Environment(\.modelContext) private var modelContext
     let workout: Workout
     @State private var isPresentingNewExercise = false
+    @State private var exerciseBeingEdited: WorkoutExercise?
+    @State private var exercisePendingDeletion: WorkoutExercise?
 
     var body: some View {
         Group {
@@ -74,19 +76,36 @@ private struct WorkoutDetailView: View {
                     description: Text("Cette séance ne contient encore aucun exercice.")
                 )
             } else {
-                List(workout.orderedExercises) { exercise in
-                    NavigationLink {
-                        WorkoutExerciseDetailView(exercise: exercise)
-                    } label: {
-                        Text(exercise.name)
+                List {
+                    ForEach(workout.orderedExercises) { exercise in
+                        NavigationLink {
+                            WorkoutExerciseDetailView(exercise: exercise)
+                        } label: {
+                            Text(exercise.name)
+                        }
+                        .swipeActions(edge: .trailing) {
+                            Button("Supprimer", role: .destructive) {
+                                exercisePendingDeletion = exercise
+                            }
+                            Button("Modifier") {
+                                exerciseBeingEdited = exercise
+                            }
+                            .tint(.blue)
+                        }
                     }
+                    .onMove(perform: moveExercises)
                 }
             }
         }
         .navigationTitle(workout.name)
         .toolbar {
-            Button("Ajouter un exercice", systemImage: "plus") {
-                isPresentingNewExercise = true
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                if !workout.orderedExercises.isEmpty {
+                    EditButton()
+                }
+                Button("Ajouter un exercice", systemImage: "plus") {
+                    isPresentingNewExercise = true
+                }
             }
         }
         .sheet(isPresented: $isPresentingNewExercise) {
@@ -99,6 +118,47 @@ private struct WorkoutDetailView: View {
                 workout.exercises.append(exercise)
                 modelContext.insert(exercise)
             }
+        }
+        .sheet(item: $exerciseBeingEdited) { exercise in
+            EditWorkoutExerciseSheet(exercise: exercise)
+        }
+        .confirmationDialog(
+            "Supprimer cet exercice ?",
+            isPresented: Binding(
+                get: { exercisePendingDeletion != nil },
+                set: { if !$0 { exercisePendingDeletion = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Supprimer", role: .destructive) {
+                if let exercisePendingDeletion {
+                    delete(exercisePendingDeletion)
+                }
+                exercisePendingDeletion = nil
+            }
+            Button("Annuler", role: .cancel) {
+                exercisePendingDeletion = nil
+            }
+        } message: {
+            Text("Ses séries prévues seront également supprimées.")
+        }
+    }
+
+    private func moveExercises(from source: IndexSet, to destination: Int) {
+        var exercises = workout.orderedExercises
+        exercises.move(fromOffsets: source, toOffset: destination)
+        updatePositions(of: exercises)
+    }
+
+    private func delete(_ exercise: WorkoutExercise) {
+        let remainingExercises = workout.orderedExercises.filter { $0 !== exercise }
+        modelContext.delete(exercise)
+        updatePositions(of: remainingExercises)
+    }
+
+    private func updatePositions(of exercises: [WorkoutExercise]) {
+        for (position, exercise) in exercises.enumerated() {
+            exercise.position = position
         }
     }
 }
@@ -256,6 +316,50 @@ private struct NewWorkoutExerciseSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Créer") {
                         createExercise(trimmedName, isBodyweight)
+                        dismiss()
+                    }
+                    .disabled(trimmedName.isEmpty)
+                }
+            }
+        }
+    }
+}
+
+private struct EditWorkoutExerciseSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let exercise: WorkoutExercise
+    @State private var name: String
+    @State private var isBodyweight: Bool
+
+    init(exercise: WorkoutExercise) {
+        self.exercise = exercise
+        _name = State(initialValue: exercise.name)
+        _isBodyweight = State(initialValue: exercise.isBodyweight)
+    }
+
+    private var trimmedName: String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Nom de l’exercice", text: $name)
+                    .textInputAutocapitalization(.sentences)
+                Toggle("Exercice au poids du corps", isOn: $isBodyweight)
+            }
+            .navigationTitle("Modifier l’exercice")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Annuler") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Enregistrer") {
+                        exercise.name = trimmedName
+                        exercise.isBodyweight = isBodyweight
                         dismiss()
                     }
                     .disabled(trimmedName.isEmpty)
