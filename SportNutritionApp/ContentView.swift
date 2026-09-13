@@ -5,11 +5,13 @@ struct ContentView: View {
     var body: some View {
         TabView {
             ForEach(AppSection.allCases) { section in
-                switch section {
-                case .workouts:
-                    WorkoutListView()
-                case .nutrition:
-                    SectionPlaceholderView(section: section)
+                Group {
+                    switch section {
+                    case .workouts:
+                        WorkoutListView()
+                    case .nutrition:
+                        SectionPlaceholderView(section: section)
+                    }
                 }
                 .tabItem {
                     Label(section.title, systemImage: section.systemImage)
