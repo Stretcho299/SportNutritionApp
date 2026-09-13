@@ -14,6 +14,10 @@ final class Workout {
     var orderedExercises: [WorkoutExercise] {
         exercises.sorted { $0.position < $1.position }
     }
+
+    var nextExercisePosition: Int {
+        (exercises.map(\.position).max() ?? -1) + 1
+    }
 }
 
 @Model

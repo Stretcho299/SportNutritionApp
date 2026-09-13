@@ -61,7 +61,9 @@ private struct WorkoutListView: View {
 }
 
 private struct WorkoutDetailView: View {
+    @Environment(\.modelContext) private var modelContext
     let workout: Workout
+    @State private var isPresentingNewExercise = false
 
     var body: some View {
         Group {
@@ -78,6 +80,60 @@ private struct WorkoutDetailView: View {
             }
         }
         .navigationTitle(workout.name)
+        .toolbar {
+            Button("Ajouter un exercice", systemImage: "plus") {
+                isPresentingNewExercise = true
+            }
+        }
+        .sheet(isPresented: $isPresentingNewExercise) {
+            NewWorkoutExerciseSheet { name, isBodyweight in
+                let exercise = WorkoutExercise(
+                    name: name,
+                    position: workout.nextExercisePosition,
+                    isBodyweight: isBodyweight
+                )
+                exercise.workout = workout
+                modelContext.insert(exercise)
+            }
+        }
+    }
+}
+
+private struct NewWorkoutExerciseSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var isBodyweight = false
+
+    let createExercise: (String, Bool) -> Void
+
+    private var trimmedName: String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Nom de l’exercice", text: $name)
+                    .textInputAutocapitalization(.sentences)
+                Toggle("Exercice au poids du corps", isOn: $isBodyweight)
+            }
+            .navigationTitle("Nouvel exercice")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Annuler") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Créer") {
+                        createExercise(trimmedName, isBodyweight)
+                        dismiss()
+                    }
+                    .disabled(trimmedName.isEmpty)
+                }
+            }
+        }
     }
 }
 
