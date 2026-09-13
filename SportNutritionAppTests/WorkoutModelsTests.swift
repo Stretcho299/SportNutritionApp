@@ -3,6 +3,18 @@ import XCTest
 @testable import SportNutritionApp
 
 final class WorkoutModelsTests: XCTestCase {
+    func testPersistsNewWorkoutName() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+
+        context.insert(Workout(name: "Séance libre"))
+        try context.save()
+
+        let readingContext = ModelContext(container)
+        let workouts = try readingContext.fetch(FetchDescriptor<Workout>())
+        XCTAssertEqual(workouts.map(\.name), ["Séance libre"])
+    }
+
     func testPersistsOrderedWorkoutHierarchyAndIndependentSetValues() throws {
         let container = try makeContainer()
         let writingContext = ModelContext(container)
