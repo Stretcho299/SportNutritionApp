@@ -31,7 +31,7 @@ final class WorkoutModelsTests: XCTestCase {
 
         let readingContext = ModelContext(container)
         let persistedWorkout = try XCTUnwrap(readingContext.fetch(FetchDescriptor<Workout>()).first)
-        let exercises = persistedWorkout.exercises.sorted { $0.position < $1.position }
+        let exercises = persistedWorkout.orderedExercises
         XCTAssertEqual(persistedWorkout.name, "Haut du corps")
         XCTAssertEqual(exercises.map(\.name), ["Développé couché", "Tirage horizontal"])
 
