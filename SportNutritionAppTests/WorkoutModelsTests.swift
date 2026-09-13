@@ -49,9 +49,11 @@ final class WorkoutModelsTests: XCTestCase {
 
         context.delete(workout)
         try context.save()
-        XCTAssertTrue(try readingContext.fetch(FetchDescriptor<Workout>()).isEmpty)
-        XCTAssertTrue(try readingContext.fetch(FetchDescriptor<WorkoutExercise>()).isEmpty)
-        XCTAssertTrue(try readingContext.fetch(FetchDescriptor<WorkoutSet>()).isEmpty)
+
+        let verificationContext = ModelContext(container)
+        XCTAssertTrue(try verificationContext.fetch(FetchDescriptor<Workout>()).isEmpty)
+        XCTAssertTrue(try verificationContext.fetch(FetchDescriptor<WorkoutExercise>()).isEmpty)
+        XCTAssertTrue(try verificationContext.fetch(FetchDescriptor<WorkoutSet>()).isEmpty)
     }
 
     private func makeContainer() throws -> ModelContainer {
