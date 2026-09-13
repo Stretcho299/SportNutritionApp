@@ -3,6 +3,32 @@ import XCTest
 @testable import SportNutritionApp
 
 final class WorkoutModelsTests: XCTestCase {
+    func testPersistsNewExerciseAttachedToWorkoutAfterExistingExercises() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let workout = Workout(name: "Haut du corps")
+        workout.exercises = [WorkoutExercise(name: "Développé couché", position: 3)]
+        context.insert(workout)
+        try context.save()
+
+        let exercise = WorkoutExercise(
+            name: "Tractions",
+            position: workout.nextExercisePosition,
+            isBodyweight: true
+        )
+        exercise.workout = workout
+        context.insert(exercise)
+        try context.save()
+
+        let readingContext = ModelContext(container)
+        let persistedWorkout = try XCTUnwrap(readingContext.fetch(FetchDescriptor<Workout>()).first)
+        let exercises = persistedWorkout.orderedExercises
+        XCTAssertEqual(exercises.map(\.name), ["Développé couché", "Tractions"])
+        XCTAssertEqual(exercises.map(\.position), [3, 4])
+        XCTAssertEqual(exercises.last?.workout?.name, "Haut du corps")
+        XCTAssertTrue(exercises.last?.isBodyweight ?? false)
+    }
+
     func testPersistsNewWorkoutName() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
