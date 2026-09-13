@@ -10,6 +10,10 @@ final class Workout {
     init(name: String) {
         self.name = name
     }
+
+    var orderedExercises: [WorkoutExercise] {
+        exercises.sorted { $0.position < $1.position }
+    }
 }
 
 @Model

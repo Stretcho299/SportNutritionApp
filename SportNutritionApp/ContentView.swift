@@ -37,7 +37,11 @@ private struct WorkoutListView: View {
                     )
                 } else {
                     List(workouts) { workout in
-                        Text(workout.name)
+                        NavigationLink {
+                            WorkoutDetailView(workout: workout)
+                        } label: {
+                            Text(workout.name)
+                        }
                     }
                 }
             }
@@ -53,6 +57,27 @@ private struct WorkoutListView: View {
                 }
             }
         }
+    }
+}
+
+private struct WorkoutDetailView: View {
+    let workout: Workout
+
+    var body: some View {
+        Group {
+            if workout.orderedExercises.isEmpty {
+                ContentUnavailableView(
+                    "Aucun exercice",
+                    systemImage: "dumbbell",
+                    description: Text("Cette séance ne contient encore aucun exercice.")
+                )
+            } else {
+                List(workout.orderedExercises) { exercise in
+                    Text(exercise.name)
+                }
+            }
+        }
+        .navigationTitle(workout.name)
     }
 }
 
