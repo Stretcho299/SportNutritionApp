@@ -40,12 +40,16 @@ Le dépôt public n’exige aucun secret, compte de signature ou service macOS p
 
 ## Capture visuelle de la CI
 
-Après les tests, la CI démarre le simulateur iPhone, installe et lance
-l’application, puis produit une capture PNG réelle. Elle est publiée sous le nom
-exact d’artifact **`iphone-simulator-screenshot`** ; aucune image n’est ajoutée au
-dépôt Git.
+Les UI tests exécutent le parcours Séances sur le simulateur iPhone avec un
+conteneur SwiftData en mémoire, activé uniquement par l’argument XCUITest
+`-ui-testing`. Le stockage est donc vide et déterministe, sans créer de données
+de test dans l’application normale. Les tests conservent des captures PNG de
+l’état vide, de la liste, du détail de séance, du détail d’exercice et du
+formulaire d’ajout de série.
 
-Pour la récupérer depuis GitHub : ouvrez l’onglet **Actions**, sélectionnez une
-exécution du workflow **iOS CI**, puis, au bas de la page de l’exécution, ouvrez
-la section **Artifacts** et téléchargez **`iphone-simulator-screenshot`**.
-L’archive téléchargée contient le fichier `sport-nutrition-app.png`.
+La CI les exporte dans l’artifact unique
+**`iphone-simulator-workout-screenshots`** ; aucune image n’est ajoutée au dépôt
+Git. Pour le récupérer depuis GitHub, ouvrez l’onglet **Actions**, sélectionnez
+une exécution du workflow **iOS CI**, puis téléchargez
+**`iphone-simulator-workout-screenshots`** dans la section **Artifacts**, en bas
+de la page de l’exécution. L’archive contient les PNG nommés par le UI test.
