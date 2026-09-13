@@ -28,20 +28,25 @@ jobs:
         run: >-
           xcodebuild test -project SportNutritionApp.xcodeproj -scheme SportNutritionApp
           -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}'
-          -derivedDataPath "$RUNNER_TEMP/SportNutritionAppDerivedData" CODE_SIGNING_ALLOWED=NO
-      - name: Capture iPhone Simulator screenshot
+          -derivedDataPath "$RUNNER_TEMP/SportNutritionAppDerivedData"
+          -resultBundlePath "$RUNNER_TEMP/SportNutritionApp.xcresult" CODE_SIGNING_ALLOWED=NO INFOPLIST_KEY_CFBundleDevelopmentRegion=fr
+      - name: Export UI test screenshots
         id: screenshot
         run: |
-          app_path="$RUNNER_TEMP/SportNutritionAppDerivedData/Build/Products/Debug-iphonesimulator/SportNutritionApp.app"
-          screenshot_path="$RUNNER_TEMP/sport-nutrition-app.png"
-          xcrun simctl install "${{ steps.simulator.outputs.udid }}" "$app_path"
-          xcrun simctl launch "${{ steps.simulator.outputs.udid }}" com.stretcho299.SportNutritionApp
-          sleep 3
-          xcrun simctl io "${{ steps.simulator.outputs.udid }}" screenshot "$screenshot_path"
-          echo "path=$screenshot_path" >> "$GITHUB_OUTPUT"
-      - name: Upload iPhone Simulator screenshot
+          screenshots_path="$RUNNER_TEMP/workout-ui-screenshots"
+          xcrun xcresulttool export attachments \
+            --path "$RUNNER_TEMP/SportNutritionApp.xcresult" \
+            --output-path "$screenshots_path"
+          manifest_path="$screenshots_path/manifest.json"
+          jq -r '.[].attachments[] | [.exportedFileName, .suggestedHumanReadableName] | @tsv' "$manifest_path" | while IFS=$'\t' read -r exported_file_name suggested_name; do
+            capture_name="${suggested_name%%_0_*}.png"
+            mv "$screenshots_path/$exported_file_name" "$screenshots_path/$capture_name"
+          done
+          test -n "$(find "$screenshots_path" -name '*.png' -print -quit)"
+          echo "path=$screenshots_path" >> "$GITHUB_OUTPUT"
+      - name: Upload iPhone Simulator screenshots
         uses: actions/upload-artifact@v4
         with:
-          name: iphone-simulator-screenshot
+          name: iphone-simulator-workout-screenshots
           path: ${{ steps.screenshot.outputs.path }}
           if-no-files-found: error
