@@ -122,7 +122,7 @@ private struct WorkoutExerciseDetailView: View {
                         Text("Série \(set.position + 1)")
                         HStack {
                             if !exercise.isBodyweight, let weight = set.weightInKilograms {
-                                Text("\(weight, specifier: \"%.2f\") kg")
+                                Text("\(weight, specifier: "%.2f") kg")
                             }
                             Text("\(set.repetitions) répétitions")
                             Text("\(set.restDurationSeconds) s")
