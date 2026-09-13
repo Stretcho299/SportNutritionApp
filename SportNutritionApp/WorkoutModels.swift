@@ -34,6 +34,14 @@ final class WorkoutExercise {
         self.position = position
         self.isBodyweight = isBodyweight
     }
+
+    var orderedSets: [WorkoutSet] {
+        sets.sorted { $0.position < $1.position }
+    }
+
+    var nextSetPosition: Int {
+        (sets.map(\.position).max() ?? -1) + 1
+    }
 }
 
 @Model
