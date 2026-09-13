@@ -24,6 +24,13 @@ jobs:
         run: |
           xcrun simctl boot "${{ steps.simulator.outputs.udid }}" || true
           xcrun simctl bootstatus "${{ steps.simulator.outputs.udid }}" -b
+      - name: Configure iPhone Simulator locale for UI tests
+        run: |
+          xcrun simctl spawn "${{ steps.simulator.outputs.udid }}" defaults write NSGlobalDomain AppleLanguages -array fr
+          xcrun simctl spawn "${{ steps.simulator.outputs.udid }}" defaults write NSGlobalDomain AppleLocale -string fr_FR
+          xcrun simctl shutdown "${{ steps.simulator.outputs.udid }}"
+          xcrun simctl boot "${{ steps.simulator.outputs.udid }}"
+          xcrun simctl bootstatus "${{ steps.simulator.outputs.udid }}" -b
       - name: Build and test
         run: >-
           xcodebuild test -project SportNutritionApp.xcodeproj -scheme SportNutritionApp

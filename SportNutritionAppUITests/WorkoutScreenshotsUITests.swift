@@ -41,6 +41,7 @@ final class WorkoutScreenshotsUITests: XCTestCase {
         exerciseName.tap()
 
         XCTAssertTrue(app.navigationBars["Exercice de test"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Retour"].waitForExistence(timeout: 5))
         capture("04-exercise-detail.png")
 
         app.buttons["Ajouter une série"].tap()
