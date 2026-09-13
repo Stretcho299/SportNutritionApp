@@ -3,6 +3,56 @@ import XCTest
 @testable import SportNutritionApp
 
 final class WorkoutModelsTests: XCTestCase {
+    func testPersistsNewWeightedAndBodyweightSetsWithNextPositions() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let workout = Workout(name: "Haut du corps")
+        let weightedExercise = WorkoutExercise(name: "Développé couché", position: 0)
+        weightedExercise.sets = [
+            WorkoutSet(position: 2, weightInKilograms: 60, repetitions: 8, restDurationSeconds: 90)
+        ]
+        let bodyweightExercise = WorkoutExercise(name: "Tractions", position: 1, isBodyweight: true)
+        workout.exercises = [weightedExercise, bodyweightExercise]
+        context.insert(workout)
+        try context.save()
+
+        let weightedSet = WorkoutSet(
+            position: weightedExercise.nextSetPosition,
+            weightInKilograms: 70.5,
+            repetitions: 10,
+            restDurationSeconds: 120
+        )
+        weightedSet.exercise = weightedExercise
+        context.insert(weightedSet)
+
+        let bodyweightSet = WorkoutSet(
+            position: bodyweightExercise.nextSetPosition,
+            weightInKilograms: nil,
+            repetitions: 12,
+            restDurationSeconds: 45
+        )
+        bodyweightSet.exercise = bodyweightExercise
+        context.insert(bodyweightSet)
+        try context.save()
+
+        let readingContext = ModelContext(container)
+        let persistedWorkout = try XCTUnwrap(readingContext.fetch(FetchDescriptor<Workout>()).first)
+        let exercises = persistedWorkout.orderedExercises
+        let persistedWeightedSets = exercises[0].orderedSets
+        let persistedBodyweightSets = exercises[1].orderedSets
+
+        XCTAssertEqual(persistedWeightedSets.map(\.position), [2, 3])
+        XCTAssertEqual(persistedWeightedSets.last?.weightInKilograms, 70.5)
+        XCTAssertEqual(persistedWeightedSets.last?.repetitions, 10)
+        XCTAssertEqual(persistedWeightedSets.last?.restDurationSeconds, 120)
+        XCTAssertEqual(persistedWeightedSets.last?.exercise?.name, "Développé couché")
+        XCTAssertEqual(persistedBodyweightSets.map(\.position), [0])
+        XCTAssertNil(persistedBodyweightSets.first?.weightInKilograms)
+        XCTAssertEqual(persistedBodyweightSets.first?.repetitions, 12)
+        XCTAssertEqual(persistedBodyweightSets.first?.restDurationSeconds, 45)
+        XCTAssertEqual(persistedBodyweightSets.first?.exercise?.name, "Tractions")
+    }
+
     func testPersistsNewExerciseAttachedToWorkoutAfterExistingExercises() throws {
         let container = try makeContainer()
         let context = ModelContext(container)

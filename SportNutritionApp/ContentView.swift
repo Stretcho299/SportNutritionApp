@@ -75,7 +75,11 @@ private struct WorkoutDetailView: View {
                 )
             } else {
                 List(workout.orderedExercises) { exercise in
-                    Text(exercise.name)
+                    NavigationLink {
+                        WorkoutExerciseDetailView(exercise: exercise)
+                    } label: {
+                        Text(exercise.name)
+                    }
                 }
             }
         }
@@ -94,6 +98,130 @@ private struct WorkoutDetailView: View {
                 )
                 exercise.workout = workout
                 modelContext.insert(exercise)
+            }
+        }
+    }
+}
+
+private struct WorkoutExerciseDetailView: View {
+    @Environment(\.modelContext) private var modelContext
+    let exercise: WorkoutExercise
+    @State private var isPresentingNewSet = false
+
+    var body: some View {
+        Group {
+            if exercise.orderedSets.isEmpty {
+                ContentUnavailableView(
+                    "Aucune série",
+                    systemImage: "list.number",
+                    description: Text("Ajoutez une série prévue pour cet exercice.")
+                )
+            } else {
+                List(exercise.orderedSets) { set in
+                    VStack(alignment: .leading) {
+                        Text("Série \(set.position + 1)")
+                        HStack {
+                            if !exercise.isBodyweight, let weight = set.weightInKilograms {
+                                Text("\(weight, specifier: "%.2f") kg")
+                            }
+                            Text("\(set.repetitions) répétitions")
+                            Text("\(set.restDurationSeconds) s")
+                        }
+                        .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .navigationTitle(exercise.name)
+        .toolbar {
+            Button("Ajouter une série", systemImage: "plus") {
+                isPresentingNewSet = true
+            }
+        }
+        .sheet(isPresented: $isPresentingNewSet) {
+            NewWorkoutSetSheet(isBodyweight: exercise.isBodyweight) { weight, repetitions, restDurationSeconds in
+                let set = WorkoutSet(
+                    position: exercise.nextSetPosition,
+                    weightInKilograms: weight,
+                    repetitions: repetitions,
+                    restDurationSeconds: restDurationSeconds
+                )
+                set.exercise = exercise
+                modelContext.insert(set)
+            }
+        }
+    }
+}
+
+private struct NewWorkoutSetSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var weightText = ""
+    @State private var repetitionsText = ""
+    @State private var restDurationSeconds = 90
+
+    let isBodyweight: Bool
+    let createSet: (Double?, Int, Int) -> Void
+
+    private var parsedWeight: Double? {
+        let normalizedWeight = weightText
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: ",", with: ".")
+        return Double(normalizedWeight)
+    }
+
+    private var repetitions: Int? {
+        guard let value = Int(repetitionsText), value > 0 else {
+            return nil
+        }
+        return value
+    }
+
+    private var isValid: Bool {
+        guard repetitions != nil else {
+            return false
+        }
+        return isBodyweight || (parsedWeight ?? -1) >= 0
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                if !isBodyweight {
+                    TextField("Charge (kg)", text: $weightText)
+                        .keyboardType(.decimalPad)
+                }
+                TextField("Répétitions", text: $repetitionsText)
+                    .keyboardType(.numberPad)
+                Picker("Temps de repos", selection: $restDurationSeconds) {
+                    Text("30 s").tag(30)
+                    Text("45 s").tag(45)
+                    Text("1 min").tag(60)
+                    Text("1 min 30").tag(90)
+                    Text("2 min").tag(120)
+                    Text("2 min 30").tag(150)
+                    Text("3 min").tag(180)
+                    Text("4 min").tag(240)
+                    Text("5 min").tag(300)
+                }
+            }
+            .navigationTitle("Nouvelle série")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Annuler") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Créer") {
+                        guard let repetitions else {
+                            return
+                        }
+                        createSet(isBodyweight ? nil : parsedWeight, repetitions, restDurationSeconds)
+                        dismiss()
+                    }
+                    .disabled(!isValid)
+                }
             }
         }
     }
