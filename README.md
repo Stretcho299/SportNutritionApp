@@ -37,3 +37,15 @@ xcodebuild test -project SportNutritionApp.xcodeproj -scheme SportNutritionApp \
 
 Elle choisit automatiquement un simulateur iPhone présent sur le runner `macos-15`.
 Le dépôt public n’exige aucun secret, compte de signature ou service macOS payant.
+
+## Capture visuelle de la CI
+
+Après les tests, la CI démarre le simulateur iPhone, installe et lance
+l’application, puis produit une capture PNG réelle. Elle est publiée sous le nom
+exact d’artifact **`iphone-simulator-screenshot`** ; aucune image n’est ajoutée au
+dépôt Git.
+
+Pour la récupérer depuis GitHub : ouvrez l’onglet **Actions**, sélectionnez une
+exécution du workflow **iOS CI**, puis, au bas de la page de l’exécution, ouvrez
+la section **Artifacts** et téléchargez **`iphone-simulator-screenshot`**.
+L’archive téléchargée contient le fichier `sport-nutrition-app.png`.
