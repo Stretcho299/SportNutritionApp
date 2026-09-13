@@ -20,7 +20,28 @@ jobs:
           simulator_udid="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/ { print $2; exit }')"
           test -n "$simulator_udid"
           echo "udid=$simulator_udid" >> "$GITHUB_OUTPUT"
+      - name: Start iPhone Simulator
+        run: |
+          xcrun simctl boot "${{ steps.simulator.outputs.udid }}" || true
+          xcrun simctl bootstatus "${{ steps.simulator.outputs.udid }}" -b
       - name: Build and test
         run: >-
           xcodebuild test -project SportNutritionApp.xcodeproj -scheme SportNutritionApp
-          -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}' CODE_SIGNING_ALLOWED=NO
+          -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}'
+          -derivedDataPath "$RUNNER_TEMP/SportNutritionAppDerivedData" CODE_SIGNING_ALLOWED=NO
+      - name: Capture iPhone Simulator screenshot
+        id: screenshot
+        run: |
+          app_path="$RUNNER_TEMP/SportNutritionAppDerivedData/Build/Products/Debug-iphonesimulator/SportNutritionApp.app"
+          screenshot_path="$RUNNER_TEMP/sport-nutrition-app.png"
+          xcrun simctl install "${{ steps.simulator.outputs.udid }}" "$app_path"
+          xcrun simctl launch "${{ steps.simulator.outputs.udid }}" com.stretcho299.SportNutritionApp
+          sleep 3
+          xcrun simctl io "${{ steps.simulator.outputs.udid }}" screenshot "$screenshot_path"
+          echo "path=$screenshot_path" >> "$GITHUB_OUTPUT"
+      - name: Upload iPhone Simulator screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: iphone-simulator-screenshot
+          path: ${{ steps.screenshot.outputs.path }}
+          if-no-files-found: error
