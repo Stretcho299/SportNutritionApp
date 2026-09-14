@@ -27,21 +27,24 @@ function openOrganizeMenu() {
   fireEvent.click(screen.getByLabelText("Réorganiser les exercices"));
   return screen.getByRole("dialog", { name: "Organisation de la séance" });
 }
-function createExercise(name: string) {
+function createExercise(name: string, count = 1, rest = 90) {
   fireEvent.click(within(openAddMenu()).getByText("Ajouter un exercice"));
   fireEvent.change(screen.getByLabelText("Nom"), { target: { value: name } });
+  fireEvent.change(screen.getByLabelText("Nombre de séries initiales"), {
+    target: { value: String(count) },
+  });
+  fireEvent.change(screen.getByLabelText("Repos par défaut (secondes)"), {
+    target: { value: String(rest) },
+  });
   fireEvent.click(screen.getByText("Enregistrer"));
 }
-function createSet(weight: string) {
-  fireEvent.click(screen.getByText("+ Ajouter une série"));
-  const form = within(screen.getByRole("dialog", { name: "Nouvelle série" }));
-  fireEvent.change(form.getByLabelText("Charge"), {
+function fillSet(weight: string, index = 0) {
+  fireEvent.change(screen.getAllByLabelText("Charge (kg)")[index], {
     target: { value: weight },
   });
-  fireEvent.change(form.getByLabelText("Répétitions"), {
+  fireEvent.change(screen.getAllByLabelText("Répétitions")[index], {
     target: { value: "8" },
   });
-  fireEvent.click(form.getByText("Enregistrer"));
 }
 function selectExercise(name: string) {
   fireEvent.click(
@@ -115,18 +118,19 @@ it("renames the workout from the organization sheet", async () => {
   expect(storedWorkouts()[0].name).toBe("Pull");
 });
 
-it("automatically selects the first exercise and shows only add-series in empty zone 3", async () => {
+it("automatically selects the first exercise and displays its blank initial set", async () => {
   await openEmptyWorkout();
   createExercise("Squat");
   expect(screen.getByRole("heading", { name: "Squat" })).toBeInTheDocument();
   expect(screen.getByRole("button", { pressed: true })).toHaveTextContent(
     "Squat",
   );
-  expect(seriesRegion("Squat").textContent).toBe("+ Ajouter une série");
+  expect(screen.getByLabelText("Répétitions")).toHaveValue(null);
+  expect(screen.getByLabelText("Charge (kg)")).toHaveValue(null);
   expect(
     screen.getByRole("button", { name: "Options avancées" }),
   ).toHaveTextContent(/^Options avancées$/);
-  createSet("80");
+  fillSet("80");
   const zone = within(seriesRegion("Squat"));
   expect(zone.getByRole("heading", { name: "SÉRIE 1" })).toBeInTheDocument();
   expect(zone.getByText("Squat")).toBeInTheDocument();
@@ -141,7 +145,7 @@ it("automatically selects the first exercise and shows only add-series in empty 
 it("preserves selection when adding exercises and switches both exercise and set data", async () => {
   await openEmptyWorkout();
   createExercise("Squat");
-  createSet("80");
+  fillSet("80");
   createExercise("Row");
   expect(screen.getByRole("heading", { name: "Squat" })).toBeInTheDocument();
   expect(screen.getByLabelText("Charge (kg)")).toHaveValue(80);
@@ -149,8 +153,8 @@ it("preserves selection when adding exercises and switches both exercise and set
   expect(
     screen.queryByRole("region", { name: "Séries de Squat" }),
   ).not.toBeInTheDocument();
-  expect(screen.queryByLabelText("Charge (kg)")).not.toBeInTheDocument();
-  createSet("40");
+  expect(screen.getByLabelText("Charge (kg)")).toHaveValue(null);
+  fillSet("40");
   createExercise("Curl");
   expect(screen.getByRole("heading", { name: "Row" })).toBeInTheDocument();
   expect(screen.getByLabelText("Charge (kg)")).toHaveValue(40);
@@ -161,7 +165,7 @@ it("preserves selection when adding exercises and switches both exercise and set
 it("edits set values inline, persists them, and rejects invalid values", async () => {
   const view = await openEmptyWorkout();
   createExercise("Squat");
-  createSet("80");
+  fillSet("80");
   for (const [label, value] of [
     ["Répétitions", "12"],
     ["Charge (kg)", "82.5"],
@@ -233,11 +237,12 @@ it("reorders exercises in a dedicated sheet and retains selection and persisted 
 it("reorders and deletes sets without affecting another exercise", async () => {
   await openEmptyWorkout();
   createExercise("Row");
-  createSet("40");
+  fillSet("40");
   createExercise("Squat");
   selectExercise("Squat");
-  createSet("80");
-  createSet("90");
+  fillSet("80");
+  fireEvent.click(screen.getByText("+ Ajouter une série"));
+  fillSet("90", 1);
   expect(screen.getByLabelText("Monter la série 1")).toBeDisabled();
   expect(screen.getByLabelText("Descendre la série 2")).toBeDisabled();
   fireEvent.click(screen.getByLabelText("Monter la série 2"));
@@ -275,4 +280,99 @@ it("selects a remaining exercise after deletion and restores the empty state aft
     screen.getByRole("heading", { name: "Aucun exercice" }),
   ).toBeInTheDocument();
   expect(screen.queryByText("+ Ajouter une série")).not.toBeInTheDocument();
+});
+
+it("creates N blank sets with the requested rest and preserves blanks after reload", async () => {
+  const view = await openEmptyWorkout();
+  createExercise("Développé couché", 4, 120);
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(
+    within(seriesRegion("Développé couché")).getAllByRole("listitem"),
+  ).toHaveLength(4);
+  for (const field of screen.getAllByLabelText("Charge (kg)"))
+    expect(field).toHaveValue(null);
+  for (const field of screen.getAllByLabelText("Répétitions"))
+    expect(field).toHaveValue(null);
+  for (const field of screen.getAllByLabelText("Repos (secondes)"))
+    expect(field).toHaveValue(120);
+  const sets = storedWorkouts()[0].exercises[0].plannedSets;
+  expect(
+    sets.map((s) => [s.position, s.weightKg, s.repetitions, s.restSeconds]),
+  ).toEqual([
+    [0, null, null, 120],
+    [1, null, null, 120],
+    [2, null, null, 120],
+    [3, null, null, 120],
+  ]);
+  expect(new Set(sets.map((s) => s.id)).size).toBe(4);
+  view.unmount();
+  render(<App />);
+  fireEvent.click(await screen.findByText("Push"));
+  expect(screen.getAllByLabelText("Charge (kg)")).toHaveLength(4);
+  for (const field of screen.getAllByLabelText("Charge (kg)"))
+    expect(field).toHaveValue(null);
+  for (const field of screen.getAllByLabelText("Répétitions"))
+    expect(field).toHaveValue(null);
+  for (const field of screen.getAllByLabelText("Repos (secondes)"))
+    expect(field).toHaveValue(120);
+});
+
+it.each(["", "0", "-1", "1.5"])(
+  "rejects invalid initial set count %s",
+  async (value) => {
+    await openEmptyWorkout();
+    fireEvent.click(within(openAddMenu()).getByText("Ajouter un exercice"));
+    fireEvent.change(screen.getByLabelText("Nom"), {
+      target: { value: "Squat" },
+    });
+    fireEvent.change(screen.getByLabelText("Nombre de séries initiales"), {
+      target: { value },
+    });
+    fireEvent.click(screen.getByText("Enregistrer"));
+    expect(screen.getByLabelText("Nombre de séries initiales")).toBeInvalid();
+    expect(storedWorkouts()[0].exercises).toEqual([]);
+  },
+);
+
+it("appends a blank set immediately using the last set rest, including zero", async () => {
+  await openEmptyWorkout();
+  createExercise("Squat", 1, 120);
+  fillSet("80");
+  fireEvent.click(screen.getByText("+ Ajouter une série"));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(screen.getAllByLabelText("Charge (kg)")[1]).toHaveValue(null);
+  expect(screen.getAllByLabelText("Répétitions")[1]).toHaveValue(null);
+  expect(screen.getAllByLabelText("Repos (secondes)")[1]).toHaveValue(120);
+  fireEvent.change(screen.getAllByLabelText("Repos (secondes)")[1], {
+    target: { value: "0" },
+  });
+  fireEvent.click(screen.getByText("+ Ajouter une série"));
+  expect(screen.getAllByLabelText("Repos (secondes)")[2]).toHaveValue(0);
+  fillSet("42.5", 2);
+  expect(storedWorkouts()[0].exercises[0].plannedSets[2]).toMatchObject({
+    weightKg: 42.5,
+    repetitions: 8,
+    restSeconds: 0,
+  });
+});
+
+it("allows clearing reps and kg back to unspecified without confusing zero weight", async () => {
+  const view = await openEmptyWorkout();
+  createExercise("Squat");
+  fillSet("0");
+  expect(storedWorkouts()[0].exercises[0].plannedSets[0].weightKg).toBe(0);
+  for (const label of ["Répétitions", "Charge (kg)"]) {
+    fireEvent.change(screen.getByLabelText(label), { target: { value: "" } });
+    fireEvent.blur(screen.getByLabelText(label));
+    expect(screen.getByLabelText(label)).toHaveValue(null);
+  }
+  expect(storedWorkouts()[0].exercises[0].plannedSets[0]).toMatchObject({
+    repetitions: null,
+    weightKg: null,
+  });
+  view.unmount();
+  render(<App />);
+  fireEvent.click(await screen.findByText("Push"));
+  expect(screen.getByLabelText("Répétitions")).toHaveValue(null);
+  expect(screen.getByLabelText("Charge (kg)")).toHaveValue(null);
 });

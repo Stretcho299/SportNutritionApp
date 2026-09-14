@@ -16,7 +16,6 @@ type Dialog =
   | null
   | "workout"
   | "exercise"
-  | "set"
   | "renameWorkout"
   | "renameExercise"
   | "addMenu"
@@ -29,8 +28,7 @@ export default function App() {
   const [exerciseId, setExerciseId] = useState("");
   const [dialog, setDialog] = useState<Dialog>(null);
   const [name, setName] = useState("");
-  const [weight, setWeight] = useState("");
-  const [reps, setReps] = useState("");
+  const [initialSetCount, setInitialSetCount] = useState("1");
   const [rest, setRest] = useState(String(defaultRestSeconds));
   useEffect(() => {
     void loadWorkouts().then(setWorkouts);
@@ -44,8 +42,7 @@ export default function App() {
   const close = () => {
     setDialog(null);
     setName("");
-    setWeight("");
-    setReps("");
+    setInitialSetCount("1");
     setRest(String(defaultRestSeconds));
   };
   const submit = (e: React.FormEvent) => {
@@ -59,7 +56,17 @@ export default function App() {
         ),
       );
     if (dialog === "exercise" && workout && name.trim()) {
-      const nextWorkout = addExercise(workout, name.trim());
+      if (
+        !Number.isSafeInteger(Number(initialSetCount)) ||
+        Number(initialSetCount) <= 0
+      )
+        return;
+      const nextWorkout = addExercise(
+        workout,
+        name.trim(),
+        Number(initialSetCount),
+        Number(rest),
+      );
       update(workouts.map((w) => (w.id === workout.id ? nextWorkout : w)));
       if (!exercise) setExerciseId(nextWorkout.exercises.at(-1)!.id);
     }
@@ -71,21 +78,6 @@ export default function App() {
                 ...w,
                 exercises: w.exercises.map((x) =>
                   x.id === exercise.id ? { ...x, name: name.trim() } : x,
-                ),
-              }
-            : w,
-        ),
-      );
-    if (dialog === "set" && workout && exercise && Number(reps) > 0)
-      update(
-        workouts.map((w) =>
-          w.id === workout.id
-            ? {
-                ...w,
-                exercises: w.exercises.map((x) =>
-                  x.id === exercise.id
-                    ? addSet(x, Number(weight), Number(reps), Number(rest))
-                    : x,
                 ),
               }
             : w,
@@ -140,9 +132,10 @@ export default function App() {
   const editSet = (
     id: string,
     field: "repetitions" | "weightKg" | "restSeconds",
-    value: number,
+    value: number | null,
   ) => {
-    if (!workout || !exercise) return;
+    if (!workout || !exercise || (field === "restSeconds" && value === null))
+      return;
     update(
       workouts.map((w) =>
         w.id === workout.id
@@ -157,6 +150,21 @@ export default function App() {
                       ),
                     }
                   : x,
+              ),
+            }
+          : w,
+      ),
+    );
+  };
+  const appendSet = () => {
+    if (!workout || !exercise) return;
+    update(
+      workouts.map((w) =>
+        w.id === workout.id
+          ? {
+              ...w,
+              exercises: w.exercises.map((x) =>
+                x.id === exercise.id ? addSet(x) : x,
               ),
             }
           : w,
@@ -326,6 +334,7 @@ export default function App() {
                   </p>
                   <SetField
                     label="Répétitions"
+                    allowEmpty
                     value={s.repetitions}
                     min={1}
                     step={1}
@@ -333,6 +342,7 @@ export default function App() {
                   />
                   <SetField
                     label="Charge (kg)"
+                    allowEmpty
                     value={s.weightKg}
                     min={0}
                     step="any"
@@ -395,7 +405,7 @@ export default function App() {
                 </li>
               ))}
             </ul>
-            <button className="primary" onClick={() => setDialog("set")}>
+            <button className="primary" onClick={appendSet}>
               + Ajouter une série
             </button>
           </section>
@@ -474,53 +484,45 @@ export default function App() {
       {dialog && !isMenu && (
         <Sheet
           title={
-            dialog === "set"
-              ? "Nouvelle série"
-              : dialog === "exercise" || dialog === "renameExercise"
-                ? "Exercice"
-                : "Séance"
+            dialog === "exercise" || dialog === "renameExercise"
+              ? "Exercice"
+              : "Séance"
           }
           onClose={close}
         >
           <form onSubmit={submit}>
             <h2>
-              {dialog === "set"
-                ? "Nouvelle série"
-                : dialog === "exercise" || dialog === "renameExercise"
-                  ? "Exercice"
-                  : "Séance"}
+              {dialog === "exercise" || dialog === "renameExercise"
+                ? "Exercice"
+                : "Séance"}
             </h2>
-            {dialog === "set" ? (
+            <label>
+              Nom
+              <input
+                autoFocus
+                aria-label="Nom"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </label>
+            {dialog === "exercise" && (
               <>
                 <label>
-                  Charge (kg)
+                  Nombre de séries initiales
                   <input
-                    aria-label="Charge"
-                    type="number"
-                    min="0"
-                    step="any"
-                    inputMode="decimal"
-                    value={weight}
-                    onChange={(e) => setWeight(e.target.value)}
-                  />
-                </label>
-                <label>
-                  Répétitions
-                  <input
-                    aria-label="Répétitions"
                     type="number"
                     min="1"
                     step="1"
                     inputMode="numeric"
-                    value={reps}
-                    onChange={(e) => setReps(e.target.value)}
+                    value={initialSetCount}
+                    onChange={(e) => setInitialSetCount(e.target.value)}
                     required
                   />
                 </label>
                 <label>
-                  Repos (secondes)
+                  Repos par défaut (secondes)
                   <input
-                    aria-label="Repos"
                     type="number"
                     min="0"
                     step="1"
@@ -531,17 +533,6 @@ export default function App() {
                   />
                 </label>
               </>
-            ) : (
-              <label>
-                Nom
-                <input
-                  autoFocus
-                  aria-label="Nom"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                />
-              </label>
             )}
             <button className="primary">Enregistrer</button>
             <button type="button" onClick={close}>
@@ -568,12 +559,14 @@ function SetField({
   min,
   step,
   onSave,
+  allowEmpty = false,
 }: {
   label: string;
-  value: number;
+  value: number | null;
   min: number;
   step: number | "any";
-  onSave: (value: number) => void;
+  onSave: (value: number | null) => void;
+  allowEmpty?: boolean;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
   return (
@@ -583,12 +576,18 @@ function SetField({
         type="number"
         min={min}
         step={step}
-        required
+        required={!allowEmpty}
         inputMode={step === "any" ? "decimal" : "numeric"}
-        value={draft ?? String(value)}
+        value={draft ?? (value == null ? "" : String(value))}
         onChange={(event) => {
           setDraft(event.target.value);
-          if (event.target.validity.valid && event.target.value !== "")
+          if (
+            allowEmpty &&
+            event.target.value === "" &&
+            !event.target.validity.badInput
+          )
+            onSave(null);
+          else if (event.target.validity.valid && event.target.value !== "")
             onSave(event.target.valueAsNumber);
         }}
         onBlur={() => setDraft(null)}
