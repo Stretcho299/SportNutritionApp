@@ -236,3 +236,93 @@ nav button.active {
     padding-right: 1.5rem;
   }
 }
+
+.exercise-tabs {
+  display: flex;
+  overflow-x: auto;
+  gap: 0.55rem;
+  margin: 0 -1rem 1rem;
+  padding: 0 1rem 0.4rem;
+  scrollbar-width: none;
+}
+.exercise-tabs li {
+  flex: 0 0 auto;
+  min-width: 9rem;
+  background: #121827;
+}
+.exercise-tabs .row {
+  min-height: 4rem;
+  padding: 0.7rem 2.5rem 0.7rem 0.8rem;
+}
+.exercise-tabs li:has(.row:focus),
+.exercise-tabs li:has(.row:hover) {
+  border-color: #2878ff;
+  box-shadow: 0 0 0 1px #2878ff;
+}
+.exercise-tabs .order {
+  top: auto;
+  bottom: 0.35rem;
+  right: 0.35rem;
+}
+.exercise-tabs .order button {
+  min-height: 1.55rem;
+  font-size: 0.7rem;
+}
+.exercise-hero {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  padding: 1rem;
+  border: 1px solid #2a3652;
+  border-radius: 1.35rem;
+  background: linear-gradient(135deg, #182441, #101725);
+  margin: 1rem 0;
+}
+.exercise-hero p {
+  margin: 0 0 0.35rem;
+  color: #79a8ff;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+}
+.exercise-hero h2 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+.exercise-illustration {
+  width: 4.4rem;
+  height: 4.4rem;
+  display: grid;
+  place-items: center;
+  border-radius: 1rem;
+  background: linear-gradient(135deg, #2878ff, #7557ff);
+  font-size: 2rem;
+}
+.advanced {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  border: 1px solid #2b3650;
+  border-radius: 1rem;
+  background: #141a27;
+  color: #e7edff;
+  text-align: left;
+  font-weight: 750;
+}
+.advanced span {
+  color: #8f9bb5;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.sets-title {
+  font-size: 1rem;
+  margin: 1.5rem 0 0.5rem;
+}
+.set {
+  min-height: 4.1rem;
+}
+.set:first-line {
+  font-weight: 800;
+}

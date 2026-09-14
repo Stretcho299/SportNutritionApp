@@ -204,6 +204,7 @@ export default function App() {
                     className="row"
                     onClick={() => {
                       setWorkoutId(w.id);
+                      setExerciseId(sort(w.exercises)[0]?.id ?? "");
                       setScreen("detail");
                     }}
                   >
@@ -222,6 +223,24 @@ export default function App() {
       )}
       {screen === "detail" && workout && (
         <>
+          <section className="exercise-hero">
+            <div className="exercise-illustration" aria-hidden="true">
+              ✦
+            </div>
+            <div>
+              <p>EXERCICE SÉLECTIONNÉ</p>
+              <h2>{exercise?.name}</h2>
+            </div>
+          </section>
+          <button
+            className="advanced"
+            type="button"
+            onClick={() =>
+              alert("Les supersets, trisets et circuits arriveront bientôt.")
+            }
+          >
+            Options avancées <span>Superset / Triset / Circuit</span>
+          </button>
           <div className="actions">
             <button
               onClick={() => {
@@ -236,14 +255,13 @@ export default function App() {
           <button className="primary" onClick={() => setDialog("exercise")}>
             Ajouter un exercice
           </button>
-          <ul>
+          <ul className="exercise-tabs">
             {sort(workout.exercises).map((x, i) => (
               <li key={x.id}>
                 <button
                   className="row"
                   onClick={() => {
                     setExerciseId(x.id);
-                    setScreen("exercise");
                   }}
                 >
                   <strong>{x.name}</strong>
@@ -270,7 +288,7 @@ export default function App() {
           </ul>
         </>
       )}
-      {screen === "exercise" && exercise && (
+      {screen === "detail" && exercise && (
         <>
           <div className="actions">
             <button
@@ -283,6 +301,7 @@ export default function App() {
             </button>
             <button onClick={removeExercise}>Supprimer</button>
           </div>
+          <h2 className="sets-title">Séries prévues</h2>
           <button className="primary" onClick={() => setDialog("set")}>
             Ajouter une série
           </button>
