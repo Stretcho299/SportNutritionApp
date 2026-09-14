@@ -13,7 +13,13 @@ import {
 } from "./storage/database";
 type Screen = "list" | "detail" | "exercise";
 type Dialog =
-  null | "workout" | "exercise" | "set" | "renameWorkout" | "renameExercise";
+  | null
+  | "workout"
+  | "exercise"
+  | "set"
+  | "editSet"
+  | "renameWorkout"
+  | "renameExercise";
 export default function App() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [screen, setScreen] = useState<Screen>("list");
@@ -24,6 +30,7 @@ export default function App() {
   const [weight, setWeight] = useState("");
   const [reps, setReps] = useState("");
   const [rest, setRest] = useState(String(defaultRestSeconds));
+  const [editingSetId, setEditingSetId] = useState("");
   useEffect(() => {
     void loadWorkouts().then(setWorkouts);
   }, []);
@@ -39,6 +46,7 @@ export default function App() {
     setWeight("");
     setReps("");
     setRest(String(defaultRestSeconds));
+    setEditingSetId("");
   };
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,7 +77,12 @@ export default function App() {
             : w,
         ),
       );
-    if (dialog === "set" && workout && exercise && Number(reps) > 0)
+    if (
+      (dialog === "set" || dialog === "editSet") &&
+      workout &&
+      exercise &&
+      Number(reps) > 0
+    )
       update(
         workouts.map((w) =>
           w.id === workout!.id
@@ -77,12 +90,27 @@ export default function App() {
                 ...w,
                 exercises: w.exercises.map((x) =>
                   x.id === exercise.id
-                    ? addSet(
-                        x,
-                        Number(weight) || 0,
-                        Number(reps),
-                        Number(rest) || defaultRestSeconds,
-                      )
+                    ? dialog === "editSet"
+                      ? {
+                          ...x,
+                          plannedSets: x.plannedSets.map((set) =>
+                            set.id === editingSetId
+                              ? {
+                                  ...set,
+                                  weightKg: Number(weight) || 0,
+                                  repetitions: Number(reps),
+                                  restSeconds:
+                                    Number(rest) || defaultRestSeconds,
+                                }
+                              : set,
+                          ),
+                        }
+                      : addSet(
+                          x,
+                          Number(weight) || 0,
+                          Number(reps),
+                          Number(rest) || defaultRestSeconds,
+                        )
                     : x,
                 ),
               }
@@ -252,13 +280,22 @@ export default function App() {
           <ul>
             {sort(exercise.plannedSets).map((s, i) => (
               <li key={s.id}>
-                <div className="set">
+                <button
+                  className="set"
+                  onClick={() => {
+                    setEditingSetId(s.id);
+                    setWeight(String(s.weightKg));
+                    setReps(String(s.repetitions));
+                    setRest(String(s.restSeconds));
+                    setDialog("editSet");
+                  }}
+                >
                   Série {i + 1}
                   <small>
                     {s.weightKg} kg · {s.repetitions} répétitions ·{" "}
                     {s.restSeconds}s repos
                   </small>
-                </div>
+                </button>
                 <div className="order">
                   <button disabled={!i} onClick={() => moveSet(i, i - 1)}>
                     ↑
@@ -304,7 +341,7 @@ export default function App() {
         <form className="modal" onSubmit={submit}>
           <div>
             <h2>
-              {dialog.includes("set")
+              {dialog === "set" || dialog === "editSet"
                 ? "Nouvelle série"
                 : dialog.includes("exercise")
                   ? "Exercice"
