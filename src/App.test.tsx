@@ -17,7 +17,7 @@ it("adds and orders exercises and sets", () => {
   fireEvent.change(screen.getByLabelText("Nom"), { target: { value: "A" } });
   fireEvent.click(screen.getByText("Enregistrer"));
   fireEvent.click(screen.getByText("A"));
-  fireEvent.click(screen.getByText("Ajouter un exercice"));
+  fireEvent.click(screen.getByLabelText("Gérer les exercices"));
   fireEvent.change(screen.getByLabelText("Nom"), {
     target: { value: "Squat" },
   });

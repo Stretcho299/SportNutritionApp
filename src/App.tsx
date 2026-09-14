@@ -140,15 +140,6 @@ export default function App() {
       setScreen("detail");
     }
   };
-  const moveExercise = (from: number, to: number) =>
-    workout &&
-    update(
-      workouts.map((w) =>
-        w.id === workout!.id
-          ? { ...w, exercises: reorder(w.exercises, from, to) }
-          : w,
-      ),
-    );
   const moveSet = (from: number, to: number) =>
     workout &&
     exercise &&
@@ -168,7 +159,7 @@ export default function App() {
     );
   return (
     <main className="app-shell">
-      <header>
+      <header className="workout-control">
         <p>Sport Nutrition</p>
         <h1>
           {screen === "list"
@@ -179,11 +170,32 @@ export default function App() {
         </h1>
         {screen !== "list" && (
           <button
+            aria-label="Retour aux séances"
             className="link"
             onClick={() => setScreen(screen === "exercise" ? "detail" : "list")}
           >
             ‹ Retour
           </button>
+        )}
+        {screen === "detail" && (
+          <div className="control-actions">
+            <button
+              aria-label="Gérer les exercices"
+              onClick={() => setDialog("exercise")}
+            >
+              ＋
+            </button>
+            <button
+              aria-label="Réorganiser les exercices"
+              onClick={() =>
+                document
+                  .querySelector(".exercise-tabs")
+                  ?.scrollIntoView({ behavior: "smooth" })
+              }
+            >
+              ↕
+            </button>
+          </div>
         )}
       </header>
       {screen === "list" && (
@@ -223,6 +235,17 @@ export default function App() {
       )}
       {screen === "detail" && workout && (
         <>
+          <ul className="exercise-tabs">
+            {sort(workout.exercises).map((x, i) => (
+              <li className={x.id === exerciseId ? "selected" : ""} key={x.id}>
+                <button className="row" onClick={() => setExerciseId(x.id)}>
+                  <strong>{x.name}</strong>
+                  <small>Exercice {i + 1}</small>
+                  <span>{i + 1}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
           <section className="exercise-hero">
             <div className="exercise-illustration" aria-hidden="true">
               ✦
@@ -252,52 +275,20 @@ export default function App() {
             </button>
             <button onClick={removeWorkout}>Supprimer</button>
           </div>
-          <button className="primary" onClick={() => setDialog("exercise")}>
-            Ajouter un exercice
-          </button>
-          <ul className="exercise-tabs">
-            {sort(workout.exercises).map((x, i) => (
-              <li key={x.id}>
-                <button
-                  className="row"
-                  onClick={() => {
-                    setExerciseId(x.id);
-                  }}
-                >
-                  <strong>{x.name}</strong>
-                  <small>
-                    {x.plannedSets.length} série
-                    {x.plannedSets.length > 1 ? "s" : ""} prévue
-                    {x.plannedSets.length > 1 ? "s" : ""}
-                  </small>
-                  <span>›</span>
-                </button>
-                <div className="order">
-                  <button disabled={!i} onClick={() => moveExercise(i, i - 1)}>
-                    ↑
-                  </button>
-                  <button
-                    disabled={i === workout.exercises.length - 1}
-                    onClick={() => moveExercise(i, i + 1)}
-                  >
-                    ↓
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
         </>
       )}
       {screen === "detail" && exercise && (
         <>
-          <div className="actions">
+          <div className="exercise-menu">
             <button
+              aria-label="Actions de l’exercice"
               onClick={() => {
                 setName(exercise.name);
                 setDialog("renameExercise");
+                setDialog("renameExercise");
               }}
             >
-              Renommer
+              •••
             </button>
             <button onClick={removeExercise}>Supprimer</button>
           </div>
