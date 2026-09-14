@@ -81,7 +81,7 @@ it("exposes exactly the requested actions in each header sheet", async () => {
     within(menu)
       .getAllByRole("button")
       .map((b) => b.textContent),
-  ).toEqual(["Ajouter un exercice", "Supprimer la séance", "Annuler"]);
+  ).toEqual(["Ajouter un exercice", "Supprimer l’exercice", "Annuler"]);
   expect(within(menu).getByText("Ajouter un exercice")).toHaveFocus();
   fireEvent.click(within(menu).getByText("Annuler"));
   expect(screen.getByLabelText("Gérer les exercices")).toHaveFocus();
@@ -95,17 +95,28 @@ it("exposes exactly the requested actions in each header sheet", async () => {
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
 
-it("confirms workout deletion and preserves the workout when cancelled", async () => {
+it("confirms selected exercise deletion from the add menu", async () => {
   await openEmptyWorkout();
+  createExercise("Squat");
+  createExercise("Row");
   const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
-  fireEvent.click(within(openAddMenu()).getByText("Supprimer la séance"));
-  expect(confirm).toHaveBeenCalledWith("Supprimer cette séance ?");
-  expect(storedWorkouts()).toHaveLength(1);
+  fireEvent.click(within(openAddMenu()).getByText("Supprimer l’exercice"));
+  expect(confirm).toHaveBeenCalledWith("Supprimer cet exercice ?");
+  expect(
+    storedWorkouts()[0].exercises.map((exercise) => exercise.name),
+  ).toEqual(["Squat", "Row"]);
   confirm.mockReturnValue(true);
-  fireEvent.click(screen.getByText("Supprimer la séance"));
+  fireEvent.click(screen.getByText("Supprimer l’exercice"));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  expect(screen.getByText("Aucune séance")).toBeInTheDocument();
-  expect(storedWorkouts()).toEqual([]);
+  expect(screen.getByRole("heading", { name: "Row" })).toBeInTheDocument();
+  expect(
+    storedWorkouts()[0].exercises.map((exercise) => exercise.name),
+  ).toEqual(["Row"]);
+  fireEvent.click(within(openAddMenu()).getByText("Supprimer l’exercice"));
+  expect(
+    screen.getByRole("heading", { name: "Aucun exercice" }),
+  ).toBeInTheDocument();
+  expect(storedWorkouts()[0].exercises).toEqual([]);
 });
 
 it("renames the workout from the organization sheet", async () => {

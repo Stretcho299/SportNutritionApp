@@ -85,13 +85,6 @@ export default function App() {
       );
     close();
   };
-  const removeWorkout = () => {
-    if (workout && confirm("Supprimer cette séance ?")) {
-      update(workouts.filter((w) => w.id !== workout.id));
-      setScreen("list");
-      close();
-    }
-  };
   const removeExercise = () => {
     if (workout && exercise && confirm("Supprimer cet exercice ?")) {
       update(
@@ -110,6 +103,7 @@ export default function App() {
         sort(workout.exercises).find((x) => x.id !== exercise.id)?.id ?? "",
       );
       setScreen("detail");
+      close();
     }
   };
   const moveSet = (from: number, to: number) =>
@@ -427,8 +421,8 @@ export default function App() {
               <button onClick={() => setDialog("exercise")}>
                 Ajouter un exercice
               </button>
-              <button className="danger" onClick={removeWorkout}>
-                Supprimer la séance
+              <button className="danger" onClick={removeExercise}>
+                Supprimer l’exercice
               </button>
               <button onClick={close}>Annuler</button>
             </>
