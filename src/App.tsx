@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./App.css";
 import {
   addExercise,
@@ -11,15 +11,17 @@ import {
   sort,
   type Workout,
 } from "./storage/database";
-type Screen = "list" | "detail" | "exercise";
+type Screen = "list" | "detail";
 type Dialog =
   | null
   | "workout"
   | "exercise"
   | "set"
-  | "editSet"
   | "renameWorkout"
-  | "renameExercise";
+  | "renameExercise"
+  | "addMenu"
+  | "organizeMenu"
+  | "reorder";
 export default function App() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [screen, setScreen] = useState<Screen>("list");
@@ -30,7 +32,6 @@ export default function App() {
   const [weight, setWeight] = useState("");
   const [reps, setReps] = useState("");
   const [rest, setRest] = useState(String(defaultRestSeconds));
-  const [editingSetId, setEditingSetId] = useState("");
   useEffect(() => {
     void loadWorkouts().then(setWorkouts);
   }, []);
@@ -46,7 +47,6 @@ export default function App() {
     setWeight("");
     setReps("");
     setRest(String(defaultRestSeconds));
-    setEditingSetId("");
   };
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,12 +58,11 @@ export default function App() {
           w.id === workout!.id ? { ...w, name: name.trim() } : w,
         ),
       );
-    if (dialog === "exercise" && workout && name.trim())
-      update(
-        workouts.map((w) =>
-          w.id === workout!.id ? addExercise(w, name.trim()) : w,
-        ),
-      );
+    if (dialog === "exercise" && workout && name.trim()) {
+      const nextWorkout = addExercise(workout, name.trim());
+      update(workouts.map((w) => (w.id === workout.id ? nextWorkout : w)));
+      if (!exercise) setExerciseId(nextWorkout.exercises.at(-1)!.id);
+    }
     if (dialog === "renameExercise" && workout && exercise && name.trim())
       update(
         workouts.map((w) =>
@@ -77,40 +76,15 @@ export default function App() {
             : w,
         ),
       );
-    if (
-      (dialog === "set" || dialog === "editSet") &&
-      workout &&
-      exercise &&
-      Number(reps) > 0
-    )
+    if (dialog === "set" && workout && exercise && Number(reps) > 0)
       update(
         workouts.map((w) =>
-          w.id === workout!.id
+          w.id === workout.id
             ? {
                 ...w,
                 exercises: w.exercises.map((x) =>
                   x.id === exercise.id
-                    ? dialog === "editSet"
-                      ? {
-                          ...x,
-                          plannedSets: x.plannedSets.map((set) =>
-                            set.id === editingSetId
-                              ? {
-                                  ...set,
-                                  weightKg: Number(weight) || 0,
-                                  repetitions: Number(reps),
-                                  restSeconds:
-                                    Number(rest) || defaultRestSeconds,
-                                }
-                              : set,
-                          ),
-                        }
-                      : addSet(
-                          x,
-                          Number(weight) || 0,
-                          Number(reps),
-                          Number(rest) || defaultRestSeconds,
-                        )
+                    ? addSet(x, Number(weight), Number(reps), Number(rest))
                     : x,
                 ),
               }
@@ -123,6 +97,7 @@ export default function App() {
     if (workout && confirm("Supprimer cette séance ?")) {
       update(workouts.filter((w) => w.id !== workout.id));
       setScreen("list");
+      close();
     }
   };
   const removeExercise = () => {
@@ -132,10 +107,15 @@ export default function App() {
           w.id === workout!.id
             ? {
                 ...w,
-                exercises: w.exercises.filter((x) => x.id !== exercise.id),
+                exercises: sort(w.exercises)
+                  .filter((x) => x.id !== exercise.id)
+                  .map((x, position) => ({ ...x, position })),
               }
             : w,
         ),
+      );
+      setExerciseId(
+        sort(workout.exercises).find((x) => x.id !== exercise.id)?.id ?? "",
       );
       setScreen("detail");
     }
@@ -157,22 +137,54 @@ export default function App() {
           : w,
       ),
     );
+  const editSet = (
+    id: string,
+    field: "repetitions" | "weightKg" | "restSeconds",
+    value: number,
+  ) => {
+    if (!workout || !exercise) return;
+    update(
+      workouts.map((w) =>
+        w.id === workout.id
+          ? {
+              ...w,
+              exercises: w.exercises.map((x) =>
+                x.id === exercise.id
+                  ? {
+                      ...x,
+                      plannedSets: x.plannedSets.map((s) =>
+                        s.id === id ? { ...s, [field]: value } : s,
+                      ),
+                    }
+                  : x,
+              ),
+            }
+          : w,
+      ),
+    );
+  };
+  const moveExercise = (from: number, to: number) => {
+    if (!workout) return;
+    update(
+      workouts.map((w) =>
+        w.id === workout.id
+          ? { ...w, exercises: reorder(w.exercises, from, to) }
+          : w,
+      ),
+    );
+  };
+  const isMenu =
+    dialog === "addMenu" || dialog === "organizeMenu" || dialog === "reorder";
   return (
     <main className="app-shell">
       <header className="workout-control">
         <p>Sport Nutrition</p>
-        <h1>
-          {screen === "list"
-            ? "Séances"
-            : screen === "detail"
-              ? workout?.name
-              : exercise?.name}
-        </h1>
+        <h1>{screen === "list" ? "Séances" : workout?.name}</h1>
         {screen !== "list" && (
           <button
             aria-label="Retour aux séances"
             className="link"
-            onClick={() => setScreen(screen === "exercise" ? "detail" : "list")}
+            onClick={() => setScreen("list")}
           >
             ‹ Retour
           </button>
@@ -181,17 +193,13 @@ export default function App() {
           <div className="control-actions">
             <button
               aria-label="Gérer les exercices"
-              onClick={() => setDialog("exercise")}
+              onClick={() => setDialog("addMenu")}
             >
               ＋
             </button>
             <button
               aria-label="Réorganiser les exercices"
-              onClick={() =>
-                document
-                  .querySelector(".exercise-tabs")
-                  ?.scrollIntoView({ behavior: "smooth" })
-              }
+              onClick={() => setDialog("organizeMenu")}
             >
               ↕
             </button>
@@ -235,145 +243,262 @@ export default function App() {
       )}
       {screen === "detail" && workout && (
         <>
-          <ul className="exercise-tabs">
-            {sort(workout.exercises).map((x, i) => (
-              <li className={x.id === exerciseId ? "selected" : ""} key={x.id}>
-                <button className="row" onClick={() => setExerciseId(x.id)}>
-                  <strong>{x.name}</strong>
-                  <small>Exercice {i + 1}</small>
-                  <span>{i + 1}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-          <section className="exercise-hero">
-            <div className="exercise-illustration" aria-hidden="true">
-              ✦
-            </div>
-            <div>
-              <p>EXERCICE SÉLECTIONNÉ</p>
-              <h2>{exercise?.name}</h2>
-            </div>
-          </section>
-          <button
-            className="advanced"
-            type="button"
-            onClick={() =>
-              alert("Les supersets, trisets et circuits arriveront bientôt.")
-            }
-          >
-            Options avancées <span>Superset / Triset / Circuit</span>
-          </button>
-          <div className="actions">
-            <button
-              onClick={() => {
-                setName(workout.name);
-                setDialog("renameWorkout");
-              }}
-            >
-              Renommer
-            </button>
-            <button onClick={removeWorkout}>Supprimer</button>
-          </div>
+          {workout.exercises.length === 0 && (
+            <section className="empty">
+              <h2>Aucun exercice</h2>
+              <span>
+                Ajoutez votre premier exercice pour préparer cette séance.
+              </span>
+              <button className="primary" onClick={() => setDialog("exercise")}>
+                Ajouter un exercice
+              </button>
+            </section>
+          )}
+          {exercise && (
+            <>
+              <ul className="exercise-tabs" aria-label="Exercices">
+                {sort(workout.exercises).map((x, i) => (
+                  <li
+                    className={x.id === exerciseId ? "selected" : ""}
+                    key={x.id}
+                  >
+                    <button
+                      className="row"
+                      aria-pressed={x.id === exerciseId}
+                      onClick={() => setExerciseId(x.id)}
+                    >
+                      <strong>{x.name}</strong>
+                      <small>Exercice {i + 1}</small>
+                      <span>{i + 1}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <section className="exercise-hero">
+                <div className="exercise-illustration" aria-hidden="true">
+                  ✦
+                </div>
+                <div>
+                  <p>EXERCICE SÉLECTIONNÉ</p>
+                  <h2>{exercise?.name}</h2>
+                </div>
+                <div className="exercise-menu">
+                  <button
+                    aria-label="Actions de l’exercice"
+                    onClick={() => {
+                      setName(exercise.name);
+                      setDialog("renameExercise");
+                    }}
+                  >
+                    •••
+                  </button>
+                  <button onClick={removeExercise}>Supprimer</button>
+                </div>
+              </section>
+              <button
+                className="advanced"
+                type="button"
+                onClick={() =>
+                  alert(
+                    "Les supersets, trisets et circuits arriveront bientôt.",
+                  )
+                }
+              >
+                Options avancées
+              </button>
+            </>
+          )}
         </>
       )}
       {screen === "detail" && exercise && (
         <>
-          <div className="exercise-menu">
-            <button
-              aria-label="Actions de l’exercice"
-              onClick={() => {
-                setName(exercise.name);
-                setDialog("renameExercise");
-                setDialog("renameExercise");
-              }}
-            >
-              •••
+          <section
+            className="planned-sets"
+            aria-label={`Séries de ${exercise.name}`}
+          >
+            <ul>
+              {sort(exercise.plannedSets).map((s, i) => (
+                <li className="set-block" key={s.id}>
+                  <h3>SÉRIE {i + 1}</h3>
+                  <p className="set-exercise-name">{exercise.name}</p>
+                  <p className="set-advanced">
+                    Paramètres avancés <span>À venir</span>
+                  </p>
+                  <SetField
+                    label="Répétitions"
+                    value={s.repetitions}
+                    min={1}
+                    step={1}
+                    onSave={(value) => editSet(s.id, "repetitions", value)}
+                  />
+                  <SetField
+                    label="Charge (kg)"
+                    value={s.weightKg}
+                    min={0}
+                    step="any"
+                    onSave={(value) => editSet(s.id, "weightKg", value)}
+                  />
+                  <SetField
+                    label="Repos (secondes)"
+                    value={s.restSeconds}
+                    min={0}
+                    step={1}
+                    onSave={(value) => editSet(s.id, "restSeconds", value)}
+                  />
+                  <p className="rest-timer">
+                    {formatRest(s.restSeconds)} · Repos prévu
+                  </p>
+                  <div className="order">
+                    <button
+                      aria-label={`Monter la série ${i + 1}`}
+                      disabled={!i}
+                      onClick={() => moveSet(i, i - 1)}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      aria-label={`Descendre la série ${i + 1}`}
+                      disabled={i === exercise.plannedSets.length - 1}
+                      onClick={() => moveSet(i, i + 1)}
+                    >
+                      ↓
+                    </button>
+                    <button
+                      onClick={() =>
+                        update(
+                          workouts.map((w) =>
+                            w.id === workout!.id
+                              ? {
+                                  ...w,
+                                  exercises: w.exercises.map((x) =>
+                                    x.id === exercise.id
+                                      ? {
+                                          ...x,
+                                          plannedSets: sort(x.plannedSets)
+                                            .filter((y) => y.id !== s.id)
+                                            .map((y, position) => ({
+                                              ...y,
+                                              position,
+                                            })),
+                                        }
+                                      : x,
+                                  ),
+                                }
+                              : w,
+                          ),
+                        )
+                      }
+                    >
+                      Supprimer
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <button className="primary" onClick={() => setDialog("set")}>
+              + Ajouter une série
             </button>
-            <button onClick={removeExercise}>Supprimer</button>
-          </div>
-          <h2 className="sets-title">Séries prévues</h2>
-          <button className="primary" onClick={() => setDialog("set")}>
-            Ajouter une série
-          </button>
-          <ul>
-            {sort(exercise.plannedSets).map((s, i) => (
-              <li key={s.id}>
-                <button
-                  className="set"
-                  onClick={() => {
-                    setEditingSetId(s.id);
-                    setWeight(String(s.weightKg));
-                    setReps(String(s.repetitions));
-                    setRest(String(s.restSeconds));
-                    setDialog("editSet");
-                  }}
-                >
-                  Série {i + 1}
-                  <small>
-                    {s.weightKg} kg · {s.repetitions} répétitions ·{" "}
-                    {s.restSeconds}s repos
-                  </small>
-                </button>
-                <div className="order">
-                  <button disabled={!i} onClick={() => moveSet(i, i - 1)}>
-                    ↑
-                  </button>
-                  <button
-                    disabled={i === exercise.plannedSets.length - 1}
-                    onClick={() => moveSet(i, i + 1)}
-                  >
-                    ↓
-                  </button>
-                  <button
-                    onClick={() =>
-                      update(
-                        workouts.map((w) =>
-                          w.id === workout!.id
-                            ? {
-                                ...w,
-                                exercises: w.exercises.map((x) =>
-                                  x.id === exercise.id
-                                    ? {
-                                        ...x,
-                                        plannedSets: x.plannedSets.filter(
-                                          (y) => y.id !== s.id,
-                                        ),
-                                      }
-                                    : x,
-                                ),
-                              }
-                            : w,
-                        ),
-                      )
-                    }
-                  >
-                    Supprimer
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
+          </section>
         </>
       )}
-      {dialog && (
-        <form className="modal" onSubmit={submit}>
-          <div>
+      {dialog && isMenu && workout && (
+        <Sheet
+          title={
+            dialog === "addMenu"
+              ? "Actions de la séance"
+              : dialog === "organizeMenu"
+                ? "Organisation de la séance"
+                : "Réordonner les exercices"
+          }
+          onClose={close}
+        >
+          {dialog === "addMenu" ? (
+            <>
+              <button onClick={() => setDialog("exercise")}>
+                Ajouter un exercice
+              </button>
+              <button className="danger" onClick={removeWorkout}>
+                Supprimer la séance
+              </button>
+              <button onClick={close}>Annuler</button>
+            </>
+          ) : dialog === "organizeMenu" ? (
+            <>
+              <button onClick={() => setDialog("reorder")}>
+                Réordonner les exercices
+              </button>
+              <button
+                onClick={() => {
+                  setName(workout.name);
+                  setDialog("renameWorkout");
+                }}
+              >
+                Renommer la séance
+              </button>
+              <button onClick={close}>Annuler</button>
+            </>
+          ) : (
+            <>
+              <h2>Réordonner les exercices</h2>
+              {workout.exercises.length === 0 && (
+                <p>Aucun exercice à réordonner.</p>
+              )}
+              <ul aria-label="Ordre des exercices" className="reorder-list">
+                {sort(workout.exercises).map((x, i) => (
+                  <li key={x.id}>
+                    <strong>{x.name}</strong>
+                    <div className="order">
+                      <button
+                        aria-label={`Monter ${x.name}`}
+                        disabled={i === 0}
+                        onClick={() => moveExercise(i, i - 1)}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        aria-label={`Descendre ${x.name}`}
+                        disabled={i === workout.exercises.length - 1}
+                        onClick={() => moveExercise(i, i + 1)}
+                      >
+                        ↓
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <button onClick={close}>Terminer</button>
+            </>
+          )}
+        </Sheet>
+      )}
+      {dialog && !isMenu && (
+        <Sheet
+          title={
+            dialog === "set"
+              ? "Nouvelle série"
+              : dialog === "exercise" || dialog === "renameExercise"
+                ? "Exercice"
+                : "Séance"
+          }
+          onClose={close}
+        >
+          <form onSubmit={submit}>
             <h2>
-              {dialog === "set" || dialog === "editSet"
-                ? dialog === "editSet"
-                  ? "Modifier la série"
-                  : "Nouvelle série"
-                : dialog.includes("exercise")
+              {dialog === "set"
+                ? "Nouvelle série"
+                : dialog === "exercise" || dialog === "renameExercise"
                   ? "Exercice"
                   : "Séance"}
             </h2>
-            {dialog === "set" || dialog === "editSet" ? (
+            {dialog === "set" ? (
               <>
                 <label>
                   Charge (kg)
                   <input
                     aria-label="Charge"
+                    type="number"
+                    min="0"
+                    step="any"
                     inputMode="decimal"
                     value={weight}
                     onChange={(e) => setWeight(e.target.value)}
@@ -383,6 +508,9 @@ export default function App() {
                   Répétitions
                   <input
                     aria-label="Répétitions"
+                    type="number"
+                    min="1"
+                    step="1"
                     inputMode="numeric"
                     value={reps}
                     onChange={(e) => setReps(e.target.value)}
@@ -393,6 +521,9 @@ export default function App() {
                   Repos (secondes)
                   <input
                     aria-label="Repos"
+                    type="number"
+                    min="0"
+                    step="1"
                     inputMode="numeric"
                     value={rest}
                     onChange={(e) => setRest(e.target.value)}
@@ -416,13 +547,112 @@ export default function App() {
             <button type="button" onClick={close}>
               Annuler
             </button>
-          </div>
-        </form>
+          </form>
+        </Sheet>
       )}
       <nav>
         <button className="active">Séances</button>
         <button onClick={() => setScreen("list")}>Nutrition</button>
       </nav>
     </main>
+  );
+}
+
+function formatRest(seconds: number) {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function SetField({
+  label,
+  value,
+  min,
+  step,
+  onSave,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  step: number | "any";
+  onSave: (value: number) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  return (
+    <label className="set-field">
+      {label}
+      <input
+        type="number"
+        min={min}
+        step={step}
+        required
+        inputMode={step === "any" ? "decimal" : "numeric"}
+        value={draft ?? String(value)}
+        onChange={(event) => {
+          setDraft(event.target.value);
+          if (event.target.validity.valid && event.target.value !== "")
+            onSave(event.target.valueAsNumber);
+        }}
+        onBlur={() => setDraft(null)}
+      />
+    </label>
+  );
+}
+
+function Sheet({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    ref.current
+      ?.querySelector<HTMLElement>(
+        "input:not(:disabled), button:not(:disabled)",
+      )
+      ?.focus();
+    return () => previous?.focus();
+  }, [title]);
+  return (
+    <div
+      className="modal"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        ref={ref}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            onClose();
+          }
+          if (event.key === "Tab") {
+            const fields = ref.current?.querySelectorAll<HTMLElement>(
+              "button:not(:disabled), input:not(:disabled)",
+            );
+            if (!fields?.length) return;
+            const first = fields[0],
+              last = fields[fields.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+              event.preventDefault();
+              last.focus();
+            }
+            if (!event.shiftKey && document.activeElement === last) {
+              event.preventDefault();
+              first.focus();
+            }
+          }
+        }}
+      >
+        {children}
+      </div>
+    </div>
   );
 }
