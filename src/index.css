@@ -1,0 +1,75 @@
+:root {
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+  color: #102a2a;
+  background: #f7fbfa;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-width: 320px;
+}
+button {
+  font: inherit;
+}
+.app-shell {
+  min-height: 100dvh;
+  max-width: 680px;
+  margin: auto;
+  padding: calc(2rem + env(safe-area-inset-top)) 1.25rem
+    calc(5.75rem + env(safe-area-inset-bottom));
+}
+.app-shell header p {
+  margin: 0;
+  color: #0f766e;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.85rem;
+}
+h1 {
+  font-size: clamp(2rem, 9vw, 3rem);
+  margin: 0.3rem 0;
+}
+.empty {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  border: 1px solid #cfe4e1;
+  border-radius: 1rem;
+  background: #fff;
+}
+.empty h2 {
+  margin-top: 0;
+}
+.empty span {
+  color: #42605e;
+  line-height: 1.5;
+}
+nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
+  background: #fff;
+  border-top: 1px solid #cfe4e1;
+}
+nav button {
+  min-height: 2.75rem;
+  border: 0;
+  border-radius: 0.65rem;
+  background: transparent;
+  color: #42605e;
+  font-weight: 650;
+}
+nav button.active {
+  background: #0f766e;
+  color: #fff;
+}
