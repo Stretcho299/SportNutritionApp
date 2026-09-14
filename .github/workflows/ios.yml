@@ -24,12 +24,24 @@ jobs:
         run: |
           xcrun simctl boot "${{ steps.simulator.outputs.udid }}" || true
           xcrun simctl bootstatus "${{ steps.simulator.outputs.udid }}" -b
-      - name: Build and test
-        run: >-
-          xcodebuild test -project SportNutritionApp.xcodeproj -scheme SportNutritionApp
-          -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}'
-          -derivedDataPath "$RUNNER_TEMP/SportNutritionAppDerivedData"
-          -resultBundlePath "$RUNNER_TEMP/SportNutritionApp.xcresult" CODE_SIGNING_ALLOWED=NO INFOPLIST_KEY_CFBundleDevelopmentRegion=fr
+      - name: Build and test while recording simulator video
+        id: video
+        shell: bash
+        run: |
+          video_path="$RUNNER_TEMP/workout-flow.mp4"
+          echo "path=$video_path" >> "$GITHUB_OUTPUT"
+          xcrun simctl io "${{ steps.simulator.outputs.udid }}" recordVideo --codec=h264 --force "$video_path" >"$RUNNER_TEMP/workout-flow-recording.log" 2>&1 &
+          video_pid=$!
+          stop_recording() {
+            kill -INT "$video_pid" 2>/dev/null || true
+            wait "$video_pid" || true
+          }
+          trap stop_recording EXIT INT TERM
+          xcodebuild test -project SportNutritionApp.xcodeproj -scheme SportNutritionApp \
+            -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}' \
+            -derivedDataPath "$RUNNER_TEMP/SportNutritionAppDerivedData" \
+            -resultBundlePath "$RUNNER_TEMP/SportNutritionApp.xcresult" \
+            CODE_SIGNING_ALLOWED=NO INFOPLIST_KEY_CFBundleDevelopmentRegion=fr
       - name: Export UI test screenshots
         id: screenshot
         run: |
@@ -49,4 +61,11 @@ jobs:
         with:
           name: iphone-simulator-workout-screenshots
           path: ${{ steps.screenshot.outputs.path }}
+          if-no-files-found: error
+      - name: Upload iPhone Simulator workout video
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iphone-simulator-workout-video
+          path: ${{ steps.video.outputs.path }}
           if-no-files-found: error
