@@ -207,7 +207,11 @@ export default function App() {
                       setScreen("detail");
                     }}
                   >
-                    {w.name}
+                    <strong>{w.name}</strong>
+                    <small>
+                      {w.exercises.length} exercice
+                      {w.exercises.length > 1 ? "s" : ""}
+                    </small>
                     <span>›</span>
                   </button>
                 </li>
@@ -242,7 +246,12 @@ export default function App() {
                     setScreen("exercise");
                   }}
                 >
-                  {x.name}
+                  <strong>{x.name}</strong>
+                  <small>
+                    {x.plannedSets.length} série
+                    {x.plannedSets.length > 1 ? "s" : ""} prévue
+                    {x.plannedSets.length > 1 ? "s" : ""}
+                  </small>
                   <span>›</span>
                 </button>
                 <div className="order">
@@ -342,12 +351,14 @@ export default function App() {
           <div>
             <h2>
               {dialog === "set" || dialog === "editSet"
-                ? "Nouvelle série"
+                ? dialog === "editSet"
+                  ? "Modifier la série"
+                  : "Nouvelle série"
                 : dialog.includes("exercise")
                   ? "Exercice"
                   : "Séance"}
             </h2>
-            {dialog === "set" ? (
+            {dialog === "set" || dialog === "editSet" ? (
               <>
                 <label>
                   Charge (kg)
