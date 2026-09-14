@@ -58,10 +58,29 @@ export const reorder = <T extends { position: number }>(
   next.splice(to, 0, item);
   return next.map((x, position) => ({ ...x, position }));
 };
+const open = () =>
+  new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open("sport-nutrition", 1);
+    request.onupgradeneeded = () => request.result.createObjectStore("data");
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
 export async function loadWorkouts(): Promise<Workout[]> {
-  return JSON.parse(localStorage.getItem(key) ?? "[]");
+  if (!globalThis.indexedDB)
+    return JSON.parse(localStorage.getItem(key) ?? "[]");
+  const db = await open();
+  return new Promise((resolve) => {
+    const r = db.transaction("data").objectStore("data").get(key);
+    r.onsuccess = () => resolve(r.result ?? []);
+    r.onerror = () => resolve([]);
+  });
 }
 export async function saveWorkouts(workouts: Workout[]) {
-  localStorage.setItem(key, JSON.stringify(workouts));
+  if (!globalThis.indexedDB) {
+    localStorage.setItem(key, JSON.stringify(workouts));
+    return;
+  }
+  const db = await open();
+  db.transaction("data", "readwrite").objectStore("data").put(workouts, key);
 }
 export const __storageKey = key;
