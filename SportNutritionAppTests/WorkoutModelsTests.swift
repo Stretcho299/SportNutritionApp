@@ -144,6 +144,76 @@ final class WorkoutModelsTests: XCTestCase {
         XCTAssertTrue(try verificationContext.fetch(FetchDescriptor<WorkoutSet>()).isEmpty)
     }
 
+    func testPersistsEditedExerciseNameAndBodyweightWithoutChangingSets() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let workout = Workout(name: "Haut du corps")
+        let exercise = WorkoutExercise(name: "Développé couché", position: 0)
+        exercise.sets = [WorkoutSet(position: 0, weightInKilograms: 60, repetitions: 10, restDurationSeconds: 90)]
+        workout.exercises = [exercise]
+        context.insert(workout)
+        try context.save()
+
+        exercise.name = "Pompes"
+        exercise.isBodyweight = true
+        try context.save()
+
+        let readingContext = ModelContext(container)
+        let persistedExercise = try XCTUnwrap(readingContext.fetch(FetchDescriptor<WorkoutExercise>()).first)
+        XCTAssertEqual(persistedExercise.name, "Pompes")
+        XCTAssertTrue(persistedExercise.isBodyweight)
+        XCTAssertEqual(persistedExercise.orderedSets.count, 1)
+        XCTAssertEqual(persistedExercise.orderedSets.first?.weightInKilograms, 60)
+        XCTAssertEqual(persistedExercise.orderedSets.first?.repetitions, 10)
+    }
+
+    func testDeletingExerciseCascadesSetsAndNormalizesRemainingPositions() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let workout = Workout(name: "Haut du corps")
+        let press = WorkoutExercise(name: "Développé couché", position: 0)
+        let row = WorkoutExercise(name: "Tirage horizontal", position: 1)
+        row.sets = [WorkoutSet(position: 0, weightInKilograms: 50, repetitions: 12, restDurationSeconds: 90)]
+        let curl = WorkoutExercise(name: "Curl", position: 2)
+        workout.exercises = [press, row, curl]
+        context.insert(workout)
+        try context.save()
+
+        context.delete(row)
+        for (position, exercise) in [press, curl].enumerated() {
+            exercise.position = position
+        }
+        try context.save()
+
+        let readingContext = ModelContext(container)
+        let persistedWorkout = try XCTUnwrap(readingContext.fetch(FetchDescriptor<Workout>()).first)
+        XCTAssertEqual(persistedWorkout.orderedExercises.map(\.name), ["Développé couché", "Curl"])
+        XCTAssertEqual(persistedWorkout.orderedExercises.map(\.position), [0, 1])
+        XCTAssertTrue(try readingContext.fetch(FetchDescriptor<WorkoutSet>()).isEmpty)
+    }
+
+    func testPersistsReorderedExercisesWithContinuousPositions() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let workout = Workout(name: "Haut du corps")
+        let press = WorkoutExercise(name: "Développé couché", position: 0)
+        let row = WorkoutExercise(name: "Tirage horizontal", position: 1)
+        let curl = WorkoutExercise(name: "Curl", position: 2)
+        workout.exercises = [press, row, curl]
+        context.insert(workout)
+        try context.save()
+
+        for (position, exercise) in [curl, press, row].enumerated() {
+            exercise.position = position
+        }
+        try context.save()
+
+        let readingContext = ModelContext(container)
+        let persistedWorkout = try XCTUnwrap(readingContext.fetch(FetchDescriptor<Workout>()).first)
+        XCTAssertEqual(persistedWorkout.orderedExercises.map(\.name), ["Curl", "Développé couché", "Tirage horizontal"])
+        XCTAssertEqual(persistedWorkout.orderedExercises.map(\.position), [0, 1, 2])
+    }
+
     private func makeContainer() throws -> ModelContainer {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         return try ModelContainer(
