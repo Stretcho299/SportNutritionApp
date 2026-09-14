@@ -43,13 +43,16 @@ Le dépôt public n’exige aucun secret, compte de signature ou service macOS p
 Les UI tests exécutent le parcours Séances sur le simulateur iPhone avec un
 conteneur SwiftData en mémoire, activé uniquement par l’argument XCUITest
 `-ui-testing`. Le stockage est donc vide et déterministe, sans créer de données
-de test dans l’application normale. Les tests conservent des captures PNG de
-l’état vide, de la liste, du détail de séance, du détail d’exercice et du
-formulaire d’ajout de série.
+Les tests conservent des captures PNG de l’état vide, de la liste, du détail de
+séance, du détail d’exercice, du formulaire d’ajout et de la série créée. Ils
+poursuivent le parcours jusqu’à la création d’une série à 60 kg, 10 répétitions
+et 90 secondes de repos.
 
-La CI les exporte dans l’artifact unique
-**`iphone-simulator-workout-screenshots`** ; aucune image n’est ajoutée au dépôt
-Git. Pour le récupérer depuis GitHub, ouvrez l’onglet **Actions**, sélectionnez
-une exécution du workflow **iOS CI**, puis téléchargez
-**`iphone-simulator-workout-screenshots`** dans la section **Artifacts**, en bas
-de la page de l’exécution. L’archive contient les PNG nommés par le UI test.
+La CI exporte ces images dans l’artifact
+**`iphone-simulator-workout-screenshots`**. Elle enregistre aussi le simulateur
+pendant ce parcours avec les outils Xcode et publie le fichier
+**`workout-flow.mp4`** dans l’artifact distinct
+**`iphone-simulator-workout-video`**. Aucune image ni vidéo n’est ajoutée au
+dépôt Git. Pour les récupérer depuis GitHub, ouvrez l’onglet **Actions**,
+sélectionnez une exécution du workflow **iOS CI**, puis téléchargez les artifacts
+dans la section **Artifacts**, en bas de la page de l’exécution.
