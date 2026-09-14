@@ -167,6 +167,7 @@ private struct WorkoutExerciseDetailView: View {
     @Environment(\.modelContext) private var modelContext
     let exercise: WorkoutExercise
     @State private var isPresentingNewSet = false
+    @State private var setBeingEdited: WorkoutSet?
 
     var body: some View {
         Group {
@@ -177,25 +178,42 @@ private struct WorkoutExerciseDetailView: View {
                     description: Text("Ajoutez une série prévue pour cet exercice.")
                 )
             } else {
-                List(exercise.orderedSets) { set in
-                    VStack(alignment: .leading) {
-                        Text("Série \(set.position + 1)")
-                        HStack {
-                            if !exercise.isBodyweight, let weight = set.weightInKilograms {
-                                Text("\(weight, specifier: "%.2f") kg")
+                List {
+                    ForEach(exercise.orderedSets) { set in
+                        VStack(alignment: .leading) {
+                            Text("Série \(set.position + 1)")
+                            HStack {
+                                if !exercise.isBodyweight, let weight = set.weightInKilograms {
+                                    Text("\(weight, specifier: "%.2f") kg")
+                                }
+                                Text("\(set.repetitions) répétitions")
+                                Text("\(set.restDurationSeconds) s")
                             }
-                            Text("\(set.repetitions) répétitions")
-                            Text("\(set.restDurationSeconds) s")
+                            .foregroundStyle(.secondary)
                         }
-                        .foregroundStyle(.secondary)
+                        .swipeActions(edge: .trailing) {
+                            Button("Supprimer", role: .destructive) {
+                                delete(set)
+                            }
+                            Button("Modifier") {
+                                setBeingEdited = set
+                            }
+                            .tint(.blue)
+                        }
                     }
+                    .onMove(perform: moveSets)
                 }
             }
         }
         .navigationTitle(exercise.name)
         .toolbar {
-            Button("Ajouter une série", systemImage: "plus") {
-                isPresentingNewSet = true
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                if !exercise.orderedSets.isEmpty {
+                    EditButton()
+                }
+                Button("Ajouter une série", systemImage: "plus") {
+                    isPresentingNewSet = true
+                }
             }
         }
         .sheet(isPresented: $isPresentingNewSet) {
@@ -210,17 +228,97 @@ private struct WorkoutExerciseDetailView: View {
                 modelContext.insert(set)
             }
         }
+        .sheet(item: $setBeingEdited) { set in
+            EditWorkoutSetSheet(set: set, isBodyweight: exercise.isBodyweight)
+        }
+    }
+
+    private func moveSets(from source: IndexSet, to destination: Int) {
+        var sets = exercise.orderedSets
+        sets.move(fromOffsets: source, toOffset: destination)
+        updatePositions(of: sets)
+    }
+
+    private func delete(_ set: WorkoutSet) {
+        let remainingSets = exercise.orderedSets.filter { $0 !== set }
+        modelContext.delete(set)
+        updatePositions(of: remainingSets)
+    }
+
+    private func updatePositions(of sets: [WorkoutSet]) {
+        for (position, set) in sets.enumerated() {
+            set.position = position
+        }
     }
 }
 
 private struct NewWorkoutSetSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var weightText = ""
-    @State private var repetitionsText = ""
-    @State private var restDurationSeconds = 90
-
     let isBodyweight: Bool
     let createSet: (Double?, Int, Int) -> Void
+
+    var body: some View {
+        WorkoutSetForm(
+            title: "Nouvelle série",
+            confirmationTitle: "Créer",
+            isBodyweight: isBodyweight
+        ) { weight, repetitions, restDurationSeconds in
+            createSet(weight, repetitions, restDurationSeconds)
+            dismiss()
+        }
+    }
+}
+
+private struct EditWorkoutSetSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let set: WorkoutSet
+    let isBodyweight: Bool
+
+    var body: some View {
+        WorkoutSetForm(
+            title: "Modifier la série",
+            confirmationTitle: "Enregistrer",
+            isBodyweight: isBodyweight,
+            initialWeight: set.weightInKilograms,
+            initialRepetitions: set.repetitions,
+            initialRestDurationSeconds: set.restDurationSeconds
+        ) { weight, repetitions, restDurationSeconds in
+            set.weightInKilograms = weight
+            set.repetitions = repetitions
+            set.restDurationSeconds = restDurationSeconds
+            dismiss()
+        }
+    }
+}
+
+private struct WorkoutSetForm: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var weightText: String
+    @State private var repetitionsText: String
+    @State private var restDurationSeconds: Int
+
+    let title: String
+    let confirmationTitle: String
+    let isBodyweight: Bool
+    let saveSet: (Double?, Int, Int) -> Void
+
+    init(
+        title: String,
+        confirmationTitle: String,
+        isBodyweight: Bool,
+        initialWeight: Double? = nil,
+        initialRepetitions: Int? = nil,
+        initialRestDurationSeconds: Int = 90,
+        saveSet: @escaping (Double?, Int, Int) -> Void
+    ) {
+        self.title = title
+        self.confirmationTitle = confirmationTitle
+        self.isBodyweight = isBodyweight
+        self.saveSet = saveSet
+        _weightText = State(initialValue: initialWeight.map { String($0) } ?? "")
+        _repetitionsText = State(initialValue: initialRepetitions.map { String($0) } ?? "")
+        _restDurationSeconds = State(initialValue: initialRestDurationSeconds)
+    }
 
     private var parsedWeight: Double? {
         let normalizedWeight = weightText
@@ -264,7 +362,7 @@ private struct NewWorkoutSetSheet: View {
                     Text("5 min").tag(300)
                 }
             }
-            .navigationTitle("Nouvelle série")
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -273,12 +371,11 @@ private struct NewWorkoutSetSheet: View {
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Créer") {
+                    Button(confirmationTitle) {
                         guard let repetitions else {
                             return
                         }
-                        createSet(isBodyweight ? nil : parsedWeight, repetitions, restDurationSeconds)
-                        dismiss()
+                        saveSet(isBodyweight ? nil : parsedWeight, repetitions, restDurationSeconds)
                     }
                     .disabled(!isValid)
                 }

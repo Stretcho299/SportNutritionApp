@@ -214,6 +214,93 @@ final class WorkoutModelsTests: XCTestCase {
         XCTAssertEqual(persistedWorkout.orderedExercises.map(\.position), [0, 1, 2])
     }
 
+    func testPersistsEditedWeightedSetValues() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let exercise = WorkoutExercise(name: "Développé couché", position: 0)
+        let set = WorkoutSet(position: 0, weightInKilograms: 60, repetitions: 8, restDurationSeconds: 90)
+        exercise.sets = [set]
+        context.insert(exercise)
+        try context.save()
+
+        set.repetitions = 10
+        set.restDurationSeconds = 120
+        set.weightInKilograms = 62.5
+        try context.save()
+
+        let readingContext = ModelContext(container)
+        let persistedSet = try XCTUnwrap(readingContext.fetch(FetchDescriptor<WorkoutSet>()).first)
+        XCTAssertEqual(persistedSet.repetitions, 10)
+        XCTAssertEqual(persistedSet.restDurationSeconds, 120)
+        XCTAssertEqual(persistedSet.weightInKilograms, 62.5)
+    }
+
+    func testPersistsEditedBodyweightSetWithoutWeight() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let exercise = WorkoutExercise(name: "Pompes", position: 0, isBodyweight: true)
+        let set = WorkoutSet(position: 0, weightInKilograms: nil, repetitions: 12, restDurationSeconds: 60)
+        exercise.sets = [set]
+        context.insert(exercise)
+        try context.save()
+
+        set.repetitions = 15
+        set.restDurationSeconds = 90
+        set.weightInKilograms = nil
+        try context.save()
+
+        let readingContext = ModelContext(container)
+        let persistedSet = try XCTUnwrap(readingContext.fetch(FetchDescriptor<WorkoutSet>()).first)
+        XCTAssertEqual(persistedSet.repetitions, 15)
+        XCTAssertEqual(persistedSet.restDurationSeconds, 90)
+        XCTAssertNil(persistedSet.weightInKilograms)
+    }
+
+    func testDeletingSetNormalizesRemainingPositionsAfterReload() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let exercise = WorkoutExercise(name: "Développé couché", position: 0)
+        let first = WorkoutSet(position: 0, weightInKilograms: 60, repetitions: 10, restDurationSeconds: 90)
+        let second = WorkoutSet(position: 1, weightInKilograms: 62.5, repetitions: 8, restDurationSeconds: 120)
+        let third = WorkoutSet(position: 2, weightInKilograms: 65, repetitions: 6, restDurationSeconds: 150)
+        exercise.sets = [first, second, third]
+        context.insert(exercise)
+        try context.save()
+
+        context.delete(second)
+        for (position, set) in [first, third].enumerated() {
+            set.position = position
+        }
+        try context.save()
+
+        let readingContext = ModelContext(container)
+        let persistedExercise = try XCTUnwrap(readingContext.fetch(FetchDescriptor<WorkoutExercise>()).first)
+        XCTAssertEqual(persistedExercise.orderedSets.map(\.repetitions), [10, 6])
+        XCTAssertEqual(persistedExercise.orderedSets.map(\.position), [0, 1])
+    }
+
+    func testPersistsReorderedSetsWithContinuousPositionsAfterReload() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let exercise = WorkoutExercise(name: "Développé couché", position: 0)
+        let first = WorkoutSet(position: 0, weightInKilograms: 60, repetitions: 10, restDurationSeconds: 90)
+        let second = WorkoutSet(position: 1, weightInKilograms: 62.5, repetitions: 8, restDurationSeconds: 120)
+        let third = WorkoutSet(position: 2, weightInKilograms: 65, repetitions: 6, restDurationSeconds: 150)
+        exercise.sets = [first, second, third]
+        context.insert(exercise)
+        try context.save()
+
+        for (position, set) in [third, first, second].enumerated() {
+            set.position = position
+        }
+        try context.save()
+
+        let readingContext = ModelContext(container)
+        let persistedExercise = try XCTUnwrap(readingContext.fetch(FetchDescriptor<WorkoutExercise>()).first)
+        XCTAssertEqual(persistedExercise.orderedSets.map(\.repetitions), [6, 10, 8])
+        XCTAssertEqual(persistedExercise.orderedSets.map(\.position), [0, 1, 2])
+    }
+
     private func makeContainer() throws -> ModelContainer {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         return try ModelContainer(
