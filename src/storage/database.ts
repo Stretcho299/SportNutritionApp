@@ -285,6 +285,34 @@ export const updateExecutedSet = (
   };
 };
 
+export const addSetToExecution = (
+  execution: WorkoutExecution,
+  exerciseId: string,
+  set: PlannedSet,
+): WorkoutExecution => {
+  if (execution.status !== "inProgress") return execution;
+  return {
+    ...execution,
+    exercises: execution.exercises.map((exercise) =>
+      exercise.exerciseId !== exerciseId || exercise.status === "completed"
+        ? exercise
+        : {
+            ...exercise,
+            sets: [
+              ...exercise.sets,
+              {
+                setId: set.id,
+                status: "upcoming",
+                repetitions: set.repetitions,
+                weightKg: set.weightKg,
+                restSeconds: set.restSeconds,
+              },
+            ],
+          },
+    ),
+  };
+};
+
 export const startExecutedSetRest = (
   execution: WorkoutExecution,
   exerciseId: string,

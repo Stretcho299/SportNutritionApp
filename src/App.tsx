@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
 import {
   activateExecutedExercise,
+  addSetToExecution,
   addExercise,
   addExerciseToExecution,
   addSet,
@@ -206,16 +207,31 @@ export default function App() {
   };
   const appendSet = () => {
     if (!workout || !exercise) return;
+    if (
+      execution?.status === "inProgress" &&
+      executionExercise(exercise.id)?.status === "completed"
+    )
+      return;
+    const nextExercises = workout.exercises.map((x) =>
+      x.id === exercise.id ? addSet(x) : x,
+    );
+    const nextExercise = nextExercises.find((x) => x.id === exercise.id)!;
     update(
       workouts.map((w) =>
-        w.id === workout.id
-          ? {
+        w.id !== workout.id
+          ? w
+          : {
               ...w,
-              exercises: w.exercises.map((x) =>
-                x.id === exercise.id ? addSet(x) : x,
-              ),
-            }
-          : w,
+              exercises: nextExercises,
+              execution:
+                execution?.status === "inProgress"
+                  ? addSetToExecution(
+                      execution,
+                      exercise.id,
+                      nextExercise.plannedSets.at(-1)!,
+                    )
+                  : execution,
+            },
       ),
     );
   };
@@ -616,7 +632,10 @@ export default function App() {
                     </li>
                   ))}
                 </ul>
-                {!execution && (
+                {(!execution ||
+                  (execution.status === "inProgress" &&
+                    executionExercise(exercise.id)?.status !==
+                      "completed")) && (
                   <button className="primary" onClick={appendSet}>
                     + Ajouter une série
                   </button>

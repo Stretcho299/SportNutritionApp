@@ -572,3 +572,32 @@ it("keeps future exercise states unchanged while browsing and starts them explic
     storedWorkouts()[0].execution?.exercises.map((item) => item.status),
   ).toEqual(["active", "active", "upcoming"]);
 });
+
+it("keeps add set available after starting and appends a blank execution set", async () => {
+  await openEmptyWorkout();
+  createExercise("Squat", 2, 30);
+  fireEvent.click(screen.getByText("Démarrer la séance"));
+  const region = seriesRegion("Squat");
+  expect(screen.getByText("+ Ajouter une série")).toBeVisible();
+  fireEvent.click(screen.getByText("+ Ajouter une série"));
+  expect(within(region).getAllByRole("listitem")).toHaveLength(3);
+  expect(storedWorkouts()[0].execution?.exercises[0].sets).toHaveLength(3);
+  expect(storedWorkouts()[0].execution?.exercises[0].sets[2].status).toBe(
+    "upcoming",
+  );
+});
+
+it("keeps add set available after the first series has started", async () => {
+  await openEmptyWorkout();
+  createExercise("Squat", 2, 30);
+  fireEvent.click(screen.getByText("Démarrer la séance"));
+  const region = seriesRegion("Squat");
+  const blocks = within(region).getAllByRole("listitem");
+  fireEvent.click(within(blocks[0]).getByText("Lancer le repos"));
+  expect(screen.getByText("+ Ajouter une série")).toBeVisible();
+  fireEvent.click(screen.getByText("+ Ajouter une série"));
+  expect(within(region).getAllByRole("listitem")).toHaveLength(3);
+  expect(
+    within(region).getByRole("heading", { name: "SÉRIE 3" }),
+  ).toBeInTheDocument();
+});
