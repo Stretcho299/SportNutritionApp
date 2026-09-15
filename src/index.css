@@ -501,3 +501,49 @@ input:focus-visible {
     text-align: center;
   }
 }
+
+.workout-detail {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  padding: calc(1.5rem + env(safe-area-inset-top)) 1rem 0;
+}
+.workout-detail .workout-control {
+  flex: 0 0 auto;
+  margin-bottom: 0;
+}
+.workout-preparation {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+}
+.workout-fixed-zones {
+  min-width: 0;
+}
+.workout-detail .exercise-tabs {
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.workout-detail .exercise-hero {
+  margin: 0 0 0.75rem;
+}
+.workout-detail .planned-sets {
+  min-height: 0;
+  margin-top: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1rem 0;
+}
+.workout-detail .planned-sets .primary {
+  margin-bottom: 0;
+}
+.workout-detail nav {
+  position: static;
+  flex: 0 0 auto;
+  width: calc(100% + 2rem);
+  margin: 0 -1rem;
+  transform: none;
+}

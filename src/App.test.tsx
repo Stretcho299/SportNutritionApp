@@ -245,7 +245,7 @@ it("reorders exercises in a dedicated sheet and retains selection and persisted 
   ).toHaveTextContent("Row");
 });
 
-it("reorders and deletes sets without affecting another exercise", async () => {
+it("keeps sets in their natural order and renumbers them after deletion", async () => {
   await openEmptyWorkout();
   createExercise("Row");
   fillSet("40");
@@ -254,17 +254,16 @@ it("reorders and deletes sets without affecting another exercise", async () => {
   fillSet("80");
   fireEvent.click(screen.getByText("+ Ajouter une série"));
   fillSet("90", 1);
-  expect(screen.getByLabelText("Monter la série 1")).toBeDisabled();
-  expect(screen.getByLabelText("Descendre la série 2")).toBeDisabled();
-  fireEvent.click(screen.getByLabelText("Monter la série 2"));
+  expect(screen.queryByLabelText(/Monter la série/)).not.toBeInTheDocument();
+  expect(screen.queryByLabelText(/Descendre la série/)).not.toBeInTheDocument();
   expect(
     screen
       .getAllByLabelText("Charge (kg)")
       .map((e) => (e as HTMLInputElement).value),
-  ).toEqual(["90", "80"]);
+  ).toEqual(["80", "90"]);
   let blocks = within(seriesRegion("Squat")).getAllByRole("listitem");
   fireEvent.click(within(blocks[0]).getByText("Supprimer"));
-  expect(screen.getByLabelText("Charge (kg)")).toHaveValue(80);
+  expect(screen.getByLabelText("Charge (kg)")).toHaveValue(90);
   blocks = within(seriesRegion("Squat")).getAllByRole("listitem");
   fireEvent.click(within(blocks[0]).getByText("Supprimer"));
   expect(seriesRegion("Squat").textContent).toBe("+ Ajouter une série");
@@ -386,4 +385,25 @@ it("allows clearing reps and kg back to unspecified without confusing zero weigh
   fireEvent.click(await screen.findByText("Push"));
   expect(screen.getByLabelText("Répétitions")).toHaveValue(null);
   expect(screen.getByLabelText("Charge (kg)")).toHaveValue(null);
+});
+
+it("keeps fixed exercise zones outside a long series list", async () => {
+  const view = await openEmptyWorkout();
+  createExercise("Squat", 12);
+  const preparation = view.container.querySelector<HTMLDivElement>(
+    ".workout-preparation",
+  );
+  const fixedZones = view.container.querySelector<HTMLDivElement>(
+    ".workout-fixed-zones",
+  );
+  const sets = seriesRegion("Squat");
+  expect(preparation).toContainElement(fixedZones);
+  expect(preparation).toContainElement(sets);
+  expect(fixedZones).toContainElement(
+    screen.getByRole("list", { name: "Exercices" }),
+  );
+  expect(fixedZones).toContainElement(screen.getByText("Options avancées"));
+  expect(fixedZones).not.toContainElement(sets);
+  expect(within(sets).getAllByRole("listitem")).toHaveLength(12);
+  expect(view.container.querySelector("main")).toHaveClass("workout-detail");
 });

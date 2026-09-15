@@ -106,23 +106,6 @@ export default function App() {
       close();
     }
   };
-  const moveSet = (from: number, to: number) =>
-    workout &&
-    exercise &&
-    update(
-      workouts.map((w) =>
-        w.id === workout!.id
-          ? {
-              ...w,
-              exercises: w.exercises.map((x) =>
-                x.id === exercise.id
-                  ? { ...x, plannedSets: reorder(x.plannedSets, from, to) }
-                  : x,
-              ),
-            }
-          : w,
-      ),
-    );
   const editSet = (
     id: string,
     field: "repetitions" | "weightKg" | "restSeconds",
@@ -178,7 +161,9 @@ export default function App() {
   const isMenu =
     dialog === "addMenu" || dialog === "organizeMenu" || dialog === "reorder";
   return (
-    <main className="app-shell">
+    <main
+      className={`app-shell${screen === "detail" && exercise ? " workout-detail" : ""}`}
+    >
       <header className="workout-control">
         <p>Sport Nutrition</p>
         <h1>{screen === "list" ? "Séances" : workout?.name}</h1>
@@ -257,152 +242,136 @@ export default function App() {
             </section>
           )}
           {exercise && (
-            <>
-              <ul className="exercise-tabs" aria-label="Exercices">
-                {sort(workout.exercises).map((x, i) => (
-                  <li
-                    className={x.id === exerciseId ? "selected" : ""}
-                    key={x.id}
-                  >
-                    <button
-                      className="row"
-                      aria-pressed={x.id === exerciseId}
-                      onClick={() => setExerciseId(x.id)}
+            <div className="workout-preparation">
+              <div className="workout-fixed-zones">
+                <ul className="exercise-tabs" aria-label="Exercices">
+                  {sort(workout.exercises).map((x, i) => (
+                    <li
+                      className={x.id === exerciseId ? "selected" : ""}
+                      key={x.id}
                     >
-                      <strong>{x.name}</strong>
-                      <small>Exercice {i + 1}</small>
-                      <span>{i + 1}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              <section className="exercise-hero">
-                <div className="exercise-illustration" aria-hidden="true">
-                  ✦
-                </div>
-                <div>
-                  <p>EXERCICE SÉLECTIONNÉ</p>
-                  <h2>{exercise?.name}</h2>
-                </div>
-                <div className="exercise-menu">
-                  <button
-                    aria-label="Actions de l’exercice"
-                    onClick={() => {
-                      setName(exercise.name);
-                      setDialog("renameExercise");
-                    }}
-                  >
-                    •••
-                  </button>
-                  <button onClick={removeExercise}>Supprimer</button>
-                </div>
-              </section>
-              <button
-                className="advanced"
-                type="button"
-                onClick={() =>
-                  alert(
-                    "Les supersets, trisets et circuits arriveront bientôt.",
-                  )
-                }
-              >
-                Options avancées
-              </button>
-            </>
-          )}
-        </>
-      )}
-      {screen === "detail" && exercise && (
-        <>
-          <section
-            className="planned-sets"
-            aria-label={`Séries de ${exercise.name}`}
-          >
-            <ul>
-              {sort(exercise.plannedSets).map((s, i) => (
-                <li className="set-block" key={s.id}>
-                  <h3>SÉRIE {i + 1}</h3>
-                  <p className="set-exercise-name">{exercise.name}</p>
-                  <p className="set-advanced">
-                    Paramètres avancés <span>À venir</span>
-                  </p>
-                  <SetField
-                    label="Répétitions"
-                    allowEmpty
-                    value={s.repetitions}
-                    min={1}
-                    step={1}
-                    onSave={(value) => editSet(s.id, "repetitions", value)}
-                  />
-                  <SetField
-                    label="Charge (kg)"
-                    allowEmpty
-                    value={s.weightKg}
-                    min={0}
-                    step="any"
-                    onSave={(value) => editSet(s.id, "weightKg", value)}
-                  />
-                  <SetField
-                    label="Repos (secondes)"
-                    value={s.restSeconds}
-                    min={0}
-                    step={1}
-                    onSave={(value) => editSet(s.id, "restSeconds", value)}
-                  />
-                  <p className="rest-timer">
-                    {formatRest(s.restSeconds)} · Repos prévu
-                  </p>
-                  <div className="order">
-                    <button
-                      aria-label={`Monter la série ${i + 1}`}
-                      disabled={!i}
-                      onClick={() => moveSet(i, i - 1)}
-                    >
-                      ↑
-                    </button>
-                    <button
-                      aria-label={`Descendre la série ${i + 1}`}
-                      disabled={i === exercise.plannedSets.length - 1}
-                      onClick={() => moveSet(i, i + 1)}
-                    >
-                      ↓
-                    </button>
-                    <button
-                      onClick={() =>
-                        update(
-                          workouts.map((w) =>
-                            w.id === workout!.id
-                              ? {
-                                  ...w,
-                                  exercises: w.exercises.map((x) =>
-                                    x.id === exercise.id
-                                      ? {
-                                          ...x,
-                                          plannedSets: sort(x.plannedSets)
-                                            .filter((y) => y.id !== s.id)
-                                            .map((y, position) => ({
-                                              ...y,
-                                              position,
-                                            })),
-                                        }
-                                      : x,
-                                  ),
-                                }
-                              : w,
-                          ),
-                        )
-                      }
-                    >
-                      Supprimer
-                    </button>
+                      <button
+                        className="row"
+                        aria-pressed={x.id === exerciseId}
+                        onClick={() => setExerciseId(x.id)}
+                      >
+                        <strong>{x.name}</strong>
+                        <small>Exercice {i + 1}</small>
+                        <span>{i + 1}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <section className="exercise-hero">
+                  <div className="exercise-illustration" aria-hidden="true">
+                    ✦
                   </div>
-                </li>
-              ))}
-            </ul>
-            <button className="primary" onClick={appendSet}>
-              + Ajouter une série
-            </button>
-          </section>
+                  <div>
+                    <p>EXERCICE SÉLECTIONNÉ</p>
+                    <h2>{exercise?.name}</h2>
+                  </div>
+                  <div className="exercise-menu">
+                    <button
+                      aria-label="Actions de l’exercice"
+                      onClick={() => {
+                        setName(exercise.name);
+                        setDialog("renameExercise");
+                      }}
+                    >
+                      •••
+                    </button>
+                    <button onClick={removeExercise}>Supprimer</button>
+                  </div>
+                </section>
+                <button
+                  className="advanced"
+                  type="button"
+                  onClick={() =>
+                    alert(
+                      "Les supersets, trisets et circuits arriveront bientôt.",
+                    )
+                  }
+                >
+                  Options avancées
+                </button>
+              </div>
+              <section
+                className="planned-sets"
+                aria-label={`Séries de ${exercise.name}`}
+              >
+                <ul>
+                  {sort(exercise.plannedSets).map((s, i) => (
+                    <li className="set-block" key={s.id}>
+                      <h3>SÉRIE {i + 1}</h3>
+                      <p className="set-exercise-name">{exercise.name}</p>
+                      <p className="set-advanced">
+                        Paramètres avancés <span>À venir</span>
+                      </p>
+                      <SetField
+                        label="Répétitions"
+                        allowEmpty
+                        value={s.repetitions}
+                        min={1}
+                        step={1}
+                        onSave={(value) => editSet(s.id, "repetitions", value)}
+                      />
+                      <SetField
+                        label="Charge (kg)"
+                        allowEmpty
+                        value={s.weightKg}
+                        min={0}
+                        step="any"
+                        onSave={(value) => editSet(s.id, "weightKg", value)}
+                      />
+                      <SetField
+                        label="Repos (secondes)"
+                        value={s.restSeconds}
+                        min={0}
+                        step={1}
+                        onSave={(value) => editSet(s.id, "restSeconds", value)}
+                      />
+                      <p className="rest-timer">
+                        {formatRest(s.restSeconds)} · Repos prévu
+                      </p>
+                      <div className="order">
+                        <button
+                          onClick={() =>
+                            update(
+                              workouts.map((w) =>
+                                w.id === workout!.id
+                                  ? {
+                                      ...w,
+                                      exercises: w.exercises.map((x) =>
+                                        x.id === exercise.id
+                                          ? {
+                                              ...x,
+                                              plannedSets: sort(x.plannedSets)
+                                                .filter((y) => y.id !== s.id)
+                                                .map((y, position) => ({
+                                                  ...y,
+                                                  position,
+                                                })),
+                                            }
+                                          : x,
+                                      ),
+                                    }
+                                  : w,
+                              ),
+                            )
+                          }
+                        >
+                          Supprimer
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <button className="primary" onClick={appendSet}>
+                  + Ajouter une série
+                </button>
+              </section>
+            </div>
+          )}
         </>
       )}
       {dialog && isMenu && workout && (
