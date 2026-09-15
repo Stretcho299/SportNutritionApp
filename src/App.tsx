@@ -9,6 +9,8 @@ import {
   reorder,
   saveWorkouts,
   sort,
+  startWorkoutExecution,
+  type WorkoutExecution,
   type Workout,
 } from "./storage/database";
 type Screen = "list" | "detail";
@@ -39,6 +41,21 @@ export default function App() {
   };
   const workout = workouts.find((w) => w.id === workoutId);
   const exercise = workout?.exercises.find((e) => e.id === exerciseId);
+  const execution = workout?.execution;
+  const updateExecution = (next: WorkoutExecution) =>
+    update(
+      workouts.map((w) => (w.id === workoutId ? { ...w, execution: next } : w)),
+    );
+  const startExecution = () => {
+    if (workout) updateExecution(startWorkoutExecution(workout));
+  };
+  const finishWorkout = () => {
+    if (execution)
+      updateExecution({
+        ...execution,
+        status: "completed",
+      });
+  };
   const close = () => {
     setDialog(null);
     setName("");
@@ -301,6 +318,19 @@ export default function App() {
                 >
                   Options avancées
                 </button>
+                {!execution || execution.status === "completed" ? (
+                  <button className="primary" onClick={startExecution}>
+                    Démarrer la séance
+                  </button>
+                ) : execution.status === "readyToFinish" ? (
+                  <button className="primary" onClick={finishWorkout}>
+                    Terminer la séance
+                  </button>
+                ) : (
+                  <p className="execution-resume">
+                    Séance en cours · Reprenez là où vous vous êtes arrêté.
+                  </p>
+                )}
               </div>
               <section
                 className="planned-sets"

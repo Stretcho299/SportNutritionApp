@@ -3,8 +3,12 @@ import {
   addExercise,
   addSet,
   createWorkout,
+  finishExecutedRest,
   loadWorkouts,
   saveWorkouts,
+  skipExecutedExercise,
+  startExecutedSetRest,
+  startWorkoutExecution,
   type Workout,
 } from "./database";
 
@@ -84,4 +88,29 @@ it("uses the last set in persisted display order as the rest reference", () => {
   exercise.plannedSets[1].position = 0;
   exercise.plannedSets[0].restSeconds = 0;
   expect(addSet(exercise).plannedSets.at(-1)?.restSeconds).toBe(0);
+});
+
+it("persists execution states, advances after rest, and skips remaining sets", async () => {
+  const workout = addExercise(createWorkout("Push"), "Bench", 2, 30);
+  const execution = startWorkoutExecution(workout, 1000);
+  expect(execution.exercises[0].sets[0].status).toBe("active");
+  const resting = startExecutedSetRest(
+    execution,
+    workout.exercises[0].id,
+    workout.exercises[0].plannedSets[0].id,
+    1000,
+  );
+  expect(resting.exercises[0].sets[0]).toMatchObject({
+    status: "resting",
+    restEndsAt: 31000,
+  });
+  const advanced = finishExecutedRest(resting);
+  expect(advanced.exercises[0].sets[1].status).toBe("active");
+  const skipped = skipExecutedExercise(advanced, workout.exercises[0].id);
+  expect(skipped.exercises[0].sets.map((set) => set.status)).toEqual([
+    "performed",
+    "skipped",
+  ]);
+  await saveWorkouts([{ ...workout, execution: skipped }]);
+  expect((await loadWorkouts())[0].execution).toEqual(skipped);
 });
