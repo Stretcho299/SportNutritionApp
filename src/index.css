@@ -787,6 +787,7 @@ input:focus-visible {
   overflow: hidden;
 }
 .workout-swipe {
+  border: 0;
   background: #d93b4f;
 }
 .workout-delete {
@@ -803,6 +804,9 @@ input:focus-visible {
 .workout-card {
   position: relative;
   z-index: 1;
+  border: 1px solid #222b3e;
+  border-radius: 1.2rem;
+  background: #141923;
   transition: transform 180ms ease;
   touch-action: pan-y;
 }

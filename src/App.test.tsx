@@ -465,6 +465,15 @@ it("reveals a confirmed workout deletion action after a horizontal swipe", async
   fireEvent.pointerUp(card, { clientX: 80 });
   expect(card).toHaveClass("open");
   expect(confirm).not.toHaveBeenCalled();
+  const cardButton = card.querySelector(".workout-card")!;
+  fireEvent.pointerDown(cardButton, { clientX: 80 });
+  fireEvent.pointerUp(cardButton, { clientX: 80 });
+  fireEvent.click(cardButton);
+  expect(card).not.toHaveClass("open");
+  expect(screen.getByRole("heading", { name: "Séances" })).toBeInTheDocument();
+  fireEvent.pointerDown(card, { clientX: 160 });
+  fireEvent.pointerMove(card, { clientX: 80 });
+  fireEvent.pointerUp(card, { clientX: 80 });
   fireEvent.click(screen.getByRole("button", { name: "Supprimer Push" }));
   expect(confirm).toHaveBeenCalledWith("Supprimer cette séance ?");
   expect(screen.getByText("Push")).toBeInTheDocument();

@@ -802,6 +802,10 @@ function WorkoutRow({
             moved.current = false;
             return;
           }
+          if (open) {
+            setOpen(false);
+            return;
+          }
           onOpen();
         }}
       >
