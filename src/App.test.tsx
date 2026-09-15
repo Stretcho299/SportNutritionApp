@@ -543,3 +543,32 @@ it("keeps a completed workout final after returning home and reloading", async (
   expect(screen.queryByText("Démarrer la séance")).not.toBeInTheDocument();
   expect(storedWorkouts()[0].execution?.status).toBe("completed");
 });
+
+it("keeps future exercise states unchanged while browsing and starts them explicitly", async () => {
+  await openEmptyWorkout();
+  createExercise("A", 1, 30);
+  createExercise("B", 1, 30);
+  createExercise("C", 1, 30);
+  fireEvent.click(screen.getByText("Démarrer la séance"));
+  const addButton = screen.getByLabelText("Gérer les exercices");
+  expect(addButton).toBeVisible();
+  const tabs = within(screen.getByRole("list", { name: "Exercices" }));
+  const select = (name: string) =>
+    fireEvent.click(tabs.getByRole("button", { name: new RegExp("^" + name) }));
+  select("B");
+  select("C");
+  select("B");
+  expect(
+    storedWorkouts()[0].execution?.exercises.map((item) => item.status),
+  ).toEqual(["active", "upcoming", "upcoming"]);
+  fireEvent.click(within(seriesRegion("B")).getByText("Lancer le repos"));
+  expect(
+    storedWorkouts()[0].execution?.exercises.map((item) => item.status),
+  ).toEqual(["active", "active", "upcoming"]);
+  select("C");
+  select("A");
+  select("B");
+  expect(
+    storedWorkouts()[0].execution?.exercises.map((item) => item.status),
+  ).toEqual(["active", "active", "upcoming"]);
+});

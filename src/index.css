@@ -563,7 +563,15 @@ input:focus-visible {
   padding-top: calc(0.35rem + env(safe-area-inset-top));
 }
 .workout-detail .workout-control {
+  position: relative;
+  z-index: 3;
+  width: 100%;
   min-height: 2.5rem;
+}
+.workout-detail .control-actions {
+  min-width: 4.75rem;
+  flex-shrink: 0;
+  visibility: visible;
 }
 .workout-detail .control-actions button {
   width: 2.2rem;

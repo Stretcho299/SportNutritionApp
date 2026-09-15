@@ -365,13 +365,7 @@ export default function App() {
                       <button
                         className="exercise-tab"
                         aria-pressed={x.id === exerciseId}
-                        onClick={() => {
-                          setExerciseId(x.id);
-                          if (execution?.status === "inProgress")
-                            updateExecution(
-                              activateExecutedExercise(execution, x.id),
-                            );
-                        }}
+                        onClick={() => setExerciseId(x.id)}
                       >
                         <span
                           className="exercise-tab-circle"
@@ -578,13 +572,20 @@ export default function App() {
                             ? "Repos"
                             : "Repos prévu"}
                       </p>
-                      {executionSet(s.id)?.status === "active" && (
+                      {(executionSet(s.id)?.status === "active" ||
+                        (executionSet(s.id)?.status === "upcoming" &&
+                          i === 0)) && (
                         <button
                           className="primary execution-action"
                           onClick={() =>
                             updateExecution(
                               startExecutedSetRest(
-                                execution!,
+                                executionSet(s.id)?.status === "upcoming"
+                                  ? activateExecutedExercise(
+                                      execution!,
+                                      exercise.id,
+                                    )
+                                  : execution!,
                                 exercise.id,
                                 s.id,
                               ),
