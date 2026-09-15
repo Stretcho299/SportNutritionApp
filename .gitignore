@@ -13,6 +13,7 @@ xcuserdata/
 # Secrets / local configuration
 .env
 .env.*
+test-results/
 Secrets.xcconfig
 
 # Node / Vite
