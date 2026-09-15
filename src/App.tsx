@@ -272,6 +272,7 @@ export default function App() {
       ),
     );
   };
+  const isWorkoutDetail = screen === "detail" && !!workout;
   const isMenu =
     dialog === "addMenu" || dialog === "organizeMenu" || dialog === "reorder";
   return (
@@ -290,7 +291,7 @@ export default function App() {
             ‹ Retour
           </button>
         )}
-        {screen === "detail" && (
+        {isWorkoutDetail && (
           <div className="control-actions">
             <button
               aria-label="Gérer les exercices"
