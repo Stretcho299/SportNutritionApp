@@ -393,6 +393,11 @@ it("keeps fixed exercise zones outside a long series list", async () => {
   const preparation = view.container.querySelector<HTMLDivElement>(
     ".workout-preparation",
   );
+  createExercise("Row");
+  createExercise("Curl");
+  createExercise("Press");
+  createExercise("Lunge");
+  createExercise("Plank");
   const fixedZones = view.container.querySelector<HTMLDivElement>(
     ".workout-fixed-zones",
   );
@@ -403,6 +408,11 @@ it("keeps fixed exercise zones outside a long series list", async () => {
     screen.getByRole("list", { name: "Exercices" }),
   );
   expect(fixedZones).toContainElement(screen.getByText("Options avancées"));
+  expect(
+    within(screen.getByRole("list", { name: "Exercices" })).getAllByRole(
+      "button",
+    ),
+  ).toHaveLength(6);
   expect(fixedZones).not.toContainElement(sets);
   expect(within(sets).getAllByRole("listitem")).toHaveLength(12);
   expect(view.container.querySelector("main")).toHaveClass("workout-detail");

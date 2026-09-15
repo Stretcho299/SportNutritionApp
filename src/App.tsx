@@ -251,13 +251,20 @@ export default function App() {
                       key={x.id}
                     >
                       <button
-                        className="row"
+                        className="exercise-tab"
                         aria-pressed={x.id === exerciseId}
                         onClick={() => setExerciseId(x.id)}
                       >
-                        <strong>{x.name}</strong>
-                        <small>Exercice {i + 1}</small>
-                        <span>{i + 1}</span>
+                        <span
+                          className="exercise-tab-circle"
+                          aria-hidden="true"
+                        >
+                          ✦
+                        </span>
+                        <span className="exercise-tab-index" aria-hidden="true">
+                          {i + 1}
+                        </span>
+                        <span className="sr-only">{x.name}</span>
                       </button>
                     </li>
                   ))}
