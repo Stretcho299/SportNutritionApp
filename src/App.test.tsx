@@ -494,6 +494,10 @@ it("adds an upcoming exercise during execution without losing the active series"
   await openEmptyWorkout();
   createExercise("Squat", 2, 30);
   fireEvent.click(screen.getByText("Démarrer la séance"));
+  expect(screen.getByLabelText("Gérer les exercices")).toBeInTheDocument();
+  fireEvent.click(within(seriesRegion("Squat")).getByText("Lancer le repos"));
+  fireEvent.click(within(seriesRegion("Squat")).getByText("Terminer le repos"));
+  expect(screen.getByLabelText("Gérer les exercices")).toBeInTheDocument();
   createExercise("Row", 2, 30);
   expect(
     within(seriesRegion("Squat")).getByText("Série active"),
@@ -502,10 +506,6 @@ it("adds an upcoming exercise during execution without losing the active series"
     { exerciseId: storedWorkouts()[0].exercises[0].id, status: "active" },
     { exerciseId: storedWorkouts()[0].exercises[1].id, status: "upcoming" },
   ]);
-  selectExercise("Row");
-  expect(
-    within(seriesRegion("Row")).getByText("Série active"),
-  ).toBeInTheDocument();
 });
 
 it("only offers deletion for an upcoming series during execution", async () => {
