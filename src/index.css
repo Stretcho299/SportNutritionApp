@@ -563,7 +563,15 @@ input:focus-visible {
   padding-top: calc(0.35rem + env(safe-area-inset-top));
 }
 .workout-detail .workout-control {
+  position: relative;
+  z-index: 3;
+  width: 100%;
   min-height: 2.5rem;
+}
+.workout-detail .control-actions {
+  min-width: 4.75rem;
+  flex-shrink: 0;
+  visibility: visible;
 }
 .workout-detail .control-actions button {
   width: 2.2rem;
@@ -768,4 +776,48 @@ input:focus-visible {
   .workout-detail .exercise-menu button:last-child {
     padding: 0 0.35rem;
   }
+}
+.workout-detail .set-block.active {
+  border-color: #2878ff;
+  box-shadow: 0 0 0 1px #2878ff66;
+}
+.workout-detail .set-status {
+  margin: 0 0 0.3rem;
+  color: #79a8ff;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+.workout-detail .execution-action {
+  width: 100%;
+  margin-top: 0.25rem;
+}
+.workout-list {
+  overflow: hidden;
+}
+.workout-swipe {
+  border: 0;
+  background: #d93b4f;
+}
+.workout-delete {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6.4rem;
+  height: 100%;
+  border: 0;
+  background: #d93b4f;
+  color: #fff;
+  font-weight: 800;
+}
+.workout-card {
+  position: relative;
+  z-index: 1;
+  border: 1px solid #222b3e;
+  border-radius: 1.2rem;
+  background: #141923;
+  transition: transform 180ms ease;
+  touch-action: pan-y;
+}
+.workout-swipe.open .workout-card {
+  transform: translateX(-6.4rem);
 }
