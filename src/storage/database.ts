@@ -432,7 +432,7 @@ export const removeExecutedUpcomingSet = (
     .find((exercise) => exercise.exerciseId === exerciseId)
     ?.sets.find((set) => set.setId === setId);
   if (target?.status !== "upcoming") return execution;
-  const next = normalizeExecution({
+  return {
     ...execution,
     exercises: execution.exercises.map((exercise) =>
       exercise.exerciseId !== exerciseId
@@ -442,8 +442,7 @@ export const removeExecutedUpcomingSet = (
             sets: exercise.sets.filter((set) => set.setId !== setId),
           },
     ),
-  });
-  return activateNextUpcomingExercise(next);
+  };
 };
 
 export const completeWorkoutExecution = (

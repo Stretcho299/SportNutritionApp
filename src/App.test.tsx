@@ -601,3 +601,26 @@ it("keeps add set available after the first series has started", async () => {
     within(region).getByRole("heading", { name: "SÉRIE 3" }),
   ).toBeInTheDocument();
 });
+
+it("does not activate the next exercise when deleting an upcoming set", async () => {
+  await openEmptyWorkout();
+  createExercise("A", 2, 30);
+  createExercise("B", 1, 30);
+  fireEvent.click(screen.getByText("Démarrer la séance"));
+  const region = seriesRegion("A");
+  const blocks = within(region).getAllByRole("listitem");
+  fireEvent.click(within(blocks[1]).getByText("Supprimer"));
+  expect(
+    storedWorkouts()[0].execution?.exercises.map((item) => item.status),
+  ).toEqual(["active", "upcoming"]);
+  expect(within(region).getAllByRole("listitem")).toHaveLength(1);
+  selectExercise("B");
+  expect(
+    within(seriesRegion("B")).getByText("À venir", { selector: ".set-status" }),
+  ).toBeInTheDocument();
+  selectExercise("A");
+  fireEvent.click(within(region).getByText("Lancer le repos"));
+  expect(
+    storedWorkouts()[0].execution?.exercises.map((item) => item.status),
+  ).toEqual(["active", "upcoming"]);
+});

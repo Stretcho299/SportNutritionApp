@@ -193,3 +193,33 @@ it("keeps completed execution final and omits the final rest", async () => {
   await saveWorkouts([{ ...workout, execution: completed }]);
   expect((await loadWorkouts())[0].execution).toEqual(completed);
 });
+
+it("does not complete an exercise or activate the next one when its last upcoming set is removed", () => {
+  let workout = addExercise(createWorkout("Push"), "Bench", 3, 30);
+  workout = addExercise(workout, "Row", 1, 30);
+  const bench = workout.exercises[0];
+  let execution = startWorkoutExecution(workout, 1000);
+  execution = {
+    ...execution,
+    exercises: execution.exercises.map((exercise) =>
+      exercise.exerciseId === bench.id
+        ? {
+            ...exercise,
+            status: "active",
+            sets: exercise.sets.map((set, index) => ({
+              ...set,
+              status: index < 2 ? "performed" : "upcoming",
+            })),
+          }
+        : { ...exercise, status: "upcoming" },
+    ),
+  };
+  const next = removeExecutedUpcomingSet(
+    execution,
+    bench.id,
+    bench.plannedSets[2].id,
+  );
+  expect(next.exercises[0].status).toBe("active");
+  expect(next.exercises[1].status).toBe("upcoming");
+  expect(next.exercises[1].sets[0].status).toBe("upcoming");
+});
