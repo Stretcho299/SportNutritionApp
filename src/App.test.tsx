@@ -447,3 +447,36 @@ it("shows an active series and advances it when its rest ends", async () => {
     weightKg: 80,
   });
 });
+
+it("reveals a confirmed workout deletion action after a horizontal swipe", async () => {
+  render(<App />);
+  await screen.findByText("Aucune séance");
+  const create = (name: string) => {
+    fireEvent.click(screen.getByText("Créer une séance"));
+    fireEvent.change(screen.getByLabelText("Nom"), { target: { value: name } });
+    fireEvent.click(screen.getByText("Enregistrer"));
+  };
+  create("Push");
+  create("Pull");
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  const card = screen.getByText("Push").closest("li")!;
+  fireEvent.pointerDown(card, { clientX: 160 });
+  fireEvent.pointerMove(card, { clientX: 80 });
+  fireEvent.pointerUp(card, { clientX: 80 });
+  expect(card).toHaveClass("open");
+  expect(confirm).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Supprimer Push" }));
+  expect(confirm).toHaveBeenCalledWith("Supprimer cette séance ?");
+  expect(screen.getByText("Push")).toBeInTheDocument();
+  fireEvent.pointerDown(card, { clientX: 80 });
+  fireEvent.pointerMove(card, { clientX: 160 });
+  fireEvent.pointerUp(card, { clientX: 160 });
+  expect(card).not.toHaveClass("open");
+  fireEvent.pointerDown(card, { clientX: 160 });
+  fireEvent.pointerMove(card, { clientX: 80 });
+  fireEvent.pointerUp(card, { clientX: 80 });
+  confirm.mockReturnValue(true);
+  fireEvent.click(screen.getByRole("button", { name: "Supprimer Push" }));
+  expect(screen.queryByText("Push")).not.toBeInTheDocument();
+  expect(storedWorkouts().map((workout) => workout.name)).toEqual(["Pull"]);
+});

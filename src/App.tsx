@@ -134,6 +134,17 @@ export default function App() {
       );
     close();
   };
+  const removeWorkout = (id: string) => {
+    const target = workouts.find((item) => item.id === id);
+    if (target && confirm("Supprimer cette séance ?")) {
+      update(workouts.filter((item) => item.id !== id));
+      if (workoutId === id) {
+        setWorkoutId("");
+        setExerciseId("");
+        setScreen("list");
+      }
+    }
+  };
   const removeExercise = () => {
     if (workout && exercise && confirm("Supprimer cet exercice ?")) {
       update(
@@ -269,25 +280,18 @@ export default function App() {
               <span>Créez votre première séance.</span>
             </section>
           ) : (
-            <ul>
-              {workouts.map((w) => (
-                <li key={w.id}>
-                  <button
-                    className="row"
-                    onClick={() => {
-                      setWorkoutId(w.id);
-                      setExerciseId(sort(w.exercises)[0]?.id ?? "");
-                      setScreen("detail");
-                    }}
-                  >
-                    <strong>{w.name}</strong>
-                    <small>
-                      {w.exercises.length} exercice
-                      {w.exercises.length > 1 ? "s" : ""}
-                    </small>
-                    <span>›</span>
-                  </button>
-                </li>
+            <ul className="workout-list">
+              {workouts.map((item) => (
+                <WorkoutRow
+                  key={item.id}
+                  workout={item}
+                  onDelete={() => removeWorkout(item.id)}
+                  onOpen={() => {
+                    setWorkoutId(item.id);
+                    setExerciseId(sort(item.exercises)[0]?.id ?? "");
+                    setScreen("detail");
+                  }}
+                />
               ))}
             </ul>
           )}
@@ -743,6 +747,72 @@ export default function App() {
         <button onClick={() => setScreen("list")}>Nutrition</button>
       </nav>
     </main>
+  );
+}
+
+function WorkoutRow({
+  workout,
+  onOpen,
+  onDelete,
+}: {
+  workout: Workout;
+  onOpen: () => void;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const startX = useRef<number | null>(null);
+  const moved = useRef(false);
+  const move = (clientX: number) => {
+    if (startX.current === null) return;
+    const distance = clientX - startX.current;
+    if (Math.abs(distance) > 8) moved.current = true;
+    if (distance < -36) setOpen(true);
+    if (distance > 36) setOpen(false);
+  };
+  return (
+    <li
+      className={"workout-swipe" + (open ? " open" : "")}
+      onPointerDown={(event) => {
+        startX.current = event.clientX;
+        moved.current = false;
+      }}
+      onPointerMove={(event) => move(event.clientX)}
+      onPointerUp={(event) => {
+        move(event.clientX);
+        startX.current = null;
+      }}
+      onPointerCancel={() => {
+        startX.current = null;
+      }}
+    >
+      <button
+        aria-label={"Supprimer " + workout.name}
+        className="workout-delete"
+        onClick={(event) => {
+          event.stopPropagation();
+          onDelete();
+        }}
+      >
+        Supprimer
+      </button>
+      <button
+        className="row workout-card"
+        onClick={() => {
+          if (moved.current) {
+            moved.current = false;
+            return;
+          }
+          onOpen();
+        }}
+      >
+        <strong>{workout.name}</strong>
+        <small>
+          {workout.exercises.length} exercice
+          {workout.exercises.length > 1 ? "s" : ""}
+        </small>
+        <span>›</span>
+      </button>
+    </li>
   );
 }
 
