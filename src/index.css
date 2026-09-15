@@ -769,3 +769,17 @@ input:focus-visible {
     padding: 0 0.35rem;
   }
 }
+.workout-detail .set-block.active {
+  border-color: #2878ff;
+  box-shadow: 0 0 0 1px #2878ff66;
+}
+.workout-detail .set-status {
+  margin: 0 0 0.3rem;
+  color: #79a8ff;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+.workout-detail .execution-action {
+  width: 100%;
+  margin-top: 0.25rem;
+}

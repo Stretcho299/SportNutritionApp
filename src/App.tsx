@@ -1,15 +1,20 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
 import {
   addExercise,
   addSet,
   createWorkout,
   defaultRestSeconds,
+  finishExecutedRest,
   loadWorkouts,
   reorder,
   saveWorkouts,
+  skipExecutedExercise,
   sort,
+  startExecutedSetRest,
   startWorkoutExecution,
+  updateExecutedSet,
+  type ExecutedSet,
   type WorkoutExecution,
   type Workout,
 } from "./storage/database";
@@ -32,23 +37,50 @@ export default function App() {
   const [name, setName] = useState("");
   const [initialSetCount, setInitialSetCount] = useState("1");
   const [rest, setRest] = useState(String(defaultRestSeconds));
+  const [clock, setClock] = useState(0);
   useEffect(() => {
     void loadWorkouts().then(setWorkouts);
   }, []);
-  const update = (next: Workout[]) => {
+  const update = useCallback((next: Workout[]) => {
     setWorkouts(next);
     void saveWorkouts(next);
-  };
+  }, []);
   const workout = workouts.find((w) => w.id === workoutId);
   const exercise = workout?.exercises.find((e) => e.id === exerciseId);
   const execution = workout?.execution;
-  const updateExecution = (next: WorkoutExecution) =>
-    update(
-      workouts.map((w) => (w.id === workoutId ? { ...w, execution: next } : w)),
+  const executionExercise = (id: string) =>
+    execution?.exercises.find((item) => item.exerciseId === id);
+  const executionSet = (id: string): ExecutedSet | undefined =>
+    executionExercise(exercise?.id ?? "")?.sets.find(
+      (item) => item.setId === id,
     );
+  const updateExecution = useCallback(
+    (next: WorkoutExecution) =>
+      update(
+        workouts.map((w) =>
+          w.id === workoutId ? { ...w, execution: next } : w,
+        ),
+      ),
+    [update, workoutId, workouts],
+  );
   const startExecution = () => {
     if (workout) updateExecution(startWorkoutExecution(workout));
   };
+  useEffect(() => {
+    const resting = execution?.exercises
+      .flatMap((item) => item.sets)
+      .find((item) => item.status === "resting");
+    const restEndsAt = resting?.restEndsAt;
+    if (!restEndsAt) return;
+    const tick = () => {
+      setClock(Date.now());
+      if (restEndsAt <= Date.now())
+        updateExecution(finishExecutedRest(execution!));
+    };
+    tick();
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
+  }, [execution, updateExecution]);
   const finishWorkout = () => {
     if (execution)
       updateExecution({
@@ -170,7 +202,23 @@ export default function App() {
     update(
       workouts.map((w) =>
         w.id === workout.id
-          ? { ...w, exercises: reorder(w.exercises, from, to) }
+          ? (() => {
+              const exercises = reorder(w.exercises, from, to);
+              return {
+                ...w,
+                exercises,
+                execution: w.execution
+                  ? {
+                      ...w.execution,
+                      exercises: exercises.map((item) =>
+                        w.execution!.exercises.find(
+                          (entry) => entry.exerciseId === item.id,
+                        )!,
+                      ),
+                    }
+                  : undefined,
+              };
+            })()
           : w,
       ),
     );
@@ -264,7 +312,11 @@ export default function App() {
                 <ul className="exercise-tabs" aria-label="Exercices">
                   {sort(workout.exercises).map((x, i) => (
                     <li
-                      className={x.id === exerciseId ? "selected" : ""}
+                      className={
+                        (x.id === exerciseId ? "selected " : "") +
+                        "execution-" +
+                        (executionExercise(x.id)?.status ?? "upcoming")
+                      }
                       key={x.id}
                     >
                       <button
@@ -276,7 +328,13 @@ export default function App() {
                           className="exercise-tab-circle"
                           aria-hidden="true"
                         >
-                          ✦
+                          {execution
+                            ? executionExercise(x.id)?.status === "completed"
+                              ? "✓"
+                              : executionExercise(x.id)?.status === "active"
+                                ? "●"
+                                : "○"
+                            : "✦"}
                         </span>
                         <span className="exercise-tab-index" aria-hidden="true">
                           {i + 1}
@@ -304,7 +362,22 @@ export default function App() {
                     >
                       •••
                     </button>
-                    <button onClick={removeExercise}>Supprimer</button>
+                    {execution?.status === "inProgress" ? (
+                      <button
+                        disabled={
+                          executionExercise(exercise.id)?.status === "completed"
+                        }
+                        onClick={() =>
+                          updateExecution(
+                            skipExecutedExercise(execution, exercise.id),
+                          )
+                        }
+                      >
+                        Terminer l’exercice
+                      </button>
+                    ) : (
+                      <button onClick={removeExercise}>Supprimer</button>
+                    )}
                   </div>
                 </section>
                 <button
@@ -338,7 +411,28 @@ export default function App() {
               >
                 <ul>
                   {sort(exercise.plannedSets).map((s, i) => (
-                    <li className="set-block" key={s.id}>
+                    <li
+                      className={
+                        "set-block" +
+                        (executionSet(s.id)?.status === "active"
+                          ? " active"
+                          : "")
+                      }
+                      key={s.id}
+                    >
+                      {execution && (
+                        <p className="set-status">
+                          {executionSet(s.id)?.status === "active"
+                            ? "Série active"
+                            : executionSet(s.id)?.status === "resting"
+                              ? "Repos en cours"
+                              : executionSet(s.id)?.status === "performed"
+                                ? "Effectuée"
+                                : executionSet(s.id)?.status === "skipped"
+                                  ? "Skippée"
+                                  : "À venir"}
+                        </p>
+                      )}
                       <h3>SÉRIE {i + 1}</h3>
                       <p className="set-exercise-name">{exercise.name}</p>
                       <p className="set-advanced">
@@ -347,30 +441,119 @@ export default function App() {
                       <SetField
                         label="Répétitions"
                         allowEmpty
-                        value={s.repetitions}
+                        value={executionSet(s.id)?.repetitions ?? s.repetitions}
                         min={1}
                         step={1}
-                        onSave={(value) => editSet(s.id, "repetitions", value)}
+                        onSave={(value) =>
+                          execution
+                            ? updateExecution(
+                                updateExecutedSet(
+                                  execution,
+                                  exercise.id,
+                                  s.id,
+                                  "repetitions",
+                                  value,
+                                ),
+                              )
+                            : editSet(s.id, "repetitions", value)
+                        }
+                        disabled={
+                          !!execution && executionSet(s.id)?.status !== "active"
+                        }
                       />
                       <SetField
                         label="Charge (kg)"
                         allowEmpty
-                        value={s.weightKg}
+                        value={executionSet(s.id)?.weightKg ?? s.weightKg}
                         min={0}
                         step="any"
-                        onSave={(value) => editSet(s.id, "weightKg", value)}
+                        onSave={(value) =>
+                          execution
+                            ? updateExecution(
+                                updateExecutedSet(
+                                  execution,
+                                  exercise.id,
+                                  s.id,
+                                  "weightKg",
+                                  value,
+                                ),
+                              )
+                            : editSet(s.id, "weightKg", value)
+                        }
+                        disabled={
+                          !!execution && executionSet(s.id)?.status !== "active"
+                        }
                       />
                       <SetField
                         label="Repos (secondes)"
-                        value={s.restSeconds}
+                        value={executionSet(s.id)?.restSeconds ?? s.restSeconds}
                         min={0}
                         step={1}
-                        onSave={(value) => editSet(s.id, "restSeconds", value)}
+                        onSave={(value) =>
+                          execution
+                            ? updateExecution(
+                                updateExecutedSet(
+                                  execution,
+                                  exercise.id,
+                                  s.id,
+                                  "restSeconds",
+                                  value,
+                                ),
+                              )
+                            : editSet(s.id, "restSeconds", value)
+                        }
+                        disabled={
+                          !!execution && executionSet(s.id)?.status !== "active"
+                        }
                       />
                       <p className="rest-timer">
-                        {formatRest(s.restSeconds)} · Repos prévu
+                        {formatRest(
+                          executionSet(s.id)?.status === "resting"
+                            ? Math.max(
+                                0,
+                                Math.ceil(
+                                  ((executionSet(s.id)?.restEndsAt ?? clock) -
+                                    clock) /
+                                    1000,
+                                ),
+                              )
+                            : (executionSet(s.id)?.restSeconds ??
+                                s.restSeconds),
+                        )}{" "}
+                        ·{" "}
+                        {executionSet(s.id)?.status === "resting"
+                          ? "Repos en cours"
+                          : execution
+                            ? "Repos"
+                            : "Repos prévu"}
                       </p>
-                      <div className="order">
+                      {executionSet(s.id)?.status === "active" && (
+                        <button
+                          className="primary execution-action"
+                          onClick={() =>
+                            updateExecution(
+                              startExecutedSetRest(
+                                execution!,
+                                exercise.id,
+                                s.id,
+                              ),
+                            )
+                          }
+                        >
+                          Lancer le repos
+                        </button>
+                      )}
+                      {executionSet(s.id)?.status === "resting" && (
+                        <button
+                          className="execution-action"
+                          onClick={() =>
+                            updateExecution(finishExecutedRest(execution!))
+                          }
+                        >
+                          Terminer le repos
+                        </button>
+                      )}
+                      <div className="order" hidden={!!execution}>
                         <button
                           onClick={() =>
                             update(
@@ -403,9 +586,11 @@ export default function App() {
                     </li>
                   ))}
                 </ul>
-                <button className="primary" onClick={appendSet}>
-                  + Ajouter une série
-                </button>
+                {!execution && (
+                  <button className="primary" onClick={appendSet}>
+                    + Ajouter une série
+                  </button>
+                )}
               </section>
             </div>
           )}
@@ -460,14 +645,26 @@ export default function App() {
                     <div className="order">
                       <button
                         aria-label={`Monter ${x.name}`}
-                        disabled={i === 0}
+                        disabled={
+                          i === 0 ||
+                          executionExercise(x.id)?.status === "completed" ||
+                          executionExercise(
+                            sort(workout.exercises)[i - 1]?.id ?? "",
+                          )?.status === "completed"
+                        }
                         onClick={() => moveExercise(i, i - 1)}
                       >
                         ↑
                       </button>
                       <button
                         aria-label={`Descendre ${x.name}`}
-                        disabled={i === workout.exercises.length - 1}
+                        disabled={
+                          i === workout.exercises.length - 1 ||
+                          executionExercise(x.id)?.status === "completed" ||
+                          executionExercise(
+                            sort(workout.exercises)[i + 1]?.id ?? "",
+                          )?.status === "completed"
+                        }
                         onClick={() => moveExercise(i, i + 1)}
                       >
                         ↓
@@ -560,6 +757,7 @@ function SetField({
   step,
   onSave,
   allowEmpty = false,
+  disabled = false,
 }: {
   label: string;
   value: number | null;
@@ -567,6 +765,7 @@ function SetField({
   step: number | "any";
   onSave: (value: number | null) => void;
   allowEmpty?: boolean;
+  disabled?: boolean;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
   return (
@@ -578,6 +777,7 @@ function SetField({
         step={step}
         required={!allowEmpty}
         inputMode={step === "any" ? "decimal" : "numeric"}
+        disabled={disabled}
         value={draft ?? (value == null ? "" : String(value))}
         onChange={(event) => {
           setDraft(event.target.value);

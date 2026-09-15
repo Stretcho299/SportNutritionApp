@@ -417,3 +417,33 @@ it("keeps fixed exercise zones outside a long series list", async () => {
   expect(within(sets).getAllByRole("listitem")).toHaveLength(12);
   expect(view.container.querySelector("main")).toHaveClass("workout-detail");
 });
+
+it("shows an active series and advances it when its rest ends", async () => {
+  await openEmptyWorkout();
+  createExercise("Squat", 2, 30);
+  fireEvent.click(screen.getByText("Démarrer la séance"));
+  const blocks = within(seriesRegion("Squat")).getAllByRole("listitem");
+  expect(within(blocks[0]).getByText("Série active")).toBeInTheDocument();
+  expect(
+    within(blocks[1]).getByText("À venir", { selector: ".set-status" }),
+  ).toBeInTheDocument();
+  expect(within(blocks[0]).getByLabelText("Répétitions")).toBeEnabled();
+  expect(within(blocks[1]).getByLabelText("Répétitions")).toBeDisabled();
+  fireEvent.change(within(blocks[0]).getByLabelText("Répétitions"), {
+    target: { value: "10" },
+  });
+  fireEvent.change(within(blocks[0]).getByLabelText("Charge (kg)"), {
+    target: { value: "80" },
+  });
+  fireEvent.click(within(blocks[0]).getByText("Lancer le repos"));
+  expect(within(blocks[0]).getByText("Repos en cours")).toBeInTheDocument();
+  expect(within(blocks[0]).getByLabelText("Répétitions")).toBeDisabled();
+  fireEvent.click(within(blocks[0]).getByText("Terminer le repos"));
+  expect(within(blocks[0]).getByText("Effectuée")).toBeInTheDocument();
+  expect(within(blocks[1]).getByText("Série active")).toBeInTheDocument();
+  expect(storedWorkouts()[0].execution?.exercises[0].sets[0]).toMatchObject({
+    status: "performed",
+    repetitions: 10,
+    weightKg: 80,
+  });
+});
