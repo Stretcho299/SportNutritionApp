@@ -1,8 +1,8 @@
 export type PlannedSet = {
   id: string;
   position: number;
-  weightKg: number;
-  repetitions: number;
+  weightKg: number | null;
+  repetitions: number | null;
   restSeconds: number;
 };
 export type Exercise = {
@@ -10,6 +10,7 @@ export type Exercise = {
   name: string;
   position: number;
   plannedSets: PlannedSet[];
+  defaultRestSeconds?: number;
 };
 export type Workout = { id: string; name: string; exercises: Exercise[] };
 export const defaultRestSeconds = 90;
@@ -23,29 +24,51 @@ export const createWorkout = (name: string): Workout => ({
   name,
   exercises: [],
 });
-export const addExercise = (w: Workout, name: string): Workout => ({
-  ...w,
-  exercises: [
-    ...w.exercises,
-    { id: id(), name, position: w.exercises.length, plannedSets: [] },
-  ],
+const blankSet = (position: number, restSeconds: number): PlannedSet => ({
+  id: id(),
+  position,
+  weightKg: null,
+  repetitions: null,
+  restSeconds,
 });
-export const addSet = (
-  e: Exercise,
-  weightKg: number,
-  repetitions: number,
+export const addExercise = (
+  w: Workout,
+  name: string,
+  initialSetCount = 1,
   restSeconds = defaultRestSeconds,
-): Exercise => ({
+): Workout => {
+  if (!Number.isSafeInteger(initialSetCount) || initialSetCount <= 0)
+    throw new RangeError(
+      "Le nombre de séries doit être un entier strictement positif.",
+    );
+  return {
+    ...w,
+    exercises: [
+      ...w.exercises,
+      {
+        id: id(),
+        name,
+        position: w.exercises.length,
+        defaultRestSeconds: restSeconds,
+        plannedSets: Array.from({ length: initialSetCount }, (_, position) =>
+          blankSet(position, restSeconds),
+        ),
+      },
+    ],
+  };
+};
+// Prefer the last series in the displayed order, including an explicit zero rest.
+// The exercise default survives deletion of all its sets; legacy exercises need no migration.
+export const addSet = (e: Exercise): Exercise => ({
   ...e,
   plannedSets: [
     ...e.plannedSets,
-    {
-      id: id(),
-      position: e.plannedSets.length,
-      weightKg,
-      repetitions,
-      restSeconds,
-    },
+    blankSet(
+      e.plannedSets.length,
+      sort(e.plannedSets).at(-1)?.restSeconds ??
+        e.defaultRestSeconds ??
+        defaultRestSeconds,
+    ),
   ],
 });
 export const reorder = <T extends { position: number }>(
