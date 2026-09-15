@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
 import {
+  activateExecutedExercise,
   addExercise,
+  addExerciseToExecution,
   addSet,
+  completeWorkoutExecution,
   createWorkout,
   defaultRestSeconds,
   finishExecutedRest,
   loadWorkouts,
+  removeExecutedUpcomingSet,
   reorder,
   saveWorkouts,
   skipExecutedExercise,
@@ -82,11 +86,7 @@ export default function App() {
     return () => window.clearInterval(interval);
   }, [execution, updateExecution]);
   const finishWorkout = () => {
-    if (execution)
-      updateExecution({
-        ...execution,
-        status: "completed",
-      });
+    if (execution) updateExecution(completeWorkoutExecution(execution));
   };
   const close = () => {
     setDialog(null);
@@ -116,8 +116,19 @@ export default function App() {
         Number(initialSetCount),
         Number(rest),
       );
-      update(workouts.map((w) => (w.id === workout.id ? nextWorkout : w)));
-      if (!exercise) setExerciseId(nextWorkout.exercises.at(-1)!.id);
+      const addedExercise = nextWorkout.exercises.at(-1)!;
+      const nextExecution =
+        workout.execution?.status === "inProgress"
+          ? addExerciseToExecution(workout.execution, addedExercise)
+          : workout.execution;
+      update(
+        workouts.map((w) =>
+          w.id === workout.id
+            ? { ...nextWorkout, execution: nextExecution }
+            : w,
+        ),
+      );
+      if (!exercise) setExerciseId(addedExercise.id);
     }
     if (dialog === "renameExercise" && workout && exercise && name.trim())
       update(
@@ -205,6 +216,33 @@ export default function App() {
               ),
             }
           : w,
+      ),
+    );
+  };
+  const removeSet = (id: string) => {
+    if (!workout || !exercise) return;
+    const current = executionSet(id);
+    if (execution && current?.status !== "upcoming") return;
+    update(
+      workouts.map((w) =>
+        w.id !== workout.id
+          ? w
+          : {
+              ...w,
+              exercises: w.exercises.map((x) =>
+                x.id !== exercise.id
+                  ? x
+                  : {
+                      ...x,
+                      plannedSets: sort(x.plannedSets)
+                        .filter((set) => set.id !== id)
+                        .map((set, position) => ({ ...set, position })),
+                    },
+              ),
+              execution: w.execution
+                ? removeExecutedUpcomingSet(w.execution, exercise.id, id)
+                : undefined,
+            },
       ),
     );
   };
@@ -326,7 +364,13 @@ export default function App() {
                       <button
                         className="exercise-tab"
                         aria-pressed={x.id === exerciseId}
-                        onClick={() => setExerciseId(x.id)}
+                        onClick={() => {
+                          setExerciseId(x.id);
+                          if (execution?.status === "inProgress")
+                            updateExecution(
+                              activateExecutedExercise(execution, x.id),
+                            );
+                        }}
                       >
                         <span
                           className="exercise-tab-circle"
@@ -395,7 +439,7 @@ export default function App() {
                 >
                   Options avancées
                 </button>
-                {!execution || execution.status === "completed" ? (
+                {!execution ? (
                   <button className="primary" onClick={startExecution}>
                     Démarrer la séance
                   </button>
@@ -403,6 +447,8 @@ export default function App() {
                   <button className="primary" onClick={finishWorkout}>
                     Terminer la séance
                   </button>
+                ) : execution.status === "completed" ? (
+                  <p className="execution-resume">Séance terminée</p>
                 ) : (
                   <p className="execution-resume">
                     Séance en cours · Reprenez là où vous vous êtes arrêté.
@@ -557,36 +603,14 @@ export default function App() {
                           Terminer le repos
                         </button>
                       )}
-                      <div className="order" hidden={!!execution}>
-                        <button
-                          onClick={() =>
-                            update(
-                              workouts.map((w) =>
-                                w.id === workout!.id
-                                  ? {
-                                      ...w,
-                                      exercises: w.exercises.map((x) =>
-                                        x.id === exercise.id
-                                          ? {
-                                              ...x,
-                                              plannedSets: sort(x.plannedSets)
-                                                .filter((y) => y.id !== s.id)
-                                                .map((y, position) => ({
-                                                  ...y,
-                                                  position,
-                                                })),
-                                            }
-                                          : x,
-                                      ),
-                                    }
-                                  : w,
-                              ),
-                            )
-                          }
-                        >
-                          Supprimer
-                        </button>
-                      </div>
+                      {(!execution ||
+                        executionSet(s.id)?.status === "upcoming") && (
+                        <div className="order">
+                          <button onClick={() => removeSet(s.id)}>
+                            Supprimer
+                          </button>
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ul>

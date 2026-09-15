@@ -134,28 +134,87 @@ export type WorkoutExecution = {
   completedAt?: number;
   exercises: ExecutedExercise[];
 };
-const activateNext = (execution: WorkoutExecution): WorkoutExecution => {
-  const exercises = execution.exercises.map((exercise) => ({
-    ...exercise,
-    sets: exercise.sets.map((set) => ({ ...set, restEndsAt: undefined })),
-  }));
-  for (const exercise of exercises) {
-    if (exercise.status === "completed") continue;
-    const next = exercise.sets.find((set) => set.status === "upcoming");
-    if (next) {
-      exercise.status = "active";
-      next.status = "active";
-      return { ...execution, status: "inProgress", exercises };
-    }
-    exercise.status = "completed";
-  }
-  return { ...execution, status: "readyToFinish", exercises };
+const isTerminalSet = (set: ExecutedSet) =>
+  set.status === "performed" || set.status === "skipped";
+
+const normalizeExecution = (execution: WorkoutExecution): WorkoutExecution => {
+  if (execution.status === "completed") return execution;
+  const exercises: ExecutedExercise[] = execution.exercises.map((exercise) => {
+    const completed = exercise.sets.every(isTerminalSet);
+    return {
+      ...exercise,
+      status: completed
+        ? "completed"
+        : exercise.sets.some(
+              (set) =>
+                set.status === "active" ||
+                set.status === "resting" ||
+                set.status === "performed",
+            )
+          ? "active"
+          : "upcoming",
+    };
+  });
+  return {
+    ...execution,
+    status: exercises.every((exercise) => exercise.status === "completed")
+      ? "readyToFinish"
+      : "inProgress",
+    exercises,
+  };
 };
+
+export const activateExecutedExercise = (
+  execution: WorkoutExecution,
+  exerciseId: string,
+): WorkoutExecution => {
+  if (execution.status !== "inProgress") return execution;
+  const normalized = normalizeExecution(execution);
+  if (normalized.status !== "inProgress") return normalized;
+  return {
+    ...normalized,
+    exercises: normalized.exercises.map((exercise) => {
+      if (exercise.exerciseId !== exerciseId || exercise.status === "completed")
+        return exercise;
+      if (
+        exercise.sets.some(
+          (set) => set.status === "active" || set.status === "resting",
+        )
+      )
+        return { ...exercise, status: "active" };
+      const next = exercise.sets.find((set) => set.status === "upcoming");
+      return next
+        ? {
+            ...exercise,
+            status: "active",
+            sets: exercise.sets.map((set) =>
+              set.setId === next.setId ? { ...set, status: "active" } : set,
+            ),
+          }
+        : exercise;
+    }),
+  };
+};
+
+const activateNextUpcomingExercise = (execution: WorkoutExecution) => {
+  const normalized = normalizeExecution(execution);
+  if (normalized.status !== "inProgress") return normalized;
+  const next = normalized.exercises.find(
+    (exercise) =>
+      exercise.status === "upcoming" &&
+      exercise.sets.some((set) => set.status === "upcoming"),
+  );
+  return next
+    ? activateExecutedExercise(normalized, next.exerciseId)
+    : normalized;
+};
+
 export const startWorkoutExecution = (
   workout: Workout,
   now = Date.now(),
-): WorkoutExecution =>
-  activateNext({
+): WorkoutExecution => {
+  if (workout.execution) return workout.execution;
+  const execution: WorkoutExecution = {
     status: "inProgress",
     startedAt: now,
     exercises: sort(workout.exercises).map((exercise) => ({
@@ -169,64 +228,46 @@ export const startWorkoutExecution = (
         restSeconds: set.restSeconds,
       })),
     })),
+  };
+  return execution.exercises[0]
+    ? activateExecutedExercise(execution, execution.exercises[0].exerciseId)
+    : normalizeExecution(execution);
+};
+
+export const addExerciseToExecution = (
+  execution: WorkoutExecution,
+  exercise: Exercise,
+): WorkoutExecution => {
+  if (execution.status === "completed") return execution;
+  if (execution.exercises.some((item) => item.exerciseId === exercise.id))
+    return execution;
+  return normalizeExecution({
+    ...execution,
+    exercises: [
+      ...execution.exercises,
+      {
+        exerciseId: exercise.id,
+        status: "upcoming",
+        sets: sort(exercise.plannedSets).map((set) => ({
+          setId: set.id,
+          status: "upcoming",
+          repetitions: set.repetitions,
+          weightKg: set.weightKg,
+          restSeconds: set.restSeconds,
+        })),
+      },
+    ],
   });
+};
+
 export const updateExecutedSet = (
   execution: WorkoutExecution,
   exerciseId: string,
   setId: string,
   field: "repetitions" | "weightKg" | "restSeconds",
   value: number | null,
-): WorkoutExecution => ({
-  ...execution,
-  exercises: execution.exercises.map((exercise) =>
-    exercise.exerciseId !== exerciseId
-      ? exercise
-      : {
-          ...exercise,
-          sets: exercise.sets.map((set) =>
-            set.setId !== setId || set.status !== "active"
-              ? set
-              : { ...set, [field]: value },
-          ),
-        },
-  ),
-});
-export const startExecutedSetRest = (
-  execution: WorkoutExecution,
-  exerciseId: string,
-  setId: string,
-  now = Date.now(),
 ): WorkoutExecution => {
-  const remaining = execution.exercises.some((exercise) =>
-    exercise.exerciseId !== exerciseId
-      ? exercise.sets.some(
-          (set) => set.status === "upcoming" || set.status === "active",
-        )
-      : exercise.sets.some(
-          (set) =>
-            set.setId !== setId &&
-            (set.status === "upcoming" || set.status === "active"),
-        ),
-  );
-  if (!remaining) {
-    const completed: WorkoutExecution = {
-      ...execution,
-      exercises: execution.exercises.map((exercise) =>
-        exercise.exerciseId !== exerciseId
-          ? exercise
-          : {
-              ...exercise,
-              status: "completed",
-              sets: exercise.sets.map((set) =>
-                set.setId === setId
-                  ? { ...set, status: "performed", restEndsAt: undefined }
-                  : set,
-              ),
-            },
-      ),
-    };
-    return { ...completed, status: "readyToFinish" };
-  }
+  if (execution.status !== "inProgress") return execution;
   return {
     ...execution,
     exercises: execution.exercises.map((exercise) =>
@@ -235,7 +276,58 @@ export const startExecutedSetRest = (
         : {
             ...exercise,
             sets: exercise.sets.map((set) =>
-              set.setId === setId && set.status === "active"
+              set.setId !== setId || set.status !== "active"
+                ? set
+                : { ...set, [field]: value },
+            ),
+          },
+    ),
+  };
+};
+
+export const startExecutedSetRest = (
+  execution: WorkoutExecution,
+  exerciseId: string,
+  setId: string,
+  now = Date.now(),
+): WorkoutExecution => {
+  if (execution.status !== "inProgress") return execution;
+  const target = execution.exercises
+    .find((exercise) => exercise.exerciseId === exerciseId)
+    ?.sets.find((set) => set.setId === setId);
+  if (target?.status !== "active") return execution;
+  const remaining = execution.exercises.some((exercise) =>
+    exercise.sets.some((set) =>
+      set.setId === setId && exercise.exerciseId === exerciseId
+        ? false
+        : !isTerminalSet(set),
+    ),
+  );
+  if (!remaining)
+    return normalizeExecution({
+      ...execution,
+      exercises: execution.exercises.map((exercise) =>
+        exercise.exerciseId !== exerciseId
+          ? exercise
+          : {
+              ...exercise,
+              sets: exercise.sets.map((set) =>
+                set.setId === setId
+                  ? { ...set, status: "performed", restEndsAt: undefined }
+                  : set,
+              ),
+            },
+      ),
+    });
+  return normalizeExecution({
+    ...execution,
+    exercises: execution.exercises.map((exercise) =>
+      exercise.exerciseId !== exerciseId
+        ? exercise
+        : {
+            ...exercise,
+            sets: exercise.sets.map((set) =>
+              set.setId === setId
                 ? {
                     ...set,
                     status: "resting",
@@ -245,13 +337,15 @@ export const startExecutedSetRest = (
             ),
           },
     ),
-  };
+  });
 };
+
 export const finishExecutedRest = (
   execution: WorkoutExecution,
 ): WorkoutExecution => {
+  if (execution.status !== "inProgress") return execution;
   let current = "";
-  const settled: WorkoutExecution = {
+  const settled = normalizeExecution({
     ...execution,
     exercises: execution.exercises.map((exercise) => ({
       ...exercise,
@@ -261,39 +355,73 @@ export const finishExecutedRest = (
         return { ...set, status: "performed", restEndsAt: undefined };
       }),
     })),
-  };
+  });
   if (!current) return execution;
-  const same = settled.exercises.find(
+  const currentExercise = settled.exercises.find(
     (exercise) => exercise.exerciseId === current,
   )!;
-  const next = same.sets.find((set) => set.status === "upcoming");
-  if (next) {
-    next.status = "active";
-    same.status = "active";
-    return settled;
-  }
-  same.status = "completed";
-  return activateNext(settled);
+  if (currentExercise.status === "completed")
+    return activateNextUpcomingExercise(settled);
+  return activateExecutedExercise(settled, current);
 };
+
 export const skipExecutedExercise = (
   execution: WorkoutExecution,
   exerciseId: string,
 ): WorkoutExecution => {
-  const skipped: WorkoutExecution = {
+  if (execution.status !== "inProgress") return execution;
+  const target = execution.exercises.find(
+    (exercise) => exercise.exerciseId === exerciseId,
+  );
+  if (!target || target.status === "completed") return execution;
+  const skipped = normalizeExecution({
     ...execution,
     exercises: execution.exercises.map((exercise) =>
       exercise.exerciseId !== exerciseId
         ? exercise
         : {
             ...exercise,
-            status: "completed",
             sets: exercise.sets.map((set) =>
               set.status === "upcoming" || set.status === "active"
                 ? { ...set, status: "skipped", restEndsAt: undefined }
-                : set,
+                : set.status === "resting"
+                  ? { ...set, status: "performed", restEndsAt: undefined }
+                  : set,
             ),
           },
     ),
-  };
-  return activateNext(skipped);
+  });
+  return activateNextUpcomingExercise(skipped);
 };
+
+export const removeExecutedUpcomingSet = (
+  execution: WorkoutExecution,
+  exerciseId: string,
+  setId: string,
+): WorkoutExecution => {
+  if (execution.status !== "inProgress") return execution;
+  const target = execution.exercises
+    .find((exercise) => exercise.exerciseId === exerciseId)
+    ?.sets.find((set) => set.setId === setId);
+  if (target?.status !== "upcoming") return execution;
+  const next = normalizeExecution({
+    ...execution,
+    exercises: execution.exercises.map((exercise) =>
+      exercise.exerciseId !== exerciseId
+        ? exercise
+        : {
+            ...exercise,
+            sets: exercise.sets.filter((set) => set.setId !== setId),
+          },
+    ),
+  });
+  return activateNextUpcomingExercise(next);
+};
+
+export const completeWorkoutExecution = (
+  execution: WorkoutExecution,
+  now = Date.now(),
+): WorkoutExecution =>
+  execution.status === "readyToFinish"
+    ? { ...execution, status: "completed", completedAt: now }
+    : execution;

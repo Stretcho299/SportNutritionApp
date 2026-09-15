@@ -489,3 +489,57 @@ it("reveals a confirmed workout deletion action after a horizontal swipe", async
   expect(screen.queryByText("Push")).not.toBeInTheDocument();
   expect(storedWorkouts().map((workout) => workout.name)).toEqual(["Pull"]);
 });
+
+it("adds an upcoming exercise during execution without losing the active series", async () => {
+  await openEmptyWorkout();
+  createExercise("Squat", 2, 30);
+  fireEvent.click(screen.getByText("Démarrer la séance"));
+  createExercise("Row", 2, 30);
+  expect(
+    within(seriesRegion("Squat")).getByText("Série active"),
+  ).toBeInTheDocument();
+  expect(storedWorkouts()[0].execution?.exercises).toMatchObject([
+    { exerciseId: storedWorkouts()[0].exercises[0].id, status: "active" },
+    { exerciseId: storedWorkouts()[0].exercises[1].id, status: "upcoming" },
+  ]);
+  selectExercise("Row");
+  expect(
+    within(seriesRegion("Row")).getByText("Série active"),
+  ).toBeInTheDocument();
+});
+
+it("only offers deletion for an upcoming series during execution", async () => {
+  await openEmptyWorkout();
+  createExercise("Squat", 3, 30);
+  fireEvent.click(screen.getByText("Démarrer la séance"));
+  let blocks = within(seriesRegion("Squat")).getAllByRole("listitem");
+  fireEvent.click(within(blocks[0]).getByText("Lancer le repos"));
+  fireEvent.click(within(blocks[0]).getByText("Terminer le repos"));
+  blocks = within(seriesRegion("Squat")).getAllByRole("listitem");
+  expect(within(blocks[0]).queryByText("Supprimer")).not.toBeInTheDocument();
+  expect(within(blocks[2]).getByText("Supprimer")).toBeInTheDocument();
+  fireEvent.click(within(blocks[2]).getByText("Supprimer"));
+  expect(within(seriesRegion("Squat")).getAllByRole("listitem")).toHaveLength(
+    2,
+  );
+});
+
+it("keeps a completed workout final after returning home and reloading", async () => {
+  const view = await openEmptyWorkout();
+  createExercise("Squat", 1, 30);
+  fireEvent.click(screen.getByText("Démarrer la séance"));
+  fireEvent.click(screen.getByText("Lancer le repos"));
+  expect(screen.getByText("Terminer la séance")).toBeInTheDocument();
+  fireEvent.click(screen.getByText("Terminer la séance"));
+  expect(screen.getByText("Séance terminée")).toBeInTheDocument();
+  expect(screen.queryByText("Démarrer la séance")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByLabelText("Retour aux séances"));
+  fireEvent.click(screen.getByText("Push"));
+  expect(screen.getByText("Séance terminée")).toBeInTheDocument();
+  view.unmount();
+  render(<App />);
+  fireEvent.click(await screen.findByText("Push"));
+  expect(screen.getByText("Séance terminée")).toBeInTheDocument();
+  expect(screen.queryByText("Démarrer la séance")).not.toBeInTheDocument();
+  expect(storedWorkouts()[0].execution?.status).toBe("completed");
+});
