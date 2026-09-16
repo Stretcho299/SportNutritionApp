@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
+import { Icon } from "./Icon";
 import { WorkoutProgress } from "./WorkoutProgress";
 import {
   ConfirmationDialog,
@@ -419,7 +420,9 @@ export default function App() {
             className="link"
             onClick={() => setScreen("list")}
           >
-            ‹ Retour
+            <>
+              <Icon name="arrow-left" size={17} /> Retour
+            </>
           </button>
         )}
         {isWorkoutDetail && (
@@ -428,13 +431,13 @@ export default function App() {
               aria-label="Gérer les exercices"
               onClick={() => setDialog("addMenu")}
             >
-              ＋
+              <Icon name="plus" />
             </button>
             <button
               aria-label="Réorganiser les exercices"
               onClick={() => setDialog("organizeMenu")}
             >
-              ↕
+              <Icon name="reorder" />
             </button>
           </div>
         )}
@@ -502,13 +505,17 @@ export default function App() {
                           className="exercise-tab-circle"
                           aria-hidden="true"
                         >
-                          {execution
-                            ? executionExercise(x.id)?.status === "completed"
-                              ? "✓"
-                              : executionExercise(x.id)?.status === "active"
-                                ? "●"
-                                : "○"
-                            : "✦"}
+                          {execution ? (
+                            executionExercise(x.id)?.status === "completed" ? (
+                              <Icon name="check" size={17} />
+                            ) : executionExercise(x.id)?.status === "active" ? (
+                              <Icon name="circle" size={17} strokeWidth={2.4} />
+                            ) : (
+                              <Icon name="circle" size={17} />
+                            )
+                          ) : (
+                            <Icon name="dumbbell" size={17} />
+                          )}
                         </span>
                         <span className="exercise-tab-index" aria-hidden="true">
                           {i + 1}
@@ -540,7 +547,7 @@ export default function App() {
                         setDialog("renameExercise");
                       }}
                     >
-                      •••
+                      <Icon name="more" size={18} />
                     </button>
                     {execution?.status === "inProgress" ? (
                       <button
@@ -576,7 +583,8 @@ export default function App() {
                     )
                   }
                 >
-                  Options avancées
+                  <Icon name="settings" size={15} />
+                  <span>Options avancées</span>
                 </button>
                 {!execution ? (
                   <button className="primary" onClick={startExecution}>
@@ -592,72 +600,6 @@ export default function App() {
                   <p className="execution-resume">
                     Séance en cours · Reprenez là où vous vous êtes arrêté.
                   </p>
-                )}
-                {(import.meta.env.DEV ||
-                  window.location.hostname.includes(
-                    "feat-stitch-visual-redesign",
-                  )) && (
-                  <aside
-                    className="execution-debug-panel"
-                    aria-label="Debug exécution"
-                  >
-                    <div className="execution-debug-title">DEBUG EXÉCUTION</div>
-                    <div>
-                      workout.id : <code>{workout.id}</code>
-                    </div>
-                    <div>
-                      workout.execution :{" "}
-                      <strong>{execution ? "présent" : "absent"}</strong>
-                    </div>
-                    <div>
-                      execution.status :{" "}
-                      <strong>{execution?.status ?? "—"}</strong>
-                    </div>
-                    <div>
-                      exerciseId UI : <code>{exerciseId || "—"}</code>
-                    </div>
-                    <div>
-                      active exerciseId :{" "}
-                      <code>
-                        {execution?.exercises
-                          .filter((item) => item.status === "active")
-                          .map((item) => item.exerciseId)
-                          .join(", ") || "—"}
-                      </code>
-                    </div>
-                    <div className="execution-debug-exercises">
-                      {(execution?.exercises ?? []).map((item) => {
-                        const source = workout.exercises.find(
-                          (candidate) => candidate.id === item.exerciseId,
-                        );
-                        return (
-                          <div key={item.exerciseId}>
-                            {source?.name ?? "?"} /{" "}
-                            <code>{item.exerciseId}</code> :{" "}
-                            <strong>{item.status}</strong>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div>
-                      chrono :{" "}
-                      {restingSet ? (
-                        <>
-                          <code>
-                            {execution?.exercises.find((item) =>
-                              item.sets.some(
-                                (set) => set.setId === restingSet.setId,
-                              ),
-                            )?.exerciseId ?? "—"}
-                          </code>{" "}
-                          / <code>{restingSet.setId}</code> ·{" "}
-                          <strong>{restingSet.status}</strong>
-                        </>
-                      ) : (
-                        <strong>inactif</strong>
-                      )}
-                    </div>
-                  </aside>
                 )}
                 {execution && (
                   <WorkoutProgress
@@ -835,7 +777,7 @@ export default function App() {
                           }
                           onClick={() => startRest(exercise.id, s.id)}
                         >
-                          <span aria-hidden="true">▶</span>
+                          <Icon name="play" size={16} />
                           <span className="sr-only">Lancer le repos</span>
                         </button>
                       )}
@@ -862,7 +804,7 @@ export default function App() {
                             });
                           }}
                         >
-                          <span aria-hidden="true">■</span>
+                          <Icon name="stop" size={15} />
                           <span className="sr-only">Terminer le repos</span>
                         </button>
                       )}
@@ -871,7 +813,8 @@ export default function App() {
                           i > 0)) && (
                         <div className="order">
                           <button onClick={() => removeSet(s.id)}>
-                            Supprimer
+                            <Icon name="trash" size={15} />
+                            <span>Supprimer</span>
                           </button>
                         </div>
                       )}
@@ -955,7 +898,7 @@ export default function App() {
                         }
                         onClick={() => moveExercise(i, i - 1)}
                       >
-                        ↑
+                        <Icon name="chevron-up" />
                       </button>
                       <button
                         aria-label={`Descendre ${x.name}`}
@@ -968,7 +911,7 @@ export default function App() {
                         }
                         onClick={() => moveExercise(i, i + 1)}
                       >
-                        ↓
+                        <Icon name="chevron-down" />
                       </button>
                     </div>
                   </li>
@@ -1040,8 +983,12 @@ export default function App() {
         </Sheet>
       )}
       <nav aria-label="Navigation principale">
-        <button className="active">Séances</button>
-        <button onClick={() => setScreen("list")}>Nutrition</button>
+        <button className="active">
+          <Icon name="home" size={18} /> <span>Séances</span>
+        </button>
+        <button onClick={() => setScreen("list")}>
+          <Icon name="nutrition" size={18} /> <span>Nutrition</span>
+        </button>
       </nav>
     </main>
   );
@@ -1090,7 +1037,8 @@ function WorkoutRow({
           onDelete();
         }}
       >
-        Supprimer
+        <Icon name="trash" size={15} />
+        <span>Supprimer</span>
       </button>
       <button
         className="row workout-card"
@@ -1109,19 +1057,25 @@ function WorkoutRow({
         <small
           className={`workout-badge ${workout.execution?.status ?? "planned"}`}
         >
-          {workout.execution?.status === "completed"
-            ? "✓ Terminée"
-            : workout.execution
-              ? "● En cours"
-              : "Préparation"}
+          {workout.execution?.status === "completed" ? (
+            <>
+              <Icon name="check" size={13} /> Terminée
+            </>
+          ) : workout.execution ? (
+            <>
+              <Icon name="circle" size={13} strokeWidth={2.4} /> En cours
+            </>
+          ) : (
+            "Préparation"
+          )}
         </small>
         <strong>{workout.name}</strong>
         <small>
           {workout.exercises.length} exercice
           {workout.exercises.length > 1 ? "s" : ""}
         </small>
-        <span className="row-arrow" aria-hidden="true">
-          ›
+        <span className="row-arrow">
+          <Icon name="chevron-down" size={16} />
         </span>
       </button>
     </li>

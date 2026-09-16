@@ -325,22 +325,24 @@
 }
 .exercise-menu button:first-child {
   min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 15px;
 }
 .exercise-menu button:last-child {
   color: var(--accent-soft);
 }
 .advanced {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   min-height: 36px;
   padding: 6px 0;
   background: transparent;
   border: 0;
   color: var(--muted);
   font-size: 11px;
-}
-.advanced::after {
-  content: " ↗";
-  color: var(--accent-soft);
 }
 .workout-fixed-zones > .primary {
   margin: 0 0 8px;
@@ -642,6 +644,9 @@ progress::-moz-progress-bar {
   grid-row: 3;
 }
 .set-block .order button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   min-height: 44px;
   padding: 6px;
   font-size: 10px;
@@ -685,6 +690,10 @@ nav {
   backdrop-filter: blur(16px);
 }
 nav button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   min-height: 44px;
   border: 0;
   border-radius: 10px;
@@ -1041,38 +1050,6 @@ nav button.active {
   border: 1px solid transparent;
   background: var(--accent);
   color: var(--accent-ink);
-}
-
-.execution-debug-panel {
-  margin: 10px 0;
-  padding: 8px 10px;
-  border: 1px solid #6f3d27;
-  border-radius: 10px;
-  background: #171311;
-  color: #d8c8c0;
-  font:
-    10px/1.45 ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    monospace;
-  overflow-wrap: anywhere;
-}
-.execution-debug-title {
-  margin-bottom: 4px;
-  color: #ff7a3d;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-}
-.execution-debug-panel strong {
-  color: #ffb08a;
-}
-.execution-debug-panel code {
-  color: #f1eee9;
-}
-.execution-debug-exercises {
-  margin: 4px 0;
-  padding-left: 8px;
-  border-left: 2px solid #493026;
 }
 
 @media (max-width: 350px) {
