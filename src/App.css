@@ -1052,6 +1052,211 @@ nav button.active {
   color: var(--accent-ink);
 }
 
+/* Second visual pass: compact, high-contrast set scorecards. */
+.set-block {
+  margin-bottom: 8px;
+  padding: 11px 12px 10px;
+  border-color: #2b3038;
+  background: #17191d;
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 140ms ease;
+}
+.set-block.status-upcoming {
+  background: #15171b;
+  border-color: #262b33;
+}
+.set-block.status-active,
+.set-block.status-resting {
+  border-color: #ff8a5c;
+  background: linear-gradient(125deg, #30221d 0%, #1a1b1f 72%);
+  box-shadow:
+    inset 3px 0 #ff7a45,
+    0 4px 16px #ff6a3214;
+}
+.set-block.status-performed {
+  border-color: #3f604c;
+  background: linear-gradient(125deg, #1b2722 0%, #171b1d 74%);
+}
+.set-block h3 {
+  color: #f6f2ed;
+  font-size: 24px;
+  letter-spacing: 0.06em;
+}
+.set-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 3px 7px;
+  border: 1px solid #ffffff0b;
+  border-radius: 999px;
+  letter-spacing: 0.04em;
+}
+.status-performed .set-status {
+  background: #6aa77d18;
+  border-color: #6aa77d35;
+}
+.status-skipped .set-status {
+  background: #ffffff08;
+}
+.status-performed .set-status::before,
+.status-skipped .set-status::before {
+  content: none;
+}
+.set-metrics {
+  gap: 6px;
+  margin-top: 2px;
+}
+.set-field {
+  gap: 4px;
+}
+.set-field span {
+  font-size: 8px;
+  letter-spacing: 0.08em;
+}
+.set-picker-trigger {
+  position: relative;
+  justify-content: center;
+  height: 44px;
+  padding: 5px 20px 5px 6px;
+  border-color: #343943;
+  border-radius: 10px;
+  background: #111318;
+  color: #f1ede8;
+  text-align: center;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    transform 140ms ease;
+}
+.set-picker-trigger:active {
+  transform: scale(0.98);
+  border-color: #ff8a5c;
+  background: #1e1b1a;
+}
+.picker-trigger-chevron {
+  position: absolute;
+  right: 6px;
+  opacity: 0.5;
+}
+.rest-timer {
+  color: #9da3ad;
+  letter-spacing: 0.02em;
+}
+.status-resting .rest-timer {
+  color: #ffb08e;
+  font-weight: 700;
+}
+.rest-icon-button {
+  width: 38px;
+  height: 38px;
+  min-height: 38px;
+  box-shadow: 0 0 12px #ff57083d;
+  transition:
+    transform 140ms ease,
+    filter 160ms ease,
+    box-shadow 160ms ease;
+}
+.rest-icon-button:hover,
+.rest-icon-button:focus-visible {
+  filter: brightness(1.12);
+  box-shadow: 0 0 16px #ff570866;
+}
+.rest-stop-button {
+  background: #30201c;
+}
+.set-block .order button {
+  color: #a7776a;
+  opacity: 0.72;
+  transition:
+    color 160ms ease,
+    opacity 160ms ease,
+    background-color 160ms ease;
+}
+.set-block .order button:hover,
+.set-block .order button:focus-visible,
+.set-block .order button:active {
+  color: #ff8a72;
+  opacity: 1;
+  background: #ff5d3d12;
+}
+.advanced {
+  opacity: 0.82;
+  transition:
+    color 160ms ease,
+    opacity 160ms ease,
+    transform 140ms ease;
+}
+.advanced:hover,
+.advanced:focus-visible {
+  color: var(--accent-soft);
+  opacity: 1;
+}
+.exercise-tab,
+.exercise-tab-circle,
+.exercise-tab-index {
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease,
+    transform 140ms ease;
+}
+.exercise-tab:active {
+  transform: scale(0.94);
+}
+.exercise-tab-circle svg {
+  display: block;
+}
+.exercise-hero {
+  border-color: #2e333c;
+  background: linear-gradient(120deg, #1b1e24, #15171b);
+  box-shadow: 0 5px 18px #00000026;
+}
+.control-actions button,
+.exercise-menu button,
+.order button,
+.execution-action,
+.primary,
+nav button {
+  transition:
+    transform 140ms ease,
+    filter 160ms ease,
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+.control-actions button:active,
+.exercise-menu button:active,
+.order button:active,
+.execution-action:active,
+.primary:active,
+nav button:active {
+  transform: scale(0.97);
+}
+nav button svg {
+  flex: 0 0 auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .set-block,
+  .set-picker-trigger,
+  .rest-icon-button,
+  .advanced,
+  .exercise-tab,
+  .exercise-tab-circle,
+  .exercise-tab-index,
+  .control-actions button,
+  .exercise-menu button,
+  .order button,
+  .execution-action,
+  .primary,
+  nav button {
+    transition: none;
+  }
+}
+
 @media (max-width: 350px) {
   .app-shell {
     padding-left: 12px;
