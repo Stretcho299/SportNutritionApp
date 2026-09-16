@@ -77,14 +77,20 @@ test("does not activate the next exercise when deleting an upcoming set", async 
   await expect(tabs.nth(1)).toHaveClass(/execution-active/);
 });
 
-test("persists two independent sessions when a template is reused", async ({ page }) => {
+test("persists two independent sessions when a template is reused", async ({
+  page,
+}) => {
   await prepareWorkout(page, "1");
   await page.getByRole("button", { name: /Gérer les exercices/i }).click();
-  await page.getByRole("dialog", { name: /Actions de la séance/i })
-    .getByRole("button", { name: /Ajouter un exercice/i }).click();
+  await page
+    .getByRole("dialog", { name: /Actions de la séance/i })
+    .getByRole("button", { name: /Ajouter un exercice/i })
+    .click();
   await page.getByRole("textbox", { name: "Nom" }).fill("Exercice B");
   await page.getByLabel(/Nombre de séries initiales/i).fill("1");
-  await page.getByRole("spinbutton", { name: "Repos par défaut (secondes)" }).fill("30");
+  await page
+    .getByRole("spinbutton", { name: "Repos par défaut (secondes)" })
+    .fill("30");
   await page.getByRole("button", { name: /Enregistrer/i }).click();
   await page.getByRole("button", { name: /Démarrer la séance/i }).click();
   let region = page.getByRole("region", { name: "Séries de Exercice A" });
@@ -98,10 +104,17 @@ test("persists two independent sessions when a template is reused", async ({ pag
   await page.getByRole("button", { name: /Retour aux séances/i }).click();
   await page.locator(".workout-card").click();
   await page.getByRole("button", { name: /Démarrer la séance/i }).click();
-  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("sport-nutrition-workouts") || "{}"));
+  const stored = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("sport-nutrition-workouts") || "{}"),
+  );
   expect(stored.version).toBe(2);
   expect(stored.templates).toHaveLength(1);
   expect(stored.sessions).toHaveLength(2);
   expect(stored.sessions[0].id).not.toBe(stored.sessions[1].id);
-  expect(stored.sessions.every((session: { templateId: string }) => session.templateId === stored.templates[0].id)).toBe(true);
+  expect(
+    stored.sessions.every(
+      (session: { templateId: string }) =>
+        session.templateId === stored.templates[0].id,
+    ),
+  ).toBe(true);
 });
