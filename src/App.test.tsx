@@ -417,3 +417,210 @@ it("keeps fixed exercise zones outside a long series list", async () => {
   expect(within(sets).getAllByRole("listitem")).toHaveLength(12);
   expect(view.container.querySelector("main")).toHaveClass("workout-detail");
 });
+
+it("shows an active series and advances it when its rest ends", async () => {
+  await openEmptyWorkout();
+  createExercise("Squat", 2, 30);
+  fireEvent.click(screen.getByText("Démarrer la séance"));
+  const blocks = within(seriesRegion("Squat")).getAllByRole("listitem");
+  expect(within(blocks[0]).getByText("Série active")).toBeInTheDocument();
+  expect(
+    within(blocks[1]).getByText("À venir", { selector: ".set-status" }),
+  ).toBeInTheDocument();
+  expect(within(blocks[0]).getByLabelText("Répétitions")).toBeEnabled();
+  expect(within(blocks[1]).getByLabelText("Répétitions")).toBeDisabled();
+  fireEvent.change(within(blocks[0]).getByLabelText("Répétitions"), {
+    target: { value: "10" },
+  });
+  fireEvent.change(within(blocks[0]).getByLabelText("Charge (kg)"), {
+    target: { value: "80" },
+  });
+  fireEvent.click(within(blocks[0]).getByText("Lancer le repos"));
+  expect(within(blocks[0]).getByText("Repos en cours")).toBeInTheDocument();
+  expect(within(blocks[0]).getByLabelText("Répétitions")).toBeDisabled();
+  fireEvent.click(within(blocks[0]).getByText("Terminer le repos"));
+  expect(within(blocks[0]).getByText("Effectuée")).toBeInTheDocument();
+  expect(within(blocks[1]).getByText("Série active")).toBeInTheDocument();
+  expect(storedWorkouts()[0].execution?.exercises[0].sets[0]).toMatchObject({
+    status: "performed",
+    repetitions: 10,
+    weightKg: 80,
+  });
+});
+
+it("reveals a confirmed workout deletion action after a horizontal swipe", async () => {
+  render(<App />);
+  await screen.findByText("Aucune séance");
+  const create = (name: string) => {
+    fireEvent.click(screen.getByText("Créer une séance"));
+    fireEvent.change(screen.getByLabelText("Nom"), { target: { value: name } });
+    fireEvent.click(screen.getByText("Enregistrer"));
+  };
+  create("Push");
+  create("Pull");
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  const card = screen.getByText("Push").closest("li")!;
+  fireEvent.pointerDown(card, { clientX: 160 });
+  fireEvent.pointerMove(card, { clientX: 80 });
+  fireEvent.pointerUp(card, { clientX: 80 });
+  expect(card).toHaveClass("open");
+  expect(confirm).not.toHaveBeenCalled();
+  const cardButton = card.querySelector(".workout-card")!;
+  fireEvent.pointerDown(cardButton, { clientX: 80 });
+  fireEvent.pointerUp(cardButton, { clientX: 80 });
+  fireEvent.click(cardButton);
+  expect(card).not.toHaveClass("open");
+  expect(screen.getByRole("heading", { name: "Séances" })).toBeInTheDocument();
+  fireEvent.pointerDown(card, { clientX: 160 });
+  fireEvent.pointerMove(card, { clientX: 80 });
+  fireEvent.pointerUp(card, { clientX: 80 });
+  fireEvent.click(screen.getByRole("button", { name: "Supprimer Push" }));
+  expect(confirm).toHaveBeenCalledWith("Supprimer cette séance ?");
+  expect(screen.getByText("Push")).toBeInTheDocument();
+  fireEvent.pointerDown(card, { clientX: 80 });
+  fireEvent.pointerMove(card, { clientX: 160 });
+  fireEvent.pointerUp(card, { clientX: 160 });
+  expect(card).not.toHaveClass("open");
+  fireEvent.pointerDown(card, { clientX: 160 });
+  fireEvent.pointerMove(card, { clientX: 80 });
+  fireEvent.pointerUp(card, { clientX: 80 });
+  confirm.mockReturnValue(true);
+  fireEvent.click(screen.getByRole("button", { name: "Supprimer Push" }));
+  expect(screen.queryByText("Push")).not.toBeInTheDocument();
+  expect(storedWorkouts().map((workout) => workout.name)).toEqual(["Pull"]);
+});
+
+it("adds an upcoming exercise during execution without losing the active series", async () => {
+  await openEmptyWorkout();
+  createExercise("Squat", 2, 30);
+  fireEvent.click(screen.getByText("Démarrer la séance"));
+  expect(screen.getByLabelText("Gérer les exercices")).toBeInTheDocument();
+  fireEvent.click(within(seriesRegion("Squat")).getByText("Lancer le repos"));
+  fireEvent.click(within(seriesRegion("Squat")).getByText("Terminer le repos"));
+  expect(screen.getByLabelText("Gérer les exercices")).toBeInTheDocument();
+  createExercise("Row", 2, 30);
+  expect(
+    within(seriesRegion("Squat")).getByText("Série active"),
+  ).toBeInTheDocument();
+  expect(storedWorkouts()[0].execution?.exercises).toMatchObject([
+    { exerciseId: storedWorkouts()[0].exercises[0].id, status: "active" },
+    { exerciseId: storedWorkouts()[0].exercises[1].id, status: "upcoming" },
+  ]);
+});
+
+it("only offers deletion for an upcoming series during execution", async () => {
+  await openEmptyWorkout();
+  createExercise("Squat", 3, 30);
+  fireEvent.click(screen.getByText("Démarrer la séance"));
+  let blocks = within(seriesRegion("Squat")).getAllByRole("listitem");
+  fireEvent.click(within(blocks[0]).getByText("Lancer le repos"));
+  fireEvent.click(within(blocks[0]).getByText("Terminer le repos"));
+  blocks = within(seriesRegion("Squat")).getAllByRole("listitem");
+  expect(within(blocks[0]).queryByText("Supprimer")).not.toBeInTheDocument();
+  expect(within(blocks[2]).getByText("Supprimer")).toBeInTheDocument();
+  fireEvent.click(within(blocks[2]).getByText("Supprimer"));
+  expect(within(seriesRegion("Squat")).getAllByRole("listitem")).toHaveLength(
+    2,
+  );
+});
+
+it("keeps a completed workout final after returning home and reloading", async () => {
+  const view = await openEmptyWorkout();
+  createExercise("Squat", 1, 30);
+  fireEvent.click(screen.getByText("Démarrer la séance"));
+  fireEvent.click(screen.getByText("Lancer le repos"));
+  expect(screen.getByText("Terminer la séance")).toBeInTheDocument();
+  fireEvent.click(screen.getByText("Terminer la séance"));
+  expect(screen.getByText("Séance terminée")).toBeInTheDocument();
+  expect(screen.queryByText("Démarrer la séance")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByLabelText("Retour aux séances"));
+  fireEvent.click(screen.getByText("Push"));
+  expect(screen.getByText("Séance terminée")).toBeInTheDocument();
+  view.unmount();
+  render(<App />);
+  fireEvent.click(await screen.findByText("Push"));
+  expect(screen.getByText("Séance terminée")).toBeInTheDocument();
+  expect(screen.queryByText("Démarrer la séance")).not.toBeInTheDocument();
+  expect(storedWorkouts()[0].execution?.status).toBe("completed");
+});
+
+it("keeps future exercise states unchanged while browsing and starts them explicitly", async () => {
+  await openEmptyWorkout();
+  createExercise("A", 1, 30);
+  createExercise("B", 1, 30);
+  createExercise("C", 1, 30);
+  fireEvent.click(screen.getByText("Démarrer la séance"));
+  const addButton = screen.getByLabelText("Gérer les exercices");
+  expect(addButton).toBeVisible();
+  const tabs = within(screen.getByRole("list", { name: "Exercices" }));
+  const select = (name: string) =>
+    fireEvent.click(tabs.getByRole("button", { name: new RegExp("^" + name) }));
+  select("B");
+  select("C");
+  select("B");
+  expect(
+    storedWorkouts()[0].execution?.exercises.map((item) => item.status),
+  ).toEqual(["active", "upcoming", "upcoming"]);
+  fireEvent.click(within(seriesRegion("B")).getByText("Lancer le repos"));
+  expect(
+    storedWorkouts()[0].execution?.exercises.map((item) => item.status),
+  ).toEqual(["active", "active", "upcoming"]);
+  select("C");
+  select("A");
+  select("B");
+  expect(
+    storedWorkouts()[0].execution?.exercises.map((item) => item.status),
+  ).toEqual(["active", "active", "upcoming"]);
+});
+
+it("keeps add set available after starting and appends a blank execution set", async () => {
+  await openEmptyWorkout();
+  createExercise("Squat", 2, 30);
+  fireEvent.click(screen.getByText("Démarrer la séance"));
+  const region = seriesRegion("Squat");
+  expect(screen.getByText("+ Ajouter une série")).toBeVisible();
+  fireEvent.click(screen.getByText("+ Ajouter une série"));
+  expect(within(region).getAllByRole("listitem")).toHaveLength(3);
+  expect(storedWorkouts()[0].execution?.exercises[0].sets).toHaveLength(3);
+  expect(storedWorkouts()[0].execution?.exercises[0].sets[2].status).toBe(
+    "upcoming",
+  );
+});
+
+it("keeps add set available after the first series has started", async () => {
+  await openEmptyWorkout();
+  createExercise("Squat", 2, 30);
+  fireEvent.click(screen.getByText("Démarrer la séance"));
+  const region = seriesRegion("Squat");
+  const blocks = within(region).getAllByRole("listitem");
+  fireEvent.click(within(blocks[0]).getByText("Lancer le repos"));
+  expect(screen.getByText("+ Ajouter une série")).toBeVisible();
+  fireEvent.click(screen.getByText("+ Ajouter une série"));
+  expect(within(region).getAllByRole("listitem")).toHaveLength(3);
+  expect(
+    within(region).getByRole("heading", { name: "SÉRIE 3" }),
+  ).toBeInTheDocument();
+});
+
+it("does not activate the next exercise when deleting an upcoming set", async () => {
+  await openEmptyWorkout();
+  createExercise("A", 2, 30);
+  createExercise("B", 1, 30);
+  fireEvent.click(screen.getByText("Démarrer la séance"));
+  const region = seriesRegion("A");
+  const blocks = within(region).getAllByRole("listitem");
+  fireEvent.click(within(blocks[1]).getByText("Supprimer"));
+  expect(
+    storedWorkouts()[0].execution?.exercises.map((item) => item.status),
+  ).toEqual(["active", "upcoming"]);
+  expect(within(region).getAllByRole("listitem")).toHaveLength(1);
+  selectExercise("B");
+  expect(
+    within(seriesRegion("B")).getByText("À venir", { selector: ".set-status" }),
+  ).toBeInTheDocument();
+  selectExercise("A");
+  fireEvent.click(within(region).getByText("Lancer le repos"));
+  expect(
+    storedWorkouts()[0].execution?.exercises.map((item) => item.status),
+  ).toEqual(["active", "upcoming"]);
+});

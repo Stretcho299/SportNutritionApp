@@ -1,14 +1,26 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
 import {
+  activateExecutedExercise,
+  addSetToExecution,
   addExercise,
+  addExerciseToExecution,
   addSet,
+  completeWorkoutExecution,
   createWorkout,
   defaultRestSeconds,
+  finishExecutedRest,
   loadWorkouts,
+  removeExecutedUpcomingSet,
   reorder,
   saveWorkouts,
+  skipExecutedExercise,
   sort,
+  startExecutedSetRest,
+  startWorkoutExecution,
+  updateExecutedSet,
+  type ExecutedSet,
+  type WorkoutExecution,
   type Workout,
 } from "./storage/database";
 type Screen = "list" | "detail";
@@ -30,15 +42,53 @@ export default function App() {
   const [name, setName] = useState("");
   const [initialSetCount, setInitialSetCount] = useState("1");
   const [rest, setRest] = useState(String(defaultRestSeconds));
+  const [clock, setClock] = useState(0);
   useEffect(() => {
     void loadWorkouts().then(setWorkouts);
   }, []);
-  const update = (next: Workout[]) => {
+  const update = useCallback((next: Workout[]) => {
     setWorkouts(next);
     void saveWorkouts(next);
-  };
+  }, []);
   const workout = workouts.find((w) => w.id === workoutId);
   const exercise = workout?.exercises.find((e) => e.id === exerciseId);
+  const execution = workout?.execution;
+  const executionExercise = (id: string) =>
+    execution?.exercises.find((item) => item.exerciseId === id);
+  const executionSet = (id: string): ExecutedSet | undefined =>
+    executionExercise(exercise?.id ?? "")?.sets.find(
+      (item) => item.setId === id,
+    );
+  const updateExecution = useCallback(
+    (next: WorkoutExecution) =>
+      update(
+        workouts.map((w) =>
+          w.id === workoutId ? { ...w, execution: next } : w,
+        ),
+      ),
+    [update, workoutId, workouts],
+  );
+  const startExecution = () => {
+    if (workout) updateExecution(startWorkoutExecution(workout));
+  };
+  useEffect(() => {
+    const resting = execution?.exercises
+      .flatMap((item) => item.sets)
+      .find((item) => item.status === "resting");
+    const restEndsAt = resting?.restEndsAt;
+    if (!restEndsAt) return;
+    const tick = () => {
+      setClock(Date.now());
+      if (restEndsAt <= Date.now())
+        updateExecution(finishExecutedRest(execution!));
+    };
+    tick();
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
+  }, [execution, updateExecution]);
+  const finishWorkout = () => {
+    if (execution) updateExecution(completeWorkoutExecution(execution));
+  };
   const close = () => {
     setDialog(null);
     setName("");
@@ -67,8 +117,19 @@ export default function App() {
         Number(initialSetCount),
         Number(rest),
       );
-      update(workouts.map((w) => (w.id === workout.id ? nextWorkout : w)));
-      if (!exercise) setExerciseId(nextWorkout.exercises.at(-1)!.id);
+      const addedExercise = nextWorkout.exercises.at(-1)!;
+      const nextExecution =
+        workout.execution?.status === "inProgress"
+          ? addExerciseToExecution(workout.execution, addedExercise)
+          : workout.execution;
+      update(
+        workouts.map((w) =>
+          w.id === workout.id
+            ? { ...nextWorkout, execution: nextExecution }
+            : w,
+        ),
+      );
+      if (!exercise) setExerciseId(addedExercise.id);
     }
     if (dialog === "renameExercise" && workout && exercise && name.trim())
       update(
@@ -84,6 +145,17 @@ export default function App() {
         ),
       );
     close();
+  };
+  const removeWorkout = (id: string) => {
+    const target = workouts.find((item) => item.id === id);
+    if (target && confirm("Supprimer cette séance ?")) {
+      update(workouts.filter((item) => item.id !== id));
+      if (workoutId === id) {
+        setWorkoutId("");
+        setExerciseId("");
+        setScreen("list");
+      }
+    }
   };
   const removeExercise = () => {
     if (workout && exercise && confirm("Supprimer cet exercice ?")) {
@@ -135,16 +207,58 @@ export default function App() {
   };
   const appendSet = () => {
     if (!workout || !exercise) return;
+    if (
+      execution?.status === "inProgress" &&
+      executionExercise(exercise.id)?.status === "completed"
+    )
+      return;
+    const nextExercises = workout.exercises.map((x) =>
+      x.id === exercise.id ? addSet(x) : x,
+    );
+    const nextExercise = nextExercises.find((x) => x.id === exercise.id)!;
     update(
       workouts.map((w) =>
-        w.id === workout.id
-          ? {
+        w.id !== workout.id
+          ? w
+          : {
+              ...w,
+              exercises: nextExercises,
+              execution:
+                execution?.status === "inProgress"
+                  ? addSetToExecution(
+                      execution,
+                      exercise.id,
+                      nextExercise.plannedSets.at(-1)!,
+                    )
+                  : execution,
+            },
+      ),
+    );
+  };
+  const removeSet = (id: string) => {
+    if (!workout || !exercise) return;
+    const current = executionSet(id);
+    if (execution && current?.status !== "upcoming") return;
+    update(
+      workouts.map((w) =>
+        w.id !== workout.id
+          ? w
+          : {
               ...w,
               exercises: w.exercises.map((x) =>
-                x.id === exercise.id ? addSet(x) : x,
+                x.id !== exercise.id
+                  ? x
+                  : {
+                      ...x,
+                      plannedSets: sort(x.plannedSets)
+                        .filter((set) => set.id !== id)
+                        .map((set, position) => ({ ...set, position })),
+                    },
               ),
-            }
-          : w,
+              execution: w.execution
+                ? removeExecutedUpcomingSet(w.execution, exercise.id, id)
+                : undefined,
+            },
       ),
     );
   };
@@ -153,11 +267,28 @@ export default function App() {
     update(
       workouts.map((w) =>
         w.id === workout.id
-          ? { ...w, exercises: reorder(w.exercises, from, to) }
+          ? (() => {
+              const exercises = reorder(w.exercises, from, to);
+              return {
+                ...w,
+                exercises,
+                execution: w.execution
+                  ? {
+                      ...w.execution,
+                      exercises: exercises.map((item) =>
+                        w.execution!.exercises.find(
+                          (entry) => entry.exerciseId === item.id,
+                        )!,
+                      ),
+                    }
+                  : undefined,
+              };
+            })()
           : w,
       ),
     );
   };
+  const isWorkoutDetail = screen === "detail" && !!workout;
   const isMenu =
     dialog === "addMenu" || dialog === "organizeMenu" || dialog === "reorder";
   return (
@@ -176,7 +307,7 @@ export default function App() {
             ‹ Retour
           </button>
         )}
-        {screen === "detail" && (
+        {isWorkoutDetail && (
           <div className="control-actions">
             <button
               aria-label="Gérer les exercices"
@@ -204,25 +335,18 @@ export default function App() {
               <span>Créez votre première séance.</span>
             </section>
           ) : (
-            <ul>
-              {workouts.map((w) => (
-                <li key={w.id}>
-                  <button
-                    className="row"
-                    onClick={() => {
-                      setWorkoutId(w.id);
-                      setExerciseId(sort(w.exercises)[0]?.id ?? "");
-                      setScreen("detail");
-                    }}
-                  >
-                    <strong>{w.name}</strong>
-                    <small>
-                      {w.exercises.length} exercice
-                      {w.exercises.length > 1 ? "s" : ""}
-                    </small>
-                    <span>›</span>
-                  </button>
-                </li>
+            <ul className="workout-list">
+              {workouts.map((item) => (
+                <WorkoutRow
+                  key={item.id}
+                  workout={item}
+                  onDelete={() => removeWorkout(item.id)}
+                  onOpen={() => {
+                    setWorkoutId(item.id);
+                    setExerciseId(sort(item.exercises)[0]?.id ?? "");
+                    setScreen("detail");
+                  }}
+                />
               ))}
             </ul>
           )}
@@ -247,7 +371,11 @@ export default function App() {
                 <ul className="exercise-tabs" aria-label="Exercices">
                   {sort(workout.exercises).map((x, i) => (
                     <li
-                      className={x.id === exerciseId ? "selected" : ""}
+                      className={
+                        (x.id === exerciseId ? "selected " : "") +
+                        "execution-" +
+                        (executionExercise(x.id)?.status ?? "upcoming")
+                      }
                       key={x.id}
                     >
                       <button
@@ -259,7 +387,13 @@ export default function App() {
                           className="exercise-tab-circle"
                           aria-hidden="true"
                         >
-                          ✦
+                          {execution
+                            ? executionExercise(x.id)?.status === "completed"
+                              ? "✓"
+                              : executionExercise(x.id)?.status === "active"
+                                ? "●"
+                                : "○"
+                            : "✦"}
                         </span>
                         <span className="exercise-tab-index" aria-hidden="true">
                           {i + 1}
@@ -287,7 +421,22 @@ export default function App() {
                     >
                       •••
                     </button>
-                    <button onClick={removeExercise}>Supprimer</button>
+                    {execution?.status === "inProgress" ? (
+                      <button
+                        disabled={
+                          executionExercise(exercise.id)?.status === "completed"
+                        }
+                        onClick={() =>
+                          updateExecution(
+                            skipExecutedExercise(execution, exercise.id),
+                          )
+                        }
+                      >
+                        Terminer l’exercice
+                      </button>
+                    ) : (
+                      <button onClick={removeExercise}>Supprimer</button>
+                    )}
                   </div>
                 </section>
                 <button
@@ -301,6 +450,21 @@ export default function App() {
                 >
                   Options avancées
                 </button>
+                {!execution ? (
+                  <button className="primary" onClick={startExecution}>
+                    Démarrer la séance
+                  </button>
+                ) : execution.status === "readyToFinish" ? (
+                  <button className="primary" onClick={finishWorkout}>
+                    Terminer la séance
+                  </button>
+                ) : execution.status === "completed" ? (
+                  <p className="execution-resume">Séance terminée</p>
+                ) : (
+                  <p className="execution-resume">
+                    Séance en cours · Reprenez là où vous vous êtes arrêté.
+                  </p>
+                )}
               </div>
               <section
                 className="planned-sets"
@@ -308,7 +472,28 @@ export default function App() {
               >
                 <ul>
                   {sort(exercise.plannedSets).map((s, i) => (
-                    <li className="set-block" key={s.id}>
+                    <li
+                      className={
+                        "set-block" +
+                        (executionSet(s.id)?.status === "active"
+                          ? " active"
+                          : "")
+                      }
+                      key={s.id}
+                    >
+                      {execution && (
+                        <p className="set-status">
+                          {executionSet(s.id)?.status === "active"
+                            ? "Série active"
+                            : executionSet(s.id)?.status === "resting"
+                              ? "Repos en cours"
+                              : executionSet(s.id)?.status === "performed"
+                                ? "Effectuée"
+                                : executionSet(s.id)?.status === "skipped"
+                                  ? "Skippée"
+                                  : "À venir"}
+                        </p>
+                      )}
                       <h3>SÉRIE {i + 1}</h3>
                       <p className="set-exercise-name">{exercise.name}</p>
                       <p className="set-advanced">
@@ -317,65 +502,144 @@ export default function App() {
                       <SetField
                         label="Répétitions"
                         allowEmpty
-                        value={s.repetitions}
+                        value={executionSet(s.id)?.repetitions ?? s.repetitions}
                         min={1}
                         step={1}
-                        onSave={(value) => editSet(s.id, "repetitions", value)}
+                        onSave={(value) =>
+                          execution
+                            ? updateExecution(
+                                updateExecutedSet(
+                                  execution,
+                                  exercise.id,
+                                  s.id,
+                                  "repetitions",
+                                  value,
+                                ),
+                              )
+                            : editSet(s.id, "repetitions", value)
+                        }
+                        disabled={
+                          !!execution && executionSet(s.id)?.status !== "active"
+                        }
                       />
                       <SetField
                         label="Charge (kg)"
                         allowEmpty
-                        value={s.weightKg}
+                        value={executionSet(s.id)?.weightKg ?? s.weightKg}
                         min={0}
                         step="any"
-                        onSave={(value) => editSet(s.id, "weightKg", value)}
+                        onSave={(value) =>
+                          execution
+                            ? updateExecution(
+                                updateExecutedSet(
+                                  execution,
+                                  exercise.id,
+                                  s.id,
+                                  "weightKg",
+                                  value,
+                                ),
+                              )
+                            : editSet(s.id, "weightKg", value)
+                        }
+                        disabled={
+                          !!execution && executionSet(s.id)?.status !== "active"
+                        }
                       />
                       <SetField
                         label="Repos (secondes)"
-                        value={s.restSeconds}
+                        value={executionSet(s.id)?.restSeconds ?? s.restSeconds}
                         min={0}
                         step={1}
-                        onSave={(value) => editSet(s.id, "restSeconds", value)}
+                        onSave={(value) =>
+                          execution
+                            ? updateExecution(
+                                updateExecutedSet(
+                                  execution,
+                                  exercise.id,
+                                  s.id,
+                                  "restSeconds",
+                                  value,
+                                ),
+                              )
+                            : editSet(s.id, "restSeconds", value)
+                        }
+                        disabled={
+                          !!execution && executionSet(s.id)?.status !== "active"
+                        }
                       />
                       <p className="rest-timer">
-                        {formatRest(s.restSeconds)} · Repos prévu
+                        {formatRest(
+                          executionSet(s.id)?.status === "resting"
+                            ? Math.max(
+                                0,
+                                Math.ceil(
+                                  ((executionSet(s.id)?.restEndsAt ?? clock) -
+                                    clock) /
+                                    1000,
+                                ),
+                              )
+                            : (executionSet(s.id)?.restSeconds ??
+                                s.restSeconds),
+                        )}{" "}
+                        ·{" "}
+                        {executionSet(s.id)?.status === "resting"
+                          ? "Repos en cours"
+                          : execution
+                            ? "Repos"
+                            : "Repos prévu"}
                       </p>
-                      <div className="order">
+                      {(executionSet(s.id)?.status === "active" ||
+                        (executionSet(s.id)?.status === "upcoming" &&
+                          i === 0)) && (
                         <button
+                          className="primary execution-action"
                           onClick={() =>
-                            update(
-                              workouts.map((w) =>
-                                w.id === workout!.id
-                                  ? {
-                                      ...w,
-                                      exercises: w.exercises.map((x) =>
-                                        x.id === exercise.id
-                                          ? {
-                                              ...x,
-                                              plannedSets: sort(x.plannedSets)
-                                                .filter((y) => y.id !== s.id)
-                                                .map((y, position) => ({
-                                                  ...y,
-                                                  position,
-                                                })),
-                                            }
-                                          : x,
-                                      ),
-                                    }
-                                  : w,
+                            updateExecution(
+                              startExecutedSetRest(
+                                executionSet(s.id)?.status === "upcoming"
+                                  ? activateExecutedExercise(
+                                      execution!,
+                                      exercise.id,
+                                    )
+                                  : execution!,
+                                exercise.id,
+                                s.id,
                               ),
                             )
                           }
                         >
-                          Supprimer
+                          Lancer le repos
                         </button>
-                      </div>
+                      )}
+                      {executionSet(s.id)?.status === "resting" && (
+                        <button
+                          className="execution-action"
+                          onClick={() =>
+                            updateExecution(finishExecutedRest(execution!))
+                          }
+                        >
+                          Terminer le repos
+                        </button>
+                      )}
+                      {(!execution ||
+                        executionSet(s.id)?.status === "upcoming") && (
+                        <div className="order">
+                          <button onClick={() => removeSet(s.id)}>
+                            Supprimer
+                          </button>
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ul>
-                <button className="primary" onClick={appendSet}>
-                  + Ajouter une série
-                </button>
+                {(!execution ||
+                  (execution.status === "inProgress" &&
+                    executionExercise(exercise.id)?.status !==
+                      "completed")) && (
+                  <button className="primary" onClick={appendSet}>
+                    + Ajouter une série
+                  </button>
+                )}
               </section>
             </div>
           )}
@@ -430,14 +694,26 @@ export default function App() {
                     <div className="order">
                       <button
                         aria-label={`Monter ${x.name}`}
-                        disabled={i === 0}
+                        disabled={
+                          i === 0 ||
+                          executionExercise(x.id)?.status === "completed" ||
+                          executionExercise(
+                            sort(workout.exercises)[i - 1]?.id ?? "",
+                          )?.status === "completed"
+                        }
                         onClick={() => moveExercise(i, i - 1)}
                       >
                         ↑
                       </button>
                       <button
                         aria-label={`Descendre ${x.name}`}
-                        disabled={i === workout.exercises.length - 1}
+                        disabled={
+                          i === workout.exercises.length - 1 ||
+                          executionExercise(x.id)?.status === "completed" ||
+                          executionExercise(
+                            sort(workout.exercises)[i + 1]?.id ?? "",
+                          )?.status === "completed"
+                        }
                         onClick={() => moveExercise(i, i + 1)}
                       >
                         ↓
@@ -519,6 +795,76 @@ export default function App() {
   );
 }
 
+function WorkoutRow({
+  workout,
+  onOpen,
+  onDelete,
+}: {
+  workout: Workout;
+  onOpen: () => void;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const startX = useRef<number | null>(null);
+  const moved = useRef(false);
+  const move = (clientX: number) => {
+    if (startX.current === null) return;
+    const distance = clientX - startX.current;
+    if (Math.abs(distance) > 8) moved.current = true;
+    if (distance < -36) setOpen(true);
+    if (distance > 36) setOpen(false);
+  };
+  return (
+    <li
+      className={"workout-swipe" + (open ? " open" : "")}
+      onPointerDown={(event) => {
+        startX.current = event.clientX;
+        moved.current = false;
+      }}
+      onPointerMove={(event) => move(event.clientX)}
+      onPointerUp={(event) => {
+        move(event.clientX);
+        startX.current = null;
+      }}
+      onPointerCancel={() => {
+        startX.current = null;
+      }}
+    >
+      <button
+        aria-label={"Supprimer " + workout.name}
+        className="workout-delete"
+        onClick={(event) => {
+          event.stopPropagation();
+          onDelete();
+        }}
+      >
+        Supprimer
+      </button>
+      <button
+        className="row workout-card"
+        onClick={() => {
+          if (moved.current) {
+            moved.current = false;
+            return;
+          }
+          if (open) {
+            setOpen(false);
+            return;
+          }
+          onOpen();
+        }}
+      >
+        <strong>{workout.name}</strong>
+        <small>
+          {workout.exercises.length} exercice
+          {workout.exercises.length > 1 ? "s" : ""}
+        </small>
+        <span>›</span>
+      </button>
+    </li>
+  );
+}
+
 function formatRest(seconds: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
@@ -530,6 +876,7 @@ function SetField({
   step,
   onSave,
   allowEmpty = false,
+  disabled = false,
 }: {
   label: string;
   value: number | null;
@@ -537,6 +884,7 @@ function SetField({
   step: number | "any";
   onSave: (value: number | null) => void;
   allowEmpty?: boolean;
+  disabled?: boolean;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
   return (
@@ -548,6 +896,7 @@ function SetField({
         step={step}
         required={!allowEmpty}
         inputMode={step === "any" ? "decimal" : "numeric"}
+        disabled={disabled}
         value={draft ?? (value == null ? "" : String(value))}
         onChange={(event) => {
           setDraft(event.target.value);
