@@ -72,7 +72,43 @@ test("does not activate the next exercise when deleting an upcoming set", async 
   await expect(tabs.nth(0)).toHaveClass(/execution-active/);
   await expect(tabs.nth(1)).toHaveClass(/execution-upcoming/);
   await aRegion.getByRole("button", { name: "Lancer le repos" }).click();
-  await aRegion.getByRole("button", { name: "Terminer le repos" }).click();
+  await aRegion.getByRole("button", { name: "Mettre fin au repos" }).click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Mettre fin" })
+    .click();
   await expect(tabs.nth(0)).toHaveClass(/execution-completed/);
+  await expect(tabs.nth(1)).toHaveClass(/execution-active/);
+});
+
+test("starts from the selected exercise and keeps other tabs upcoming", async ({
+  page,
+}) => {
+  await prepareWorkout(page, "2");
+  for (const name of ["Exercice B", "Exercice C"]) {
+    await page.getByRole("button", { name: /Gérer les exercices/i }).click();
+    await page
+      .getByRole("dialog", { name: /Actions de la séance/i })
+      .getByRole("button", { name: /Ajouter un exercice/i })
+      .click();
+    await page.getByRole("textbox", { name: "Nom" }).fill(name);
+    await page.getByLabel(/Nombre de séries initiales/i).fill("2");
+    await page
+      .getByRole("spinbutton", { name: "Repos par défaut (secondes)" })
+      .fill("30");
+    await page.getByRole("button", { name: /Enregistrer/i }).click();
+  }
+
+  const tabs = page.getByRole("list", { name: "Exercices" }).locator("li");
+  await tabs.nth(1).getByRole("button").click();
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  await expect(tabs.nth(0)).toHaveClass(/execution-upcoming/);
+  await expect(tabs.nth(1)).toHaveClass(/execution-active/);
+  await expect(tabs.nth(2)).toHaveClass(/execution-upcoming/);
+
+  await tabs.nth(0).getByRole("button").click();
+  await expect(tabs.nth(0)).toHaveClass(/execution-upcoming/);
+  await tabs.nth(2).getByRole("button").click();
+  await expect(tabs.nth(2)).toHaveClass(/execution-upcoming/);
   await expect(tabs.nth(1)).toHaveClass(/execution-active/);
 });

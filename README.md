@@ -33,5 +33,19 @@ Après déploiement HTTPS, ouvrir dans Safari, **Partager** → **Sur l’écran
 - `src/App.tsx` : shell Séances / Nutrition ;
 - `src/storage` : frontière pour la future persistance IndexedDB ;
 - `public/manifest.webmanifest` et `public/sw.js` : PWA.
+- `src/index.css` : tokens visuels et polices locales ; `src/App.css` : composants ;
+- `src/WorkoutProgress.tsx` : affichage de la progression et du repos, dérivé des états métier.
+
+## Design et contrôles mobiles
+
+Le [contrat de non-régression et la stratégie visuelle](docs/visual-redesign.md)
+documentent la refonte sombre/orange. Les polices Bebas Neue et Plus Jakarta Sans
+sont incluses dans `public/fonts` avec leurs licences OFL, sans requête tierce.
+
+`npm run test:e2e` vérifie les parcours sur Chromium et WebKit (installer les
+navigateurs avec `npx playwright install --with-deps chromium webkit`). Les tests
+du redesign couvrent 390×844, 320×844 et une hauteur réduite à 480 px ; leurs
+captures et traces sont disponibles dans `test-results/`. Les noms utilisés
+dans ces tests sont uniquement des fixtures et ne sont pas injectés dans l’app.
 
 La base alimentaire restera une ressource distante/API et ne sera jamais téléchargée intégralement sur l’appareil.

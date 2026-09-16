@@ -95,21 +95,26 @@ const open = () =>
   });
 export async function loadWorkouts(): Promise<Workout[]> {
   if (!globalThis.indexedDB)
-    return JSON.parse(localStorage.getItem(key) ?? "[]");
+    return normalizePersistedWorkouts(
+      JSON.parse(localStorage.getItem(key) ?? "[]"),
+    );
   const db = await open();
   return new Promise((resolve) => {
     const r = db.transaction("data").objectStore("data").get(key);
-    r.onsuccess = () => resolve(r.result ?? []);
+    r.onsuccess = () => resolve(normalizePersistedWorkouts(r.result ?? []));
     r.onerror = () => resolve([]);
   });
 }
 export async function saveWorkouts(workouts: Workout[]) {
+  const normalizedWorkouts = normalizePersistedWorkouts(workouts);
   if (!globalThis.indexedDB) {
-    localStorage.setItem(key, JSON.stringify(workouts));
+    localStorage.setItem(key, JSON.stringify(normalizedWorkouts));
     return;
   }
   const db = await open();
-  db.transaction("data", "readwrite").objectStore("data").put(workouts, key);
+  db.transaction("data", "readwrite")
+    .objectStore("data")
+    .put(normalizedWorkouts, key);
 }
 export const __storageKey = key;
 export type SetExecutionStatus =
@@ -139,13 +144,22 @@ const isTerminalSet = (set: ExecutedSet) =>
 
 const normalizeExecution = (execution: WorkoutExecution): WorkoutExecution => {
   if (execution.status === "completed") return execution;
+  let keptRestingSet = false;
   const exercises: ExecutedExercise[] = execution.exercises.map((exercise) => {
-    const completed = exercise.sets.every(isTerminalSet);
+    const sets: ExecutedSet[] = exercise.sets.map((set): ExecutedSet => {
+      if (set.status !== "resting" || !keptRestingSet) {
+        if (set.status === "resting") keptRestingSet = true;
+        return set;
+      }
+      return { ...set, status: "active" as const, restEndsAt: undefined };
+    });
+    const completed = sets.every(isTerminalSet);
     return {
       ...exercise,
+      sets,
       status: completed
         ? "completed"
-        : exercise.sets.some(
+        : sets.some(
               (set) =>
                 set.status === "active" ||
                 set.status === "resting" ||
@@ -163,6 +177,13 @@ const normalizeExecution = (execution: WorkoutExecution): WorkoutExecution => {
     exercises,
   };
 };
+
+const normalizePersistedWorkouts = (workouts: Workout[]): Workout[] =>
+  workouts.map((workout) =>
+    workout.execution
+      ? { ...workout, execution: normalizeExecution(workout.execution) }
+      : workout,
+  );
 
 export const activateExecutedExercise = (
   execution: WorkoutExecution,
@@ -212,6 +233,7 @@ const activateNextUpcomingExercise = (execution: WorkoutExecution) => {
 export const startWorkoutExecution = (
   workout: Workout,
   now = Date.now(),
+  initialExerciseId?: string,
 ): WorkoutExecution => {
   if (workout.execution) return workout.execution;
   const execution: WorkoutExecution = {
@@ -229,8 +251,11 @@ export const startWorkoutExecution = (
       })),
     })),
   };
-  return execution.exercises[0]
-    ? activateExecutedExercise(execution, execution.exercises[0].exerciseId)
+  const initialExercise =
+    execution.exercises.find((item) => item.exerciseId === initialExerciseId) ??
+    execution.exercises[0];
+  return initialExercise
+    ? activateExecutedExercise(execution, initialExercise.exerciseId)
     : normalizeExecution(execution);
 };
 
@@ -320,6 +345,14 @@ export const startExecutedSetRest = (
   now = Date.now(),
 ): WorkoutExecution => {
   if (execution.status !== "inProgress") return execution;
+  // A workout has one shared rest clock. Navigation may expose another
+  // exercise, but starting it must not create a second resting set.
+  if (
+    execution.exercises.some((exercise) =>
+      exercise.sets.some((set) => set.status === "resting"),
+    )
+  )
+    return execution;
   const target = execution.exercises
     .find((exercise) => exercise.exerciseId === exerciseId)
     ?.sets.find((set) => set.setId === setId);
