@@ -1298,7 +1298,7 @@ nav button svg {
 }
 .exercise-tabs {
   gap: 20px;
-  padding: 7px 2px 12px;
+  padding: 7px 6px 12px;
 }
 .exercise-tabs li {
   flex-basis: 44px;
