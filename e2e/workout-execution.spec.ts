@@ -90,7 +90,7 @@ test("persists two independent sessions when a template is reused", async ({
   await page.getByLabel(/Nombre de séries initiales/i).fill("1");
   await page
     .getByRole("spinbutton", { name: "Repos par défaut (secondes)" })
-    .fill("30");
+    .fill("300");
   await page.getByRole("button", { name: /Enregistrer/i }).click();
   await page.getByRole("button", { name: /Démarrer la séance/i }).click();
   let region = page.getByRole("region", { name: "Séries de Exercice A" });
