@@ -12,11 +12,32 @@ export type Exercise = {
   plannedSets: PlannedSet[];
   defaultRestSeconds?: number;
 };
-export type Workout = {
+export type WorkoutTemplate = {
   id: string;
   name: string;
   exercises: Exercise[];
+};
+
+// Compatibility view used by the existing UI while storage is split.
+export type Workout = WorkoutTemplate & {
   execution?: WorkoutExecution;
+};
+
+export type WorkoutSession = {
+  id: string;
+  templateId: string;
+  templateName: string;
+  startedAt: number;
+  completedAt: number | null;
+  status: WorkoutExecution["status"];
+  snapshot: WorkoutTemplate;
+  execution: WorkoutExecution;
+};
+
+export type WorkoutStore = {
+  version: 2;
+  templates: WorkoutTemplate[];
+  sessions: WorkoutSession[];
 };
 export const defaultRestSeconds = 90;
 const key = "sport-nutrition-workouts";
@@ -88,28 +109,153 @@ export const reorder = <T extends { position: number }>(
 };
 const open = () =>
   new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open("sport-nutrition", 1);
+    const request = indexedDB.open("sport-nutrition", 2);
     request.onupgradeneeded = () => request.result.createObjectStore("data");
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
-export async function loadWorkouts(): Promise<Workout[]> {
+const emptyStore = (): WorkoutStore => ({
+  version: 2,
+  templates: [],
+  sessions: [],
+});
+
+const clone = <T>(value: T): T =>
+  typeof structuredClone === "function"
+    ? structuredClone(value)
+    : JSON.parse(JSON.stringify(value));
+
+const migrateStore = (raw: unknown): WorkoutStore => {
+  if (raw && typeof raw === "object" && (raw as WorkoutStore).version === 2) {
+    const store = raw as WorkoutStore;
+    return {
+      version: 2,
+      templates: store.templates ?? [],
+      sessions: store.sessions ?? [],
+    };
+  }
+  if (!Array.isArray(raw)) return emptyStore();
+  const templates: WorkoutTemplate[] = [];
+  const sessions: WorkoutSession[] = [];
+  for (const legacy of raw as Workout[]) {
+    const { execution, ...template } = legacy;
+    templates.push(template);
+    if (execution) {
+      const sessionId =
+        execution.sessionId ?? `legacy-${template.id}-${execution.startedAt}`;
+      const migratedExecution = { ...execution, sessionId };
+      sessions.push({
+        id: sessionId,
+        templateId: template.id,
+        templateName: template.name,
+        startedAt: execution.startedAt,
+        completedAt: execution.completedAt ?? null,
+        status: execution.status,
+        snapshot: clone(template),
+        execution: migratedExecution,
+      });
+    }
+  }
+  return { version: 2, templates, sessions };
+};
+
+const readStoredValue = async (): Promise<unknown> => {
   if (!globalThis.indexedDB)
     return JSON.parse(localStorage.getItem(key) ?? "[]");
   const db = await open();
   return new Promise((resolve) => {
     const r = db.transaction("data").objectStore("data").get(key);
-    r.onsuccess = () => resolve(r.result ?? []);
-    r.onerror = () => resolve([]);
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => resolve(undefined);
   });
+};
+
+export async function loadWorkoutStore(): Promise<WorkoutStore> {
+  const raw = await readStoredValue();
+  const store = migrateStore(raw);
+  // Persist the migrated envelope once; subsequent loads are idempotent.
+  if (raw && Array.isArray(raw)) await saveWorkoutStore(store);
+  return store;
 }
-export async function saveWorkouts(workouts: Workout[]) {
+
+export async function saveWorkoutStore(store: WorkoutStore) {
+  if (
+    store.sessions.filter(
+      (session) =>
+        session.status === "inProgress" || session.status === "readyToFinish",
+    ).length > 1
+  ) {
+    throw new Error("Une seule séance peut être active à la fois");
+  }
+  const normalized: WorkoutStore = {
+    version: 2,
+    templates: store.templates,
+    sessions: store.sessions,
+  };
   if (!globalThis.indexedDB) {
-    localStorage.setItem(key, JSON.stringify(workouts));
+    localStorage.setItem(key, JSON.stringify(normalized));
     return;
   }
   const db = await open();
-  db.transaction("data", "readwrite").objectStore("data").put(workouts, key);
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction("data", "readwrite");
+    transaction.objectStore("data").put(normalized, key);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+}
+
+export async function loadWorkouts(): Promise<Workout[]> {
+  const store = await loadWorkoutStore();
+  return store.templates.map((template) => {
+    const latest = store.sessions
+      .filter((session) => session.templateId === template.id)
+      .sort((a, b) => b.startedAt - a.startedAt)[0];
+    if (!latest) return template;
+    const execution = { ...latest.execution };
+    delete execution.sessionId;
+    return { ...template, execution };
+  });
+}
+
+export async function saveWorkouts(workouts: Workout[]) {
+  const existing = globalThis.indexedDB
+    ? await loadWorkoutStore()
+    : migrateStore(JSON.parse(localStorage.getItem(key) ?? "[]"));
+  const templates = workouts.map(({ execution, ...template }) => {
+    const previous = existing.templates.find((item) => item.id === template.id);
+    return execution && previous ? previous : template;
+  });
+  const sessions = [...existing.sessions];
+  for (const workout of workouts) {
+    if (!workout.execution) continue;
+    const sessionId =
+      workout.execution.sessionId ??
+      `compat-${workout.id}-${workout.execution.startedAt}`;
+    const index = sessions.findIndex((session) => session.id === sessionId);
+    const session: WorkoutSession = {
+      id: sessionId,
+      templateId: workout.id,
+      templateName: workout.name,
+      startedAt: workout.execution.startedAt,
+      completedAt: workout.execution.completedAt ?? null,
+      status: workout.execution.status,
+      snapshot: clone({
+        id: workout.id,
+        name: workout.name,
+        exercises: workout.exercises,
+      }),
+      execution: { ...workout.execution, sessionId },
+    };
+    if (index >= 0) sessions[index] = session;
+    else sessions.push(session);
+  }
+  const nextStore = { version: 2 as const, templates, sessions };
+  if (!globalThis.indexedDB) {
+    void saveWorkoutStore(nextStore);
+    return;
+  }
+  await saveWorkoutStore(nextStore);
 }
 export const __storageKey = key;
 export type SetExecutionStatus =
@@ -129,6 +275,7 @@ export type ExecutedExercise = {
   sets: ExecutedSet[];
 };
 export type WorkoutExecution = {
+  sessionId?: string;
   status: "inProgress" | "readyToFinish" | "completed";
   startedAt: number;
   completedAt?: number;
@@ -212,6 +359,7 @@ const activateNextUpcomingExercise = (execution: WorkoutExecution) => {
 export const startWorkoutExecution = (
   workout: Workout,
   now = Date.now(),
+  initialExerciseId?: string,
 ): WorkoutExecution => {
   if (workout.execution) return workout.execution;
   const execution: WorkoutExecution = {
@@ -229,10 +377,41 @@ export const startWorkoutExecution = (
       })),
     })),
   };
-  return execution.exercises[0]
-    ? activateExecutedExercise(execution, execution.exercises[0].exerciseId)
+  const initialExercise =
+    execution.exercises.find((item) => item.exerciseId === initialExerciseId) ??
+    execution.exercises[0];
+  return initialExercise
+    ? activateExecutedExercise(execution, initialExercise.exerciseId)
     : normalizeExecution(execution);
 };
+
+export const createWorkoutSession = (
+  template: WorkoutTemplate,
+  now = Date.now(),
+  initialExerciseId?: string,
+): WorkoutSession => {
+  const sessionId = id();
+  const execution = {
+    ...startWorkoutExecution(template, now, initialExerciseId),
+    sessionId,
+  };
+  return {
+    id: sessionId,
+    templateId: template.id,
+    templateName: template.name,
+    startedAt: now,
+    completedAt: null,
+    status: execution.status,
+    snapshot: clone(template),
+    execution,
+  };
+};
+
+export const hasActiveWorkoutSession = (store: WorkoutStore): boolean =>
+  store.sessions.some(
+    (session) =>
+      session.status === "inProgress" || session.status === "readyToFinish",
+  );
 
 export const addExerciseToExecution = (
   execution: WorkoutExecution,

@@ -6,10 +6,14 @@ import {
   addSet,
   completeWorkoutExecution,
   createWorkout,
+  createWorkoutSession,
+  hasActiveWorkoutSession,
   finishExecutedRest,
   loadWorkouts,
+  loadWorkoutStore,
   removeExecutedUpcomingSet,
   saveWorkouts,
+  saveWorkoutStore,
   skipExecutedExercise,
   startExecutedSetRest,
   startWorkoutExecution,
@@ -222,4 +226,89 @@ it("does not complete an exercise or activate the next one when its last upcomin
   expect(next.exercises[0].status).toBe("active");
   expect(next.exercises[1].status).toBe("upcoming");
   expect(next.exercises[1].sets[0].status).toBe("upcoming");
+});
+
+it("stores independent sessions while keeping the template unchanged", async () => {
+  const template = addExercise(createWorkout("Push"), "Bench", 1, 30);
+  const sessionA = createWorkoutSession(template, 1000);
+  const changedSnapshot = {
+    ...sessionA.snapshot,
+    exercises: sessionA.snapshot.exercises.map((exercise) => ({
+      ...exercise,
+      name: "Bench modifié",
+    })),
+  };
+  await saveWorkoutStore({
+    version: 2,
+    templates: [template],
+    sessions: [{ ...sessionA, snapshot: changedSnapshot }],
+  });
+  const store = await loadWorkoutStore();
+  expect(store.templates[0]).toEqual(template);
+  expect(store.sessions).toHaveLength(1);
+  expect(store.sessions[0].snapshot.exercises[0].name).toBe("Bench modifié");
+  expect(store.sessions[0].id).not.toBe(template.id);
+});
+
+it("migrates a legacy workout execution idempotently", async () => {
+  const template = addExercise(createWorkout("Legacy"), "Squat", 1, 30);
+  const execution = startWorkoutExecution(template, 1000);
+  await saveWorkouts([{ ...template, execution }]);
+  const first = await loadWorkoutStore();
+  const second = await loadWorkoutStore();
+  expect(first.version).toBe(2);
+  expect(first.templates).toHaveLength(1);
+  expect(first.sessions).toHaveLength(1);
+  expect(second.sessions.map((session) => session.id)).toEqual(
+    first.sessions.map((session) => session.id),
+  );
+  expect(second.templates[0]).toEqual(template);
+});
+
+it("detects an active session without counting completed history", () => {
+  const template = createWorkout("Push");
+  const session = createWorkoutSession(template, 1000);
+  const completed = {
+    ...session,
+    status: "completed" as const,
+    completedAt: 2000,
+  };
+  expect(
+    hasActiveWorkoutSession({
+      version: 2,
+      templates: [template],
+      sessions: [completed],
+    }),
+  ).toBe(false);
+  expect(
+    hasActiveWorkoutSession({
+      version: 2,
+      templates: [template],
+      sessions: [session],
+    }),
+  ).toBe(true);
+});
+
+it("rejects a store containing two active sessions", async () => {
+  const templateA = createWorkout("A");
+  const templateB = createWorkout("B");
+  const sessionA = createWorkoutSession(templateA, 1000);
+  const sessionB = createWorkoutSession(templateB, 2000);
+  await expect(
+    saveWorkoutStore({
+      version: 2,
+      templates: [templateA, templateB],
+      sessions: [sessionA, sessionB],
+    }),
+  ).rejects.toThrow("Une seule séance");
+});
+
+it("keeps the localStorage fallback versioned", async () => {
+  vi.stubGlobal("indexedDB", undefined);
+  const template = createWorkout("Fallback");
+  await saveWorkoutStore({ version: 2, templates: [template], sessions: [] });
+  expect(
+    JSON.parse(localStorage.getItem("sport-nutrition-workouts") ?? "{}"),
+  ).toMatchObject({ version: 2 });
+  expect((await loadWorkoutStore()).templates).toEqual([template]);
 });

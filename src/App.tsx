@@ -8,20 +8,21 @@ import {
   addSet,
   completeWorkoutExecution,
   createWorkout,
+  createWorkoutSession,
   defaultRestSeconds,
   finishExecutedRest,
-  loadWorkouts,
+  loadWorkoutStore,
   removeExecutedUpcomingSet,
   reorder,
   saveWorkouts,
   skipExecutedExercise,
   sort,
   startExecutedSetRest,
-  startWorkoutExecution,
   updateExecutedSet,
   type ExecutedSet,
   type WorkoutExecution,
   type Workout,
+  type WorkoutStore,
 } from "./storage/database";
 type Screen = "list" | "detail";
 type Dialog =
@@ -44,7 +45,21 @@ export default function App() {
   const [rest, setRest] = useState(String(defaultRestSeconds));
   const [clock, setClock] = useState(0);
   useEffect(() => {
-    void loadWorkouts().then(setWorkouts);
+    void loadWorkoutStore().then((store: WorkoutStore) => {
+      const active = store.sessions
+        .filter((session) => session.status !== "completed")
+        .sort((a, b) => b.startedAt - a.startedAt);
+      setWorkouts(
+        store.templates.map((template) => {
+          const session = active.find(
+            (item) => item.templateId === template.id,
+          );
+          return session
+            ? { ...session.snapshot, execution: session.execution }
+            : template;
+        }),
+      );
+    });
   }, []);
   const update = useCallback((next: Workout[]) => {
     setWorkouts(next);
@@ -69,7 +84,18 @@ export default function App() {
     [update, workoutId, workouts],
   );
   const startExecution = () => {
-    if (workout) updateExecution(startWorkoutExecution(workout));
+    if (!workout || workout.execution) return;
+    if (
+      workouts.some(
+        (item) =>
+          item.execution &&
+          (item.execution.status === "inProgress" ||
+            item.execution.status === "readyToFinish"),
+      )
+    )
+      return;
+    const session = createWorkoutSession(workout, undefined, exerciseId);
+    updateExecution(session.execution);
   };
   useEffect(() => {
     const resting = execution?.exercises
@@ -87,7 +113,13 @@ export default function App() {
     return () => window.clearInterval(interval);
   }, [execution, updateExecution]);
   const finishWorkout = () => {
-    if (execution) updateExecution(completeWorkoutExecution(execution));
+    if (!execution) return;
+    updateExecution(completeWorkoutExecution(execution));
+    setWorkouts((current) =>
+      current.map((item) =>
+        item.id === workoutId ? { ...item, execution: undefined } : item,
+      ),
+    );
   };
   const close = () => {
     setDialog(null);

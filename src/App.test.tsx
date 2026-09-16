@@ -6,8 +6,19 @@ import { __storageKey, type Workout } from "./storage/database";
 beforeEach(() => localStorage.clear());
 afterEach(() => vi.restoreAllMocks());
 
-const storedWorkouts = (): Workout[] =>
-  JSON.parse(localStorage.getItem(__storageKey) ?? "[]");
+const storedWorkouts = (): Workout[] => {
+  const raw = JSON.parse(localStorage.getItem(__storageKey) ?? "[]");
+  if (Array.isArray(raw)) return raw;
+  return raw.templates.map((template: Workout) => {
+    const session = raw.sessions
+      .filter((item: { templateId: string }) => item.templateId === template.id)
+      .sort(
+        (a: { startedAt: number }, b: { startedAt: number }) =>
+          b.startedAt - a.startedAt,
+      )[0];
+    return session ? { ...template, execution: session.execution } : template;
+  });
+};
 async function openEmptyWorkout() {
   const view = render(<App />);
   await screen.findByText("Aucune séance");
@@ -502,10 +513,10 @@ it("adds an upcoming exercise during execution without losing the active series"
   expect(
     within(seriesRegion("Squat")).getByText("Série active"),
   ).toBeInTheDocument();
-  expect(storedWorkouts()[0].execution?.exercises).toMatchObject([
-    { exerciseId: storedWorkouts()[0].exercises[0].id, status: "active" },
-    { exerciseId: storedWorkouts()[0].exercises[1].id, status: "upcoming" },
-  ]);
+  const persisted = JSON.parse(localStorage.getItem(__storageKey) ?? "{}");
+  expect(persisted.templates[0].exercises).toHaveLength(1);
+  expect(persisted.sessions[0].snapshot.exercises).toHaveLength(2);
+  expect(persisted.sessions[0].execution.exercises[1].status).toBe("upcoming");
 });
 
 it("only offers deletion for an upcoming series during execution", async () => {
@@ -524,24 +535,25 @@ it("only offers deletion for an upcoming series during execution", async () => {
   );
 });
 
-it("keeps a completed workout final after returning home and reloading", async () => {
+it("keeps the template reusable after completing an independent session", async () => {
   const view = await openEmptyWorkout();
   createExercise("Squat", 1, 30);
   fireEvent.click(screen.getByText("Démarrer la séance"));
   fireEvent.click(screen.getByText("Lancer le repos"));
   expect(screen.getByText("Terminer la séance")).toBeInTheDocument();
   fireEvent.click(screen.getByText("Terminer la séance"));
-  expect(screen.getByText("Séance terminée")).toBeInTheDocument();
-  expect(screen.queryByText("Démarrer la séance")).not.toBeInTheDocument();
+  expect(screen.getByText("Démarrer la séance")).toBeInTheDocument();
   fireEvent.click(screen.getByLabelText("Retour aux séances"));
   fireEvent.click(screen.getByText("Push"));
-  expect(screen.getByText("Séance terminée")).toBeInTheDocument();
+  expect(screen.getByText("Démarrer la séance")).toBeInTheDocument();
   view.unmount();
   render(<App />);
   fireEvent.click(await screen.findByText("Push"));
-  expect(screen.getByText("Séance terminée")).toBeInTheDocument();
-  expect(screen.queryByText("Démarrer la séance")).not.toBeInTheDocument();
-  expect(storedWorkouts()[0].execution?.status).toBe("completed");
+  expect(screen.getByText("Démarrer la séance")).toBeInTheDocument();
+  const persisted = JSON.parse(localStorage.getItem(__storageKey) ?? "{}");
+  expect(persisted.templates[0].execution).toBeUndefined();
+  expect(persisted.sessions).toHaveLength(1);
+  expect(persisted.sessions[0].status).toBe("completed");
 });
 
 it("keeps future exercise states unchanged while browsing and starts them explicitly", async () => {
