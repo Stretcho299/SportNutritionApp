@@ -157,6 +157,38 @@ it("enforces a single active rest across exercises at the model boundary", () =>
   ).toHaveLength(1);
 });
 
+it("repairs duplicate persisted rest clocks at the storage boundary", async () => {
+  let workout = addExercise(createWorkout("Dual"), "Bench", 2, 30);
+  workout = addExercise(workout, "Row", 2, 30);
+  const execution = startWorkoutExecution(workout, 1000);
+  const duplicate = {
+    ...execution,
+    exercises: execution.exercises.map((exercise, index) => ({
+      ...exercise,
+      status: "active" as const,
+      sets: exercise.sets.map((set, setIndex) =>
+        setIndex === 0
+          ? {
+              ...set,
+              status: "resting" as const,
+              restEndsAt: 31000 + index * 1000,
+            }
+          : set,
+      ),
+    })),
+  };
+
+  await saveWorkouts([{ ...workout, execution: duplicate }]);
+  const persisted = (await loadWorkouts())[0].execution!;
+  const resting = persisted.exercises.flatMap((exercise) =>
+    exercise.sets.filter((set) => set.status === "resting"),
+  );
+
+  expect(resting).toHaveLength(1);
+  expect(persisted.exercises[1].sets[0].status).toBe("active");
+  expect(persisted.exercises[1].sets[0].restEndsAt).toBeUndefined();
+});
+
 it("adds a future exercise without changing the active series", () => {
   const workout = addExercise(createWorkout("Push"), "Bench", 2, 30);
   const execution = startWorkoutExecution(workout, 1000);
