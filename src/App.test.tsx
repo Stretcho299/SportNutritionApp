@@ -643,6 +643,46 @@ it("only offers deletion for an upcoming series during execution", async () => {
   );
 });
 
+it("never offers or performs deletion of the first series during execution", async () => {
+  await openEmptyWorkout();
+  createExercise("A", 2, 30);
+  createExercise("B", 2, 30);
+  fireEvent.click(screen.getByText("Démarrer la séance"));
+
+  selectExercise("B");
+  const firstExercise = seriesRegion("B");
+  expect(within(firstExercise).getAllByRole("listitem")[0]).toBeInTheDocument();
+  expect(
+    within(firstExercise).getAllByRole("listitem")[0].querySelector(".order"),
+  ).not.toBeInTheDocument();
+  expect(
+    within(within(firstExercise).getAllByRole("listitem")[1]).getByText(
+      "Supprimer",
+    ),
+  ).toBeInTheDocument();
+
+  selectExercise("A");
+  const activeBlocks = within(seriesRegion("A")).getAllByRole("listitem");
+  expect(
+    within(activeBlocks[0]).queryByText("Supprimer"),
+  ).not.toBeInTheDocument();
+  expect(within(activeBlocks[1]).getByText("Supprimer")).toBeInTheDocument();
+  fireEvent.click(within(activeBlocks[0]).getByText("Lancer le repos"));
+  fireEvent.click(within(activeBlocks[0]).getByText("Terminer le repos"));
+  fireEvent.click(
+    within(screen.getByRole("alertdialog")).getByRole("button", {
+      name: "Mettre fin",
+    }),
+  );
+  expect(within(activeBlocks[0]).getByText("Effectuée")).toBeInTheDocument();
+  expect(
+    within(activeBlocks[0]).queryByText("Supprimer"),
+  ).not.toBeInTheDocument();
+  expect(
+    within(activeBlocks[1]).queryByText("Supprimer"),
+  ).not.toBeInTheDocument();
+});
+
 it("keeps a completed workout final after returning home and reloading", async () => {
   const view = await openEmptyWorkout();
   createExercise("Squat", 1, 30);

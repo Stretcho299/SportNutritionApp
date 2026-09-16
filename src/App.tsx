@@ -301,6 +301,8 @@ export default function App() {
   const removeSet = (id: string) => {
     if (!workout || !exercise) return;
     const current = executionSet(id);
+    const firstSetId = sort(exercise.plannedSets)[0]?.id;
+    if (execution?.status === "inProgress" && id === firstSetId) return;
     if (execution && current?.status !== "upcoming") return;
     const set = exercise.plannedSets.find((item) => item.id === id);
     if (!set) return;
@@ -774,7 +776,8 @@ export default function App() {
                         </button>
                       )}
                       {(!execution ||
-                        executionSet(s.id)?.status === "upcoming") && (
+                        (executionSet(s.id)?.status === "upcoming" &&
+                          i > 0)) && (
                         <div className="order">
                           <button onClick={() => removeSet(s.id)}>
                             Supprimer

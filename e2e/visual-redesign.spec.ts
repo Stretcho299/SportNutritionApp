@@ -204,6 +204,10 @@ for (const width of [390, 320]) {
     expect(addBounds!.y + addBounds!.height).toBeLessThanOrEqual(navBounds!.y);
     await screenshot(page, info, "scrolled");
     await page.getByRole("button", { name: "Démarrer la séance" }).click();
+    await expect(first.locator(".order")).toHaveCount(0);
+    await expect(
+      page.locator(".set-block").nth(1).locator(".order"),
+    ).toHaveCount(1);
     await first.getByRole("button", { name: "Lancer le repos" }).click();
     const timer = page.getByRole("timer");
     await expect(timer).toBeVisible();
@@ -235,6 +239,11 @@ for (const width of [390, 320]) {
     );
     await rail.getByRole("button").nth(1).click();
     await expect(rail.locator("li").nth(1)).toHaveClass(/execution-upcoming/);
+    const upcomingFirst = page.locator(".set-block").first();
+    await expect(upcomingFirst.locator(".order")).toHaveCount(0);
+    await expect(
+      page.locator(".set-block").nth(1).locator(".order"),
+    ).toHaveCount(1);
     await expect(timer).toBeVisible();
     await expect(
       page.getByRole("region", { name: "Progression de la séance" }),
