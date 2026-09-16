@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
+import { WorkoutProgress } from "./WorkoutProgress";
 import {
   activateExecutedExercise,
   addSetToExecution,
@@ -295,7 +296,9 @@ export default function App() {
     <main
       className={`app-shell${screen === "detail" && exercise ? " workout-detail" : ""}`}
     >
-      <header className="workout-control">
+      <header
+        className={`workout-control${screen === "list" ? " home-header" : ""}`}
+      >
         <p>Sport Nutrition</p>
         <h1>{screen === "list" ? "Séances" : workout?.name}</h1>
         {screen !== "list" && (
@@ -399,15 +402,21 @@ export default function App() {
                           {i + 1}
                         </span>
                         <span className="sr-only">{x.name}</span>
+                        <span className="sr-only">
+                          {" "}
+                          ·{" "}
+                          {executionExercise(x.id)?.status === "completed"
+                            ? "Terminé"
+                            : executionExercise(x.id)?.status === "active"
+                              ? "En cours"
+                              : "À venir"}
+                        </span>
                       </button>
                     </li>
                   ))}
                 </ul>
                 <section className="exercise-hero">
-                  <div className="exercise-illustration" aria-hidden="true">
-                    ✦
-                  </div>
-                  <div>
+                  <div className="exercise-heading">
                     <p>EXERCICE SÉLECTIONNÉ</p>
                     <h2>{exercise?.name}</h2>
                   </div>
@@ -465,16 +474,28 @@ export default function App() {
                     Séance en cours · Reprenez là où vous vous êtes arrêté.
                   </p>
                 )}
+                {execution && (
+                  <WorkoutProgress
+                    execution={execution}
+                    workout={workout}
+                    clock={clock}
+                    selectedExerciseId={exercise.id}
+                  />
+                )}
               </div>
               <section
                 className="planned-sets"
                 aria-label={`Séries de ${exercise.name}`}
               >
+                {exercise.plannedSets.length > 0 && (
+                  <p className="set-exercise-name">{exercise.name}</p>
+                )}
                 <ul>
                   {sort(exercise.plannedSets).map((s, i) => (
                     <li
                       className={
-                        "set-block" +
+                        "set-block status-" +
+                        (executionSet(s.id)?.status ?? "planned") +
                         (executionSet(s.id)?.status === "active"
                           ? " active"
                           : "")
@@ -495,78 +516,84 @@ export default function App() {
                         </p>
                       )}
                       <h3>SÉRIE {i + 1}</h3>
-                      <p className="set-exercise-name">{exercise.name}</p>
-                      <p className="set-advanced">
-                        Paramètres avancés <span>À venir</span>
-                      </p>
-                      <SetField
-                        label="Répétitions"
-                        allowEmpty
-                        value={executionSet(s.id)?.repetitions ?? s.repetitions}
-                        min={1}
-                        step={1}
-                        onSave={(value) =>
-                          execution
-                            ? updateExecution(
-                                updateExecutedSet(
-                                  execution,
-                                  exercise.id,
-                                  s.id,
-                                  "repetitions",
-                                  value,
-                                ),
-                              )
-                            : editSet(s.id, "repetitions", value)
-                        }
-                        disabled={
-                          !!execution && executionSet(s.id)?.status !== "active"
-                        }
-                      />
-                      <SetField
-                        label="Charge (kg)"
-                        allowEmpty
-                        value={executionSet(s.id)?.weightKg ?? s.weightKg}
-                        min={0}
-                        step="any"
-                        onSave={(value) =>
-                          execution
-                            ? updateExecution(
-                                updateExecutedSet(
-                                  execution,
-                                  exercise.id,
-                                  s.id,
-                                  "weightKg",
-                                  value,
-                                ),
-                              )
-                            : editSet(s.id, "weightKg", value)
-                        }
-                        disabled={
-                          !!execution && executionSet(s.id)?.status !== "active"
-                        }
-                      />
-                      <SetField
-                        label="Repos (secondes)"
-                        value={executionSet(s.id)?.restSeconds ?? s.restSeconds}
-                        min={0}
-                        step={1}
-                        onSave={(value) =>
-                          execution
-                            ? updateExecution(
-                                updateExecutedSet(
-                                  execution,
-                                  exercise.id,
-                                  s.id,
-                                  "restSeconds",
-                                  value,
-                                ),
-                              )
-                            : editSet(s.id, "restSeconds", value)
-                        }
-                        disabled={
-                          !!execution && executionSet(s.id)?.status !== "active"
-                        }
-                      />
+                      {!execution && <p className="set-status">À venir</p>}
+                      <div className="set-metrics">
+                        <SetField
+                          label="Répétitions"
+                          allowEmpty
+                          value={
+                            executionSet(s.id)?.repetitions ?? s.repetitions
+                          }
+                          min={1}
+                          step={1}
+                          onSave={(value) =>
+                            execution
+                              ? updateExecution(
+                                  updateExecutedSet(
+                                    execution,
+                                    exercise.id,
+                                    s.id,
+                                    "repetitions",
+                                    value,
+                                  ),
+                                )
+                              : editSet(s.id, "repetitions", value)
+                          }
+                          disabled={
+                            !!execution &&
+                            executionSet(s.id)?.status !== "active"
+                          }
+                        />
+                        <SetField
+                          label="Charge (kg)"
+                          allowEmpty
+                          value={executionSet(s.id)?.weightKg ?? s.weightKg}
+                          min={0}
+                          step="any"
+                          onSave={(value) =>
+                            execution
+                              ? updateExecution(
+                                  updateExecutedSet(
+                                    execution,
+                                    exercise.id,
+                                    s.id,
+                                    "weightKg",
+                                    value,
+                                  ),
+                                )
+                              : editSet(s.id, "weightKg", value)
+                          }
+                          disabled={
+                            !!execution &&
+                            executionSet(s.id)?.status !== "active"
+                          }
+                        />
+                        <SetField
+                          label="Repos (secondes)"
+                          value={
+                            executionSet(s.id)?.restSeconds ?? s.restSeconds
+                          }
+                          min={0}
+                          step={1}
+                          onSave={(value) =>
+                            execution
+                              ? updateExecution(
+                                  updateExecutedSet(
+                                    execution,
+                                    exercise.id,
+                                    s.id,
+                                    "restSeconds",
+                                    value,
+                                  ),
+                                )
+                              : editSet(s.id, "restSeconds", value)
+                          }
+                          disabled={
+                            !!execution &&
+                            executionSet(s.id)?.status !== "active"
+                          }
+                        />
+                      </div>
                       <p className="rest-timer">
                         {formatRest(
                           executionSet(s.id)?.status === "resting"
@@ -636,7 +663,7 @@ export default function App() {
                   (execution.status === "inProgress" &&
                     executionExercise(exercise.id)?.status !==
                       "completed")) && (
-                  <button className="primary" onClick={appendSet}>
+                  <button className="primary add-set" onClick={appendSet}>
                     + Ajouter une série
                   </button>
                 )}
@@ -787,7 +814,7 @@ export default function App() {
           </form>
         </Sheet>
       )}
-      <nav>
+      <nav aria-label="Navigation principale">
         <button className="active">Séances</button>
         <button onClick={() => setScreen("list")}>Nutrition</button>
       </nav>
@@ -854,12 +881,23 @@ function WorkoutRow({
           onOpen();
         }}
       >
+        <small
+          className={`workout-badge ${workout.execution?.status ?? "planned"}`}
+        >
+          {workout.execution?.status === "completed"
+            ? "✓ Terminée"
+            : workout.execution
+              ? "● En cours"
+              : "Préparation"}
+        </small>
         <strong>{workout.name}</strong>
         <small>
           {workout.exercises.length} exercice
           {workout.exercises.length > 1 ? "s" : ""}
         </small>
-        <span>›</span>
+        <span className="row-arrow" aria-hidden="true">
+          ›
+        </span>
       </button>
     </li>
   );
@@ -889,8 +927,16 @@ function SetField({
   const [draft, setDraft] = useState<string | null>(null);
   return (
     <label className="set-field">
-      {label}
+      <span aria-hidden="true">
+        {label === "Charge (kg)"
+          ? "kg"
+          : label === "Repos (secondes)"
+            ? "Repos · s"
+            : "Répétitions"}
+      </span>
       <input
+        aria-label={label}
+        placeholder="—"
         type="number"
         min={min}
         step={step}
