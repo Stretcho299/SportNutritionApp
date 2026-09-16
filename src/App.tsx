@@ -84,6 +84,34 @@ export default function App() {
   const startExecution = () => {
     if (workout) updateExecution(startWorkoutExecution(workout));
   };
+  const startRest = (targetExerciseId: string, targetSetId: string) => {
+    if (!execution) return;
+    const currentSet = execution.exercises
+      .find((item) => item.exerciseId === targetExerciseId)
+      ?.sets.find((item) => item.setId === targetSetId);
+    const immediateBase =
+      currentSet?.status === "upcoming"
+        ? activateExecutedExercise(execution, targetExerciseId)
+        : execution;
+    updateExecution(
+      startExecutedSetRest(immediateBase, targetExerciseId, targetSetId),
+    );
+
+    // Re-read after the immediate local transition so another tab cannot
+    // start from a stale snapshot and overwrite the session's active clock.
+    void loadWorkouts().then((latestWorkouts) => {
+      const latestExecution = latestWorkouts.find(
+        (item) => item.id === workoutId,
+      )?.execution;
+      if (!latestExecution) return;
+      const latestResting = latestExecution.exercises
+        .flatMap((item) => item.sets)
+        .find((item) => item.status === "resting");
+      if (latestResting && latestResting.setId !== targetSetId) {
+        updateExecution(latestExecution);
+      }
+    });
+  };
   useEffect(() => {
     const resting = execution?.exercises
       .flatMap((item) => item.sets)
@@ -738,20 +766,7 @@ export default function App() {
                               ? "Un repos est déjà en cours"
                               : undefined
                           }
-                          onClick={() =>
-                            updateExecution(
-                              startExecutedSetRest(
-                                executionSet(s.id)?.status === "upcoming"
-                                  ? activateExecutedExercise(
-                                      execution!,
-                                      exercise.id,
-                                    )
-                                  : execution!,
-                                exercise.id,
-                                s.id,
-                              ),
-                            )
-                          }
+                          onClick={() => startRest(exercise.id, s.id)}
                         >
                           <span aria-hidden="true">▶</span>
                           <span className="sr-only">Lancer le repos</span>
