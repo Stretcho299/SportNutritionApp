@@ -94,6 +94,23 @@ it("uses the last set in persisted display order as the rest reference", () => {
   expect(addSet(exercise).plannedSets.at(-1)?.restSeconds).toBe(0);
 });
 
+it("starts the selected exercise without activating its neighbors", () => {
+  let workout = addExercise(createWorkout("Init"), "A", 2, 30);
+  workout = addExercise(workout, "B", 2, 30);
+  workout = addExercise(workout, "C", 2, 30);
+  const [, b] = workout.exercises;
+  const execution = startWorkoutExecution(workout, 1000, b.id);
+
+  expect(execution.exercises.map((item) => item.status)).toEqual([
+    "upcoming",
+    "active",
+    "upcoming",
+  ]);
+  expect(
+    execution.exercises.find((item) => item.exerciseId === b.id)?.status,
+  ).toBe("active");
+});
+
 it("persists execution states, advances after rest, and skips remaining sets", async () => {
   const workout = addExercise(createWorkout("Push"), "Bench", 2, 30);
   const execution = startWorkoutExecution(workout, 1000);

@@ -233,6 +233,7 @@ const activateNextUpcomingExercise = (execution: WorkoutExecution) => {
 export const startWorkoutExecution = (
   workout: Workout,
   now = Date.now(),
+  initialExerciseId?: string,
 ): WorkoutExecution => {
   if (workout.execution) return workout.execution;
   const execution: WorkoutExecution = {
@@ -250,8 +251,11 @@ export const startWorkoutExecution = (
       })),
     })),
   };
-  return execution.exercises[0]
-    ? activateExecutedExercise(execution, execution.exercises[0].exerciseId)
+  const initialExercise =
+    execution.exercises.find((item) => item.exerciseId === initialExerciseId) ??
+    execution.exercises[0];
+  return initialExercise
+    ? activateExecutedExercise(execution, initialExercise.exerciseId)
     : normalizeExecution(execution);
 };
 

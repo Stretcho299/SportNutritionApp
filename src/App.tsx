@@ -82,7 +82,8 @@ export default function App() {
     [update, workoutId, workouts],
   );
   const startExecution = () => {
-    if (workout) updateExecution(startWorkoutExecution(workout));
+    if (workout)
+      updateExecution(startWorkoutExecution(workout, undefined, exerciseId));
   };
   const startRest = (targetExerciseId: string, targetSetId: string) => {
     if (!execution) return;
