@@ -742,27 +742,21 @@ export default function App() {
                           }
                         />
                       </div>
-                      <p className="rest-timer">
-                        {formatRest(
-                          executionSet(s.id)?.status === "resting"
-                            ? Math.max(
-                                0,
-                                Math.ceil(
-                                  ((executionSet(s.id)?.restEndsAt ?? clock) -
-                                    clock) /
-                                    1000,
-                                ),
-                              )
-                            : (executionSet(s.id)?.restSeconds ??
-                                s.restSeconds),
-                        )}{" "}
-                        ·{" "}
-                        {executionSet(s.id)?.status === "resting"
-                          ? "Repos en cours"
-                          : execution
-                            ? "Repos"
-                            : "Repos prévu"}
-                      </p>
+                      {executionSet(s.id)?.status === "resting" && (
+                        <p className="rest-timer">
+                          {formatRest(
+                            Math.max(
+                              0,
+                              Math.ceil(
+                                ((executionSet(s.id)?.restEndsAt ?? clock) -
+                                  clock) /
+                                  1000,
+                              ),
+                            ),
+                          )}{" "}
+                          · Repos en cours
+                        </p>
+                      )}
                       {(executionSet(s.id)?.status === "active" ||
                         (executionSet(s.id)?.status === "upcoming" &&
                           i === 0)) && (

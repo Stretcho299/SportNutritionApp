@@ -1257,6 +1257,119 @@ nav button svg {
   }
 }
 
+/* Upper-zone polish: compact hierarchy and unified tactile controls. */
+.workout-detail .workout-control {
+  gap: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #252a33;
+}
+.workout-detail .workout-control h1 {
+  font-family: var(--display);
+  font-size: 25px;
+  letter-spacing: 0.04em;
+}
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #aeb4bf;
+  transition:
+    color 160ms ease,
+    transform 140ms ease;
+}
+.link:hover,
+.link:focus-visible {
+  color: var(--accent-soft);
+}
+.control-actions {
+  gap: 5px;
+}
+.control-actions button {
+  width: 40px;
+  min-height: 40px;
+  border-color: #303641;
+  background: #1a1d23;
+  color: #b7bec9;
+}
+.control-actions button:hover,
+.control-actions button:focus-visible {
+  color: var(--accent-soft);
+  border-color: #76513e;
+}
+.exercise-tabs {
+  gap: 20px;
+  padding: 7px 2px 12px;
+}
+.exercise-tabs li {
+  flex-basis: 44px;
+}
+.exercise-tabs li:not(:last-child)::after {
+  left: 42px;
+  width: 20px;
+  height: 1px;
+  background: linear-gradient(90deg, #4a4f5a, #292e38);
+}
+.exercise-tab-circle {
+  width: 42px;
+  height: 42px;
+  border-color: #343a45;
+  background: #16191f;
+}
+.exercise-tabs li.execution-upcoming .exercise-tab-circle {
+  color: #737b89;
+}
+.exercise-tabs li.execution-upcoming:not(.selected) .exercise-tab-circle {
+  opacity: 0.82;
+}
+.execution-active .exercise-tab-circle {
+  border-width: 1.5px;
+  background: #2a211e;
+  box-shadow: 0 0 14px #ff74431f;
+}
+.exercise-completed .exercise-tab-circle {
+  background: #1b2722;
+}
+.exercise-tabs .selected .exercise-tab-circle {
+  outline: 1px solid var(--accent-soft);
+  outline-offset: 3px;
+}
+.exercise-tabs .selected .exercise-tab-index {
+  box-shadow: 0 0 0 2px #131519;
+}
+.exercise-hero {
+  gap: 6px 10px;
+  padding: 11px 12px;
+  border-radius: 14px;
+}
+.exercise-heading p {
+  color: #cc8164;
+}
+.exercise-heading h2 {
+  font-family: var(--display);
+  letter-spacing: 0.03em;
+}
+.exercise-menu {
+  gap: 5px;
+}
+.exercise-menu button {
+  border-color: #303641;
+  background: #1a1d23;
+  color: #aeb4bf;
+}
+.exercise-menu button:last-child {
+  color: #d99a7f;
+  background: #2b211f;
+}
+.advanced {
+  min-height: 34px;
+  color: #8d96a4;
+  letter-spacing: 0.02em;
+}
+.workout-progress {
+  border: 1px solid #3b302b;
+  background: linear-gradient(110deg, #2b211d, #191b20 78%);
+}
+
 @media (max-width: 350px) {
   .app-shell {
     padding-left: 12px;

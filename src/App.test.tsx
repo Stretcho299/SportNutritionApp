@@ -185,7 +185,7 @@ it("automatically selects the first exercise and displays its blank initial set"
     "data-value",
     "80",
   );
-  expect(zone.getByText("1:30 · Repos prévu")).toBeInTheDocument();
+  expect(zone.queryByText("1:30 · Repos prévu")).not.toBeInTheDocument();
   expect(seriesRegion("Squat").lastElementChild).toHaveTextContent(
     "+ Ajouter une série",
   );
@@ -231,7 +231,7 @@ it("selects bounded picker values and persists repetitions, half-kilograms and s
   chooseValue("Charge (kg)", 82.5);
   chooseValue("Repos (secondes)", 419);
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  expect(screen.getByText("6:59 · Repos prévu")).toBeInTheDocument();
+  expect(screen.queryByText("6:59 · Repos prévu")).not.toBeInTheDocument();
   expect(storedWorkouts()[0].exercises[0].plannedSets[0]).toMatchObject({
     repetitions: 24,
     weightKg: 82.5,
