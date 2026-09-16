@@ -1042,6 +1042,39 @@ nav button.active {
   background: var(--accent);
   color: var(--accent-ink);
 }
+
+.execution-debug-panel {
+  margin: 10px 0;
+  padding: 8px 10px;
+  border: 1px solid #6f3d27;
+  border-radius: 10px;
+  background: #171311;
+  color: #d8c8c0;
+  font:
+    10px/1.45 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  overflow-wrap: anywhere;
+}
+.execution-debug-title {
+  margin-bottom: 4px;
+  color: #ff7a3d;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.execution-debug-panel strong {
+  color: #ffb08a;
+}
+.execution-debug-panel code {
+  color: #f1eee9;
+}
+.execution-debug-exercises {
+  margin: 4px 0;
+  padding-left: 8px;
+  border-left: 2px solid #493026;
+}
+
 @media (max-width: 350px) {
   .app-shell {
     padding-left: 12px;

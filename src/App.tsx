@@ -593,6 +593,72 @@ export default function App() {
                     Séance en cours · Reprenez là où vous vous êtes arrêté.
                   </p>
                 )}
+                {(import.meta.env.DEV ||
+                  window.location.hostname.includes(
+                    "feat-stitch-visual-redesign",
+                  )) && (
+                  <aside
+                    className="execution-debug-panel"
+                    aria-label="Debug exécution"
+                  >
+                    <div className="execution-debug-title">DEBUG EXÉCUTION</div>
+                    <div>
+                      workout.id : <code>{workout.id}</code>
+                    </div>
+                    <div>
+                      workout.execution :{" "}
+                      <strong>{execution ? "présent" : "absent"}</strong>
+                    </div>
+                    <div>
+                      execution.status :{" "}
+                      <strong>{execution?.status ?? "—"}</strong>
+                    </div>
+                    <div>
+                      exerciseId UI : <code>{exerciseId || "—"}</code>
+                    </div>
+                    <div>
+                      active exerciseId :{" "}
+                      <code>
+                        {execution?.exercises
+                          .filter((item) => item.status === "active")
+                          .map((item) => item.exerciseId)
+                          .join(", ") || "—"}
+                      </code>
+                    </div>
+                    <div className="execution-debug-exercises">
+                      {(execution?.exercises ?? []).map((item) => {
+                        const source = workout.exercises.find(
+                          (candidate) => candidate.id === item.exerciseId,
+                        );
+                        return (
+                          <div key={item.exerciseId}>
+                            {source?.name ?? "?"} /{" "}
+                            <code>{item.exerciseId}</code> :{" "}
+                            <strong>{item.status}</strong>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div>
+                      chrono :{" "}
+                      {restingSet ? (
+                        <>
+                          <code>
+                            {execution?.exercises.find((item) =>
+                              item.sets.some(
+                                (set) => set.setId === restingSet.setId,
+                              ),
+                            )?.exerciseId ?? "—"}
+                          </code>{" "}
+                          / <code>{restingSet.setId}</code> ·{" "}
+                          <strong>{restingSet.status}</strong>
+                        </>
+                      ) : (
+                        <strong>inactif</strong>
+                      )}
+                    </div>
+                  </aside>
+                )}
                 {execution && (
                   <WorkoutProgress
                     execution={execution}
