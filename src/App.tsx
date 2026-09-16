@@ -2,6 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
 import { WorkoutProgress } from "./WorkoutProgress";
 import {
+  ConfirmationDialog,
+  type ConfirmationRequest,
+} from "./ConfirmationDialog";
+import { SetValuePicker } from "./SetValuePicker";
+import { pickerValues } from "./pickerValues";
+import {
   activateExecutedExercise,
   addSetToExecution,
   addExercise,
@@ -44,6 +50,9 @@ export default function App() {
   const [initialSetCount, setInitialSetCount] = useState("1");
   const [rest, setRest] = useState(String(defaultRestSeconds));
   const [clock, setClock] = useState(0);
+  const [confirmation, setConfirmation] = useState<ConfirmationRequest | null>(
+    null,
+  );
   useEffect(() => {
     void loadWorkouts().then(setWorkouts);
   }, []);
@@ -88,8 +97,22 @@ export default function App() {
     return () => window.clearInterval(interval);
   }, [execution, updateExecution]);
   const finishWorkout = () => {
-    if (execution) updateExecution(completeWorkoutExecution(execution));
+    if (execution)
+      requestConfirmation({
+        title: "Terminer la séance ?",
+        description: "Cette séance sera clôturée définitivement.",
+        confirmLabel: "Terminer",
+        onConfirm: () => updateExecution(completeWorkoutExecution(execution)),
+      });
   };
+  const requestConfirmation = (request: ConfirmationRequest) =>
+    setConfirmation({
+      ...request,
+      onConfirm: () => {
+        setConfirmation(null);
+        request.onConfirm();
+      },
+    });
   const close = () => {
     setDialog(null);
     setName("");
@@ -149,17 +172,34 @@ export default function App() {
   };
   const removeWorkout = (id: string) => {
     const target = workouts.find((item) => item.id === id);
-    if (target && confirm("Supprimer cette séance ?")) {
-      update(workouts.filter((item) => item.id !== id));
-      if (workoutId === id) {
-        setWorkoutId("");
-        setExerciseId("");
-        setScreen("list");
-      }
-    }
+    if (target)
+      requestConfirmation({
+        title: "Supprimer cette séance ?",
+        description: `« ${target.name} » et toutes ses données seront supprimés définitivement.`,
+        confirmLabel: "Supprimer",
+        onConfirm: () => {
+          update(workouts.filter((item) => item.id !== id));
+          if (workoutId === id) {
+            setWorkoutId("");
+            setExerciseId("");
+            setScreen("list");
+          }
+        },
+      });
   };
   const removeExercise = () => {
-    if (workout && exercise && confirm("Supprimer cet exercice ?")) {
+    if (!workout || !exercise) return;
+    const progress = executionExercise(exercise.id);
+    const hasData =
+      exercise.plannedSets.some(
+        (set) =>
+          set.repetitions !== null ||
+          set.weightKg !== null ||
+          set.restSeconds !==
+            (exercise.defaultRestSeconds ?? defaultRestSeconds),
+      ) ||
+      (progress?.status !== undefined && progress.status !== "upcoming");
+    const remove = () => {
       update(
         workouts.map((w) =>
           w.id === workout!.id
@@ -177,7 +217,15 @@ export default function App() {
       );
       setScreen("detail");
       close();
-    }
+    };
+    if (hasData)
+      requestConfirmation({
+        title: "Supprimer cet exercice ?",
+        description: `« ${exercise.name} » contient des valeurs ou une progression qui seront supprimées.`,
+        confirmLabel: "Supprimer",
+        onConfirm: remove,
+      });
+    else remove();
   };
   const editSet = (
     id: string,
@@ -205,6 +253,20 @@ export default function App() {
           : w,
       ),
     );
+  };
+  const saveSetValue = (
+    id: string,
+    field: "repetitions" | "weightKg" | "restSeconds",
+    value: number,
+  ) => {
+    if (!workout || !exercise) return;
+    if (execution) {
+      updateExecution(
+        updateExecutedSet(execution, exercise.id, id, field, value),
+      );
+    } else {
+      editSet(id, field, value);
+    }
   };
   const appendSet = () => {
     if (!workout || !exercise) return;
@@ -240,28 +302,44 @@ export default function App() {
     if (!workout || !exercise) return;
     const current = executionSet(id);
     if (execution && current?.status !== "upcoming") return;
-    update(
-      workouts.map((w) =>
-        w.id !== workout.id
-          ? w
-          : {
-              ...w,
-              exercises: w.exercises.map((x) =>
-                x.id !== exercise.id
-                  ? x
-                  : {
-                      ...x,
-                      plannedSets: sort(x.plannedSets)
-                        .filter((set) => set.id !== id)
-                        .map((set, position) => ({ ...set, position })),
-                    },
-              ),
-              execution: w.execution
-                ? removeExecutedUpcomingSet(w.execution, exercise.id, id)
-                : undefined,
-            },
-      ),
-    );
+    const set = exercise.plannedSets.find((item) => item.id === id);
+    if (!set) return;
+    const hasData =
+      set.repetitions !== null ||
+      set.weightKg !== null ||
+      set.restSeconds !== (exercise.defaultRestSeconds ?? defaultRestSeconds);
+    const remove = () =>
+      update(
+        workouts.map((w) =>
+          w.id !== workout.id
+            ? w
+            : {
+                ...w,
+                exercises: w.exercises.map((x) =>
+                  x.id !== exercise.id
+                    ? x
+                    : {
+                        ...x,
+                        plannedSets: sort(x.plannedSets)
+                          .filter((set) => set.id !== id)
+                          .map((set, position) => ({ ...set, position })),
+                      },
+                ),
+                execution: w.execution
+                  ? removeExecutedUpcomingSet(w.execution, exercise.id, id)
+                  : undefined,
+              },
+        ),
+      );
+    if (hasData)
+      requestConfirmation({
+        title: "Supprimer cette série ?",
+        description:
+          "Les répétitions, la charge et le repos de cette série seront supprimés.",
+        confirmLabel: "Supprimer",
+        onConfirm: remove,
+      });
+    else remove();
   };
   const moveExercise = (from: number, to: number) => {
     if (!workout) return;
@@ -436,9 +514,16 @@ export default function App() {
                           executionExercise(exercise.id)?.status === "completed"
                         }
                         onClick={() =>
-                          updateExecution(
-                            skipExecutedExercise(execution, exercise.id),
-                          )
+                          requestConfirmation({
+                            title: "Mettre fin à cet exercice ?",
+                            description:
+                              "Les séries restantes seront ignorées et vous passerez à l’exercice suivant.",
+                            confirmLabel: "Mettre fin",
+                            onConfirm: () =>
+                              updateExecution(
+                                skipExecutedExercise(execution, exercise.id),
+                              ),
+                          })
                         }
                       >
                         Terminer l’exercice
@@ -518,79 +603,100 @@ export default function App() {
                       <h3>SÉRIE {i + 1}</h3>
                       {!execution && <p className="set-status">À venir</p>}
                       <div className="set-metrics">
-                        <SetField
+                        <SetValuePicker
                           label="Répétitions"
-                          allowEmpty
                           value={
                             executionSet(s.id)?.repetitions ?? s.repetitions
                           }
-                          min={1}
-                          step={1}
-                          onSave={(value) =>
-                            execution
-                              ? updateExecution(
-                                  updateExecutedSet(
-                                    execution,
-                                    exercise.id,
-                                    s.id,
-                                    "repetitions",
-                                    value,
-                                  ),
-                                )
-                              : editSet(s.id, "repetitions", value)
+                          columns={[
+                            {
+                              label: "Répétitions",
+                              values: pickerValues.repetitions,
+                              value: Math.min(
+                                24,
+                                Math.max(
+                                  0,
+                                  executionSet(s.id)?.repetitions ??
+                                    s.repetitions ??
+                                    0,
+                                ),
+                              ),
+                            },
+                          ]}
+                          formatValue={(value) =>
+                            value === null ? "—" : `${value} reps`
                           }
                           disabled={
                             !!execution &&
                             executionSet(s.id)?.status !== "active"
                           }
+                          onSave={(value) =>
+                            saveSetValue(s.id, "repetitions", value)
+                          }
                         />
-                        <SetField
+                        <SetValuePicker
                           label="Charge (kg)"
-                          allowEmpty
                           value={executionSet(s.id)?.weightKg ?? s.weightKg}
-                          min={0}
-                          step="any"
-                          onSave={(value) =>
-                            execution
-                              ? updateExecution(
-                                  updateExecutedSet(
-                                    execution,
-                                    exercise.id,
-                                    s.id,
-                                    "weightKg",
-                                    value,
-                                  ),
-                                )
-                              : editSet(s.id, "weightKg", value)
+                          columns={[
+                            {
+                              label: "Kilogrammes",
+                              values: pickerValues.weightKg,
+                              value: Math.min(
+                                300,
+                                Math.max(
+                                  0,
+                                  executionSet(s.id)?.weightKg ??
+                                    s.weightKg ??
+                                    0,
+                                ),
+                              ),
+                            },
+                          ]}
+                          formatValue={(value) =>
+                            value === null ? "—" : `${value} kg`
                           }
                           disabled={
                             !!execution &&
                             executionSet(s.id)?.status !== "active"
                           }
+                          onSave={(value) =>
+                            saveSetValue(s.id, "weightKg", value)
+                          }
                         />
-                        <SetField
+                        <SetValuePicker
                           label="Repos (secondes)"
                           value={
                             executionSet(s.id)?.restSeconds ?? s.restSeconds
                           }
-                          min={0}
-                          step={1}
-                          onSave={(value) =>
-                            execution
-                              ? updateExecution(
-                                  updateExecutedSet(
-                                    execution,
-                                    exercise.id,
-                                    s.id,
-                                    "restSeconds",
-                                    value,
-                                  ),
-                                )
-                              : editSet(s.id, "restSeconds", value)
+                          columns={[
+                            {
+                              label: "Minutes",
+                              values: pickerValues.minutes,
+                              value: Math.min(
+                                6,
+                                Math.floor(
+                                  (executionSet(s.id)?.restSeconds ??
+                                    s.restSeconds) / 60,
+                                ),
+                              ),
+                            },
+                            {
+                              label: "Secondes",
+                              values: pickerValues.seconds,
+                              value:
+                                (executionSet(s.id)?.restSeconds ??
+                                  s.restSeconds) % 60,
+                            },
+                          ]}
+                          formatValue={(value) =>
+                            value === null ? "—" : formatRest(value)
                           }
                           disabled={
                             !!execution &&
                             executionSet(s.id)?.status !== "active"
+                          }
+                          onSave={(value) =>
+                            saveSetValue(s.id, "restSeconds", value)
                           }
                         />
                       </div>
@@ -619,7 +725,8 @@ export default function App() {
                         (executionSet(s.id)?.status === "upcoming" &&
                           i === 0)) && (
                         <button
-                          className="primary execution-action"
+                          className="rest-icon-button rest-start-button"
+                          aria-label="Lancer le repos"
                           onClick={() =>
                             updateExecution(
                               startExecutedSetRest(
@@ -635,17 +742,35 @@ export default function App() {
                             )
                           }
                         >
-                          Lancer le repos
+                          <span aria-hidden="true">▶</span>
+                          <span className="sr-only">Lancer le repos</span>
                         </button>
                       )}
                       {executionSet(s.id)?.status === "resting" && (
                         <button
-                          className="execution-action"
-                          onClick={() =>
-                            updateExecution(finishExecutedRest(execution!))
-                          }
+                          className="rest-icon-button rest-stop-button"
+                          aria-label="Mettre fin au repos"
+                          onClick={() => {
+                            const activeSet = executionSet(s.id);
+                            const remaining = Math.max(
+                              0,
+                              Math.ceil(
+                                ((activeSet?.restEndsAt ?? clock) -
+                                  Date.now()) /
+                                  1000,
+                              ),
+                            );
+                            requestConfirmation({
+                              title: "Mettre fin au repos ?",
+                              description: `Il reste ${remaining} ${remaining === 1 ? "seconde" : "secondes"}. La série sera considérée comme terminée et vous passerez à la suivante.`,
+                              confirmLabel: "Mettre fin",
+                              onConfirm: () =>
+                                updateExecution(finishExecutedRest(execution!)),
+                            });
+                          }}
                         >
-                          Terminer le repos
+                          <span aria-hidden="true">■</span>
+                          <span className="sr-only">Terminer le repos</span>
                         </button>
                       )}
                       {(!execution ||
@@ -671,6 +796,12 @@ export default function App() {
             </div>
           )}
         </>
+      )}
+      {confirmation && (
+        <ConfirmationDialog
+          request={confirmation}
+          onCancel={() => setConfirmation(null)}
+        />
       )}
       {dialog && isMenu && workout && (
         <Sheet
@@ -905,60 +1036,6 @@ function WorkoutRow({
 
 function formatRest(seconds: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-}
-
-function SetField({
-  label,
-  value,
-  min,
-  step,
-  onSave,
-  allowEmpty = false,
-  disabled = false,
-}: {
-  label: string;
-  value: number | null;
-  min: number;
-  step: number | "any";
-  onSave: (value: number | null) => void;
-  allowEmpty?: boolean;
-  disabled?: boolean;
-}) {
-  const [draft, setDraft] = useState<string | null>(null);
-  return (
-    <label className="set-field">
-      <span aria-hidden="true">
-        {label === "Charge (kg)"
-          ? "kg"
-          : label === "Repos (secondes)"
-            ? "Repos · s"
-            : "Répétitions"}
-      </span>
-      <input
-        aria-label={label}
-        placeholder="—"
-        type="number"
-        min={min}
-        step={step}
-        required={!allowEmpty}
-        inputMode={step === "any" ? "decimal" : "numeric"}
-        disabled={disabled}
-        value={draft ?? (value == null ? "" : String(value))}
-        onChange={(event) => {
-          setDraft(event.target.value);
-          if (
-            allowEmpty &&
-            event.target.value === "" &&
-            !event.target.validity.badInput
-          )
-            onSave(null);
-          else if (event.target.validity.valid && event.target.value !== "")
-            onSave(event.target.valueAsNumber);
-        }}
-        onBlur={() => setDraft(null)}
-      />
-    </label>
-  );
 }
 
 function Sheet({

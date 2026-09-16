@@ -72,7 +72,11 @@ test("does not activate the next exercise when deleting an upcoming set", async 
   await expect(tabs.nth(0)).toHaveClass(/execution-active/);
   await expect(tabs.nth(1)).toHaveClass(/execution-upcoming/);
   await aRegion.getByRole("button", { name: "Lancer le repos" }).click();
-  await aRegion.getByRole("button", { name: "Terminer le repos" }).click();
+  await aRegion.getByRole("button", { name: "Mettre fin au repos" }).click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Mettre fin" })
+    .click();
   await expect(tabs.nth(0)).toHaveClass(/execution-completed/);
   await expect(tabs.nth(1)).toHaveClass(/execution-active/);
 });

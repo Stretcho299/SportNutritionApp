@@ -573,6 +573,60 @@ progress::-moz-progress-bar {
 .set-field input:invalid {
   border-color: var(--danger);
 }
+.set-picker-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  height: 46px;
+  padding: 6px 8px;
+  border: 1px solid #514138;
+  border-radius: 8px;
+  background: var(--surface-inset);
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.set-picker-trigger:disabled {
+  opacity: 1;
+  color: var(--muted);
+  border-color: transparent;
+  background: #ffffff04;
+}
+.picker-trigger-chevron {
+  color: var(--accent-soft);
+  font-size: 13px;
+}
+.rest-icon-button {
+  display: grid;
+  place-items: center;
+  grid-column: 2;
+  grid-row: 3;
+  align-self: center;
+  justify-self: end;
+  width: 42px;
+  height: 42px;
+  min-height: 42px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 0 0 14px #ff57084d;
+  font-size: 15px;
+}
+.rest-stop-button {
+  background: #4a261b;
+  color: var(--accent-soft);
+  border: 1px solid var(--accent);
+  font-size: 13px;
+}
+.rest-icon-button:active {
+  transform: scale(0.94);
+}
 .rest-timer {
   grid-column: 1;
   align-self: center;
@@ -759,6 +813,235 @@ nav button.active {
   width: 44px;
   margin: 0;
 }
+.confirmation-backdrop {
+  z-index: 6;
+  align-items: center;
+  padding: 20px;
+}
+.confirmation-dialog {
+  width: min(100%, 400px);
+  padding: 24px 20px 20px;
+  border: 1px solid #654632;
+  border-radius: 22px;
+  background: linear-gradient(150deg, #29221f, var(--surface) 45%);
+  box-shadow:
+    0 20px 80px #000b,
+    0 0 30px #ff570814;
+}
+.confirmation-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-bottom: 12px;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  color: var(--accent-soft);
+  font-family: var(--display);
+  font-size: 23px;
+}
+.confirmation-dialog h2 {
+  margin: 0 0 8px;
+  font-size: 30px;
+}
+.confirmation-dialog p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.confirmation-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 22px;
+}
+.confirmation-actions button {
+  min-height: 46px;
+  padding: 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+.confirmation-cancel {
+  border: 1px solid var(--line);
+  background: var(--surface-raised);
+  color: var(--text);
+}
+.confirmation-submit {
+  border: 1px solid transparent;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.picker-backdrop {
+  z-index: 5;
+  align-items: end;
+  padding: 0;
+}
+.picker-dialog {
+  width: 100%;
+  max-width: 540px;
+  max-height: min(90dvh, 620px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0 auto;
+  padding: 18px 16px calc(14px + env(safe-area-inset-bottom));
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 24px 24px 0 0;
+  background: linear-gradient(160deg, #292321, var(--surface) 35%);
+  box-shadow: 0 -18px 60px #0009;
+}
+.picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.picker-header > div > span {
+  color: var(--accent-soft);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+.picker-header h2 {
+  margin: 3px 0 0;
+  font-size: 30px;
+}
+.picker-header > button {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface-raised);
+  color: var(--muted);
+  font-size: 26px;
+}
+.picker-wheels {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  padding: 2px 0 10px;
+}
+.picker-wheels-pair {
+  gap: 12px;
+}
+.picker-wheel-group {
+  flex: 0 1 230px;
+  min-width: 0;
+  text-align: center;
+}
+.picker-wheels-pair .picker-wheel-group {
+  flex: 1 1 0;
+  max-width: 210px;
+}
+.picker-wheel-label {
+  padding: 5px 0;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.picker-wheel-frame {
+  position: relative;
+  overflow: hidden;
+  height: 220px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-inset);
+}
+.picker-wheel {
+  position: relative;
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+  touch-action: pan-y;
+}
+.picker-wheel::-webkit-scrollbar {
+  display: none;
+}
+.picker-wheel-spacer {
+  height: 88px;
+  scroll-snap-align: none;
+}
+.picker-wheel .picker-wheel-option {
+  display: block;
+  width: 100%;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #8e8782;
+  font-family: var(--display);
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+}
+.picker-wheel .picker-wheel-option[aria-selected="true"] {
+  color: var(--accent-soft);
+  font-size: 30px;
+  text-shadow: 0 0 16px #ff570844;
+}
+.picker-selection {
+  position: absolute;
+  top: 88px;
+  left: 4px;
+  right: 4px;
+  height: 44px;
+  border-top: 1px solid #ffb77f77;
+  border-bottom: 1px solid #ffb77f77;
+  background: #ff57080b;
+  pointer-events: none;
+}
+.picker-fade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 75px;
+  z-index: 1;
+  pointer-events: none;
+}
+.picker-fade-top {
+  top: 0;
+  background: linear-gradient(var(--surface-inset), transparent);
+}
+.picker-fade-bottom {
+  bottom: 0;
+  background: linear-gradient(transparent, var(--surface-inset));
+}
+.picker-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 6px;
+}
+.picker-actions button {
+  min-height: 46px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 800;
+}
+.picker-cancel {
+  border: 1px solid var(--line);
+  background: var(--surface-raised);
+  color: var(--text);
+}
+.picker-save {
+  border: 1px solid transparent;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
 @media (max-width: 350px) {
   .app-shell {
     padding-left: 12px;
@@ -798,6 +1081,20 @@ nav button.active {
   .workout-detail nav {
     width: calc(100% + 24px);
     margin: 0 -12px;
+  }
+}
+@media (max-height: 600px) {
+  .picker-dialog {
+    max-height: 94dvh;
+  }
+  .picker-wheel-frame {
+    height: 176px;
+  }
+  .picker-wheel-spacer {
+    height: 66px;
+  }
+  .picker-selection {
+    top: 66px;
   }
 }
 @media (max-height: 600px) {

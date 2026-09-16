@@ -12,6 +12,93 @@ async function addExercise(page: Page, name: string, count = "2") {
   await page.getByRole("button", { name: "Enregistrer" }).click();
 }
 
+async function choosePickerValue(page: Page, label: string, value: number) {
+  await page.getByRole("button", { name: label, exact: true }).first().click();
+  const picker = page.getByRole("dialog", { name: `Choisir ${label}` });
+  const wheelName =
+    label === "Charge (kg)"
+      ? "Kilogrammes"
+      : label === "Répétitions"
+        ? "Répétitions"
+        : "Minutes";
+  await expect(
+    picker.getByRole("listbox", { name: wheelName }).getByRole("option", {
+      selected: true,
+    }),
+  ).toBeVisible();
+  if (label === "Repos (secondes)") {
+    await picker
+      .getByRole("listbox", { name: "Minutes" })
+      .getByRole("option", {
+        name: String(Math.floor(value / 60)),
+        exact: true,
+      })
+      .click();
+    await picker
+      .getByRole("listbox", { name: "Secondes" })
+      .getByRole("option", { name: String(value % 60), exact: true })
+      .click();
+  } else {
+    await picker
+      .getByRole("listbox", {
+        name: label === "Charge (kg)" ? "Kilogrammes" : "Répétitions",
+      })
+      .getByRole("option", { name: String(value), exact: true })
+      .click();
+  }
+  await picker.getByRole("button", { name: "Valider" }).click();
+}
+
+async function flickWheel(
+  page: Page,
+  wheel: import("@playwright/test").Locator,
+) {
+  const box = await wheel.boundingBox();
+  expect(box).not.toBeNull();
+  const x = box!.x + box!.width / 2;
+  let y = box!.y + box!.height * 0.72;
+  if (page.context().browser()?.browserType().name() === "chromium") {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x, y }],
+    });
+    for (let i = 0; i < 5; i++) {
+      y -= 28;
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x, y }],
+      });
+      await page.waitForTimeout(20);
+    }
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+    await cdp.detach();
+  } else {
+    for (let i = 0; i < 4; i++) await wheel.press("ArrowDown");
+  }
+  await expect
+    .poll(() =>
+      wheel.evaluate((el) => {
+        const selected = el.querySelector<HTMLElement>(
+          '[role="option"][aria-selected="true"]',
+        );
+        if (!selected) return Number.POSITIVE_INFINITY;
+        return Math.abs(
+          selected.getBoundingClientRect().top +
+            selected.getBoundingClientRect().height / 2 -
+            (el.getBoundingClientRect().top + el.clientHeight / 2),
+        );
+      }),
+    )
+    .toBeLessThan(6);
+  expect(
+    await wheel.getByRole("option", { selected: true }).textContent(),
+  ).not.toBe("0");
+}
+
 async function screenshot(page: Page, info: TestInfo, name: string) {
   await page.screenshot({
     path: info.outputPath(`${name}.png`),
@@ -70,8 +157,18 @@ for (const width of [390, 320]) {
       await addExercise(page, name);
     }
     const first = page.locator(".set-block").first();
-    await first.getByLabel("Charge (kg)").fill("62.5");
-    await first.getByLabel("Répétitions").fill("10");
+    await page.getByRole("button", { name: "Charge (kg)" }).first().click();
+    const weightPicker = page.getByRole("dialog", {
+      name: "Choisir Charge (kg)",
+    });
+    await flickWheel(
+      page,
+      weightPicker.getByRole("listbox", { name: "Kilogrammes" }),
+    );
+    await weightPicker.getByRole("button", { name: "Annuler" }).click();
+    await choosePickerValue(page, "Charge (kg)", 62.5);
+    await choosePickerValue(page, "Répétitions", 10);
+    await choosePickerValue(page, "Repos (secondes)", 90);
     await noOverflow(page);
     await screenshot(page, info, "preparation");
     const rail = page.getByRole("list", { name: "Exercices" });
@@ -132,7 +229,10 @@ for (const width of [390, 320]) {
     await page.reload();
     await page.locator(".workout-card").click();
     await expect(timer).toBeVisible();
-    await expect(first.getByLabel("Charge (kg)")).toHaveValue("62.5");
+    await expect(first.getByLabel("Charge (kg)")).toHaveAttribute(
+      "data-value",
+      "62.5",
+    );
     await rail.getByRole("button").nth(1).click();
     await expect(rail.locator("li").nth(1)).toHaveClass(/execution-upcoming/);
     await expect(timer).toBeVisible();
@@ -140,7 +240,18 @@ for (const width of [390, 320]) {
       page.getByRole("region", { name: "Progression de la séance" }),
     ).toContainText("Développé couché");
     await rail.getByRole("button").first().click();
-    await first.getByRole("button", { name: "Terminer le repos" }).click();
+    await first.getByRole("button", { name: "Mettre fin au repos" }).click();
+    const stopDialog = page.getByRole("alertdialog", {
+      name: "Mettre fin au repos ?",
+    });
+    await expect(stopDialog).toContainText(/Il reste \d+ secondes?/);
+    await stopDialog.getByRole("button", { name: "Annuler" }).click();
+    await expect(first).toHaveClass(/status-resting/);
+    await first.getByRole("button", { name: "Mettre fin au repos" }).click();
+    await page
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Mettre fin" })
+      .click();
     await expect(first).toHaveClass(/status-performed/);
     await expect(page.locator(".set-block").nth(1)).toHaveClass(
       /status-active/,
@@ -170,9 +281,17 @@ for (const width of [390, 320]) {
     for (let i = 0; i < 7; i++) {
       await rail.getByRole("button").nth(i).click();
       await page.getByRole("button", { name: "Terminer l’exercice" }).click();
+      await page
+        .getByRole("alertdialog", { name: "Mettre fin à cet exercice ?" })
+        .getByRole("button", { name: "Mettre fin" })
+        .click();
     }
     await page
       .getByRole("button", { name: "Terminer la séance", exact: true })
+      .click();
+    await page
+      .getByRole("alertdialog", { name: "Terminer la séance ?" })
+      .getByRole("button", { name: "Terminer" })
       .click();
     await expect(
       page.getByText("Séance terminée", { exact: true }),
