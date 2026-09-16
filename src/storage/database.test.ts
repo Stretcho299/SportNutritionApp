@@ -119,6 +119,44 @@ it("persists execution states, advances after rest, and skips remaining sets", a
   expect((await loadWorkouts())[0].execution).toEqual(skipped);
 });
 
+it("enforces a single active rest across exercises at the model boundary", () => {
+  let workout = addExercise(createWorkout("Push"), "Bench", 2, 30);
+  workout = addExercise(workout, "Row", 1, 30);
+  const bench = workout.exercises[0];
+  const row = workout.exercises[1];
+  const execution = startWorkoutExecution(workout, 1000);
+  const resting = startExecutedSetRest(
+    execution,
+    bench.id,
+    bench.plannedSets[0].id,
+    1000,
+  );
+  const rowActive = activateExecutedExercise(resting, row.id);
+  const blocked = startExecutedSetRest(
+    rowActive,
+    row.id,
+    row.plannedSets[0].id,
+    1000,
+  );
+  expect(blocked).toEqual(rowActive);
+  expect(
+    blocked.exercises.flatMap((exercise) =>
+      exercise.sets.filter((set) => set.status === "resting"),
+    ),
+  ).toHaveLength(1);
+  const afterFinish = finishExecutedRest(blocked);
+  expect(
+    startExecutedSetRest(
+      afterFinish,
+      row.id,
+      row.plannedSets[0].id,
+      1000,
+    ).exercises.flatMap((exercise) =>
+      exercise.sets.filter((set) => set.status === "resting"),
+    ),
+  ).toHaveLength(1);
+});
+
 it("adds a future exercise without changing the active series", () => {
   const workout = addExercise(createWorkout("Push"), "Bench", 2, 30);
   const execution = startWorkoutExecution(workout, 1000);

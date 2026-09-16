@@ -320,6 +320,14 @@ export const startExecutedSetRest = (
   now = Date.now(),
 ): WorkoutExecution => {
   if (execution.status !== "inProgress") return execution;
+  // A workout has one shared rest clock. Navigation may expose another
+  // exercise, but starting it must not create a second resting set.
+  if (
+    execution.exercises.some((exercise) =>
+      exercise.sets.some((set) => set.status === "resting"),
+    )
+  )
+    return execution;
   const target = execution.exercises
     .find((exercise) => exercise.exerciseId === exerciseId)
     ?.sets.find((set) => set.setId === setId);

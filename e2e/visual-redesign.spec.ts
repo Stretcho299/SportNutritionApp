@@ -224,6 +224,15 @@ for (const width of [390, 320]) {
       )
       .toBeGreaterThan(initialOffset);
     await expect(first.getByLabel("Charge (kg)")).toBeDisabled();
+    await rail.getByRole("button").nth(1).click();
+    await expect(rail.locator("li").nth(1)).toHaveClass(/execution-upcoming/);
+    await expect(
+      page.locator(".set-block").first().getByRole("button", {
+        name: "Lancer le repos",
+      }),
+    ).toBeDisabled();
+    await expect(timer).toBeVisible();
+    await rail.getByRole("button").first().click();
     await screenshot(page, info, "rest");
     await page
       .getByRole("button", { name: "+ Ajouter une série" })

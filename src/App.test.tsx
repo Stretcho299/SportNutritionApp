@@ -738,6 +738,35 @@ it("keeps future exercise states unchanged while browsing and starts them explic
   ).toEqual(["active", "active", "upcoming"]);
 });
 
+it("locks every other rest button while a chrono runs across exercises", async () => {
+  await openEmptyWorkout();
+  createExercise("A", 2, 30);
+  createExercise("B", 2, 30);
+  fireEvent.click(screen.getByText("Démarrer la séance"));
+  selectExercise("A");
+  const a = seriesRegion("A");
+  fireEvent.click(within(a).getByText("Lancer le repos"));
+  const aSecond = within(a).getAllByRole("listitem")[1];
+  expect(
+    within(aSecond).queryByLabelText("Lancer le repos"),
+  ).not.toBeInTheDocument();
+  selectExercise("B");
+  const b = seriesRegion("B");
+  expect(within(b).getByLabelText("Lancer le repos")).toBeDisabled();
+  selectExercise("A");
+  expect(within(a).getByText("Repos en cours")).toBeInTheDocument();
+  fireEvent.click(within(a).getByText("Terminer le repos"));
+  fireEvent.click(
+    within(screen.getByRole("alertdialog")).getByRole("button", {
+      name: "Mettre fin",
+    }),
+  );
+  selectExercise("B");
+  expect(within(b).getByLabelText("Lancer le repos")).toBeEnabled();
+  fireEvent.click(within(b).getByText("Lancer le repos"));
+  expect(within(b).getByText("Repos en cours")).toBeInTheDocument();
+});
+
 it("keeps add set available after starting and appends a blank execution set", async () => {
   await openEmptyWorkout();
   createExercise("Squat", 2, 30);

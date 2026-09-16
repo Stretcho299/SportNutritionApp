@@ -69,6 +69,9 @@ export default function App() {
     executionExercise(exercise?.id ?? "")?.sets.find(
       (item) => item.setId === id,
     );
+  const restingSet = execution?.exercises
+    .flatMap((item) => item.sets)
+    .find((item) => item.status === "resting");
   const updateExecution = useCallback(
     (next: WorkoutExecution) =>
       update(
@@ -729,6 +732,12 @@ export default function App() {
                         <button
                           className="rest-icon-button rest-start-button"
                           aria-label="Lancer le repos"
+                          disabled={!!restingSet && restingSet.setId !== s.id}
+                          title={
+                            restingSet && restingSet.setId !== s.id
+                              ? "Un repos est déjà en cours"
+                              : undefined
+                          }
                           onClick={() =>
                             updateExecution(
                               startExecutedSetRest(
