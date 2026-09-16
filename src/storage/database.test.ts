@@ -98,6 +98,23 @@ it("uses the last set in persisted display order as the rest reference", () => {
   expect(addSet(exercise).plannedSets.at(-1)?.restSeconds).toBe(0);
 });
 
+it("starts the selected exercise without activating its neighbors", () => {
+  let workout = addExercise(createWorkout("Init"), "A", 2, 30);
+  workout = addExercise(workout, "B", 2, 30);
+  workout = addExercise(workout, "C", 2, 30);
+  const [, b] = workout.exercises;
+  const execution = startWorkoutExecution(workout, 1000, b.id);
+
+  expect(execution.exercises.map((item) => item.status)).toEqual([
+    "upcoming",
+    "active",
+    "upcoming",
+  ]);
+  expect(
+    execution.exercises.find((item) => item.exerciseId === b.id)?.status,
+  ).toBe("active");
+});
+
 it("persists execution states, advances after rest, and skips remaining sets", async () => {
   const workout = addExercise(createWorkout("Push"), "Bench", 2, 30);
   const execution = startWorkoutExecution(workout, 1000);
@@ -121,6 +138,76 @@ it("persists execution states, advances after rest, and skips remaining sets", a
   ]);
   await saveWorkouts([{ ...workout, execution: skipped }]);
   expect((await loadWorkouts())[0].execution).toEqual(skipped);
+});
+
+it("enforces a single active rest across exercises at the model boundary", () => {
+  let workout = addExercise(createWorkout("Push"), "Bench", 2, 30);
+  workout = addExercise(workout, "Row", 1, 30);
+  const bench = workout.exercises[0];
+  const row = workout.exercises[1];
+  const execution = startWorkoutExecution(workout, 1000);
+  const resting = startExecutedSetRest(
+    execution,
+    bench.id,
+    bench.plannedSets[0].id,
+    1000,
+  );
+  const rowActive = activateExecutedExercise(resting, row.id);
+  const blocked = startExecutedSetRest(
+    rowActive,
+    row.id,
+    row.plannedSets[0].id,
+    1000,
+  );
+  expect(blocked).toEqual(rowActive);
+  expect(
+    blocked.exercises.flatMap((exercise) =>
+      exercise.sets.filter((set) => set.status === "resting"),
+    ),
+  ).toHaveLength(1);
+  const afterFinish = finishExecutedRest(blocked);
+  expect(
+    startExecutedSetRest(
+      afterFinish,
+      row.id,
+      row.plannedSets[0].id,
+      1000,
+    ).exercises.flatMap((exercise) =>
+      exercise.sets.filter((set) => set.status === "resting"),
+    ),
+  ).toHaveLength(1);
+});
+
+it("repairs duplicate persisted rest clocks at the storage boundary", async () => {
+  let workout = addExercise(createWorkout("Dual"), "Bench", 2, 30);
+  workout = addExercise(workout, "Row", 2, 30);
+  const execution = startWorkoutExecution(workout, 1000);
+  const duplicate = {
+    ...execution,
+    exercises: execution.exercises.map((exercise, index) => ({
+      ...exercise,
+      status: "active" as const,
+      sets: exercise.sets.map((set, setIndex) =>
+        setIndex === 0
+          ? {
+              ...set,
+              status: "resting" as const,
+              restEndsAt: 31000 + index * 1000,
+            }
+          : set,
+      ),
+    })),
+  };
+
+  await saveWorkouts([{ ...workout, execution: duplicate }]);
+  const persisted = (await loadWorkouts())[0].execution!;
+  const resting = persisted.exercises.flatMap((exercise) =>
+    exercise.sets.filter((set) => set.status === "resting"),
+  );
+
+  expect(resting).toHaveLength(1);
+  expect(persisted.exercises[1].sets[0].status).toBe("active");
+  expect(persisted.exercises[1].sets[0].restEndsAt).toBeUndefined();
 });
 
 it("adds a future exercise without changing the active series", () => {

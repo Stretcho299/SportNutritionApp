@@ -72,49 +72,43 @@ test("does not activate the next exercise when deleting an upcoming set", async 
   await expect(tabs.nth(0)).toHaveClass(/execution-active/);
   await expect(tabs.nth(1)).toHaveClass(/execution-upcoming/);
   await aRegion.getByRole("button", { name: "Lancer le repos" }).click();
-  await aRegion.getByRole("button", { name: "Terminer le repos" }).click();
+  await aRegion.getByRole("button", { name: "Mettre fin au repos" }).click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Mettre fin" })
+    .click();
   await expect(tabs.nth(0)).toHaveClass(/execution-completed/);
   await expect(tabs.nth(1)).toHaveClass(/execution-active/);
 });
 
-test("persists two independent sessions when a template is reused", async ({
+test("starts from the selected exercise and keeps other tabs upcoming", async ({
   page,
 }) => {
-  await prepareWorkout(page, "1");
-  await page.getByRole("button", { name: /Gérer les exercices/i }).click();
-  await page
-    .getByRole("dialog", { name: /Actions de la séance/i })
-    .getByRole("button", { name: /Ajouter un exercice/i })
-    .click();
-  await page.getByRole("textbox", { name: "Nom" }).fill("Exercice B");
-  await page.getByLabel(/Nombre de séries initiales/i).fill("1");
-  await page
-    .getByRole("spinbutton", { name: "Repos par défaut (secondes)" })
-    .fill("300");
-  await page.getByRole("button", { name: /Enregistrer/i }).click();
+  await prepareWorkout(page, "2");
+  for (const name of ["Exercice B", "Exercice C"]) {
+    await page.getByRole("button", { name: /Gérer les exercices/i }).click();
+    await page
+      .getByRole("dialog", { name: /Actions de la séance/i })
+      .getByRole("button", { name: /Ajouter un exercice/i })
+      .click();
+    await page.getByRole("textbox", { name: "Nom" }).fill(name);
+    await page.getByLabel(/Nombre de séries initiales/i).fill("2");
+    await page
+      .getByRole("spinbutton", { name: "Repos par défaut (secondes)" })
+      .fill("30");
+    await page.getByRole("button", { name: /Enregistrer/i }).click();
+  }
+
+  const tabs = page.getByRole("list", { name: "Exercices" }).locator("li");
+  await tabs.nth(1).getByRole("button").click();
   await page.getByRole("button", { name: /Démarrer la séance/i }).click();
-  let region = page.getByRole("region", { name: "Séries de Exercice A" });
-  await region.getByRole("button", { name: "Lancer le repos" }).click();
-  await region.getByRole("button", { name: "Terminer le repos" }).click();
-  await page.getByRole("button", { name: "Exercice B" }).click();
-  region = page.getByRole("region", { name: "Séries de Exercice B" });
-  await region.getByRole("button", { name: "Lancer le repos" }).click();
-  await region.getByRole("button", { name: "Terminer le repos" }).click();
-  await page.getByRole("button", { name: /Terminer la séance/i }).click();
-  await page.getByRole("button", { name: /Retour aux séances/i }).click();
-  await page.locator(".workout-card").click();
-  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
-  const stored = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem("sport-nutrition-workouts") || "{}"),
-  );
-  expect(stored.version).toBe(2);
-  expect(stored.templates).toHaveLength(1);
-  expect(stored.sessions).toHaveLength(2);
-  expect(stored.sessions[0].id).not.toBe(stored.sessions[1].id);
-  expect(
-    stored.sessions.every(
-      (session: { templateId: string }) =>
-        session.templateId === stored.templates[0].id,
-    ),
-  ).toBe(true);
+  await expect(tabs.nth(0)).toHaveClass(/execution-upcoming/);
+  await expect(tabs.nth(1)).toHaveClass(/execution-active/);
+  await expect(tabs.nth(2)).toHaveClass(/execution-upcoming/);
+
+  await tabs.nth(0).getByRole("button").click();
+  await expect(tabs.nth(0)).toHaveClass(/execution-upcoming/);
+  await tabs.nth(2).getByRole("button").click();
+  await expect(tabs.nth(2)).toHaveClass(/execution-upcoming/);
+  await expect(tabs.nth(1)).toHaveClass(/execution-active/);
 });

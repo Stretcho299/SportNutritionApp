@@ -6,19 +6,8 @@ import { __storageKey, type Workout } from "./storage/database";
 beforeEach(() => localStorage.clear());
 afterEach(() => vi.restoreAllMocks());
 
-const storedWorkouts = (): Workout[] => {
-  const raw = JSON.parse(localStorage.getItem(__storageKey) ?? "[]");
-  if (Array.isArray(raw)) return raw;
-  return raw.templates.map((template: Workout) => {
-    const session = raw.sessions
-      .filter((item: { templateId: string }) => item.templateId === template.id)
-      .sort(
-        (a: { startedAt: number }, b: { startedAt: number }) =>
-          b.startedAt - a.startedAt,
-      )[0];
-    return session ? { ...template, execution: session.execution } : template;
-  });
-};
+const storedWorkouts = (): Workout[] =>
+  JSON.parse(localStorage.getItem(__storageKey) ?? "[]");
 async function openEmptyWorkout() {
   const view = render(<App />);
   await screen.findByText("Aucune séance");
@@ -49,13 +38,36 @@ function createExercise(name: string, count = 1, rest = 90) {
   });
   fireEvent.click(screen.getByText("Enregistrer"));
 }
+function chooseValue(label: string, value: number, index = 0) {
+  fireEvent.click(screen.getAllByLabelText(label)[index]);
+  const dialog = screen.getByRole("dialog", { name: `Choisir ${label}` });
+  if (label === "Repos (secondes)") {
+    fireEvent.click(
+      within(
+        within(dialog).getByRole("listbox", { name: "Minutes" }),
+      ).getByRole("option", {
+        name: new RegExp(`^${Math.floor(value / 60)}$`),
+      }),
+    );
+    fireEvent.click(
+      within(
+        within(dialog).getByRole("listbox", { name: "Secondes" }),
+      ).getByRole("option", { name: new RegExp(`^${value % 60}$`) }),
+    );
+  } else {
+    fireEvent.click(
+      within(
+        within(dialog).getByRole("listbox", {
+          name: label === "Charge (kg)" ? "Kilogrammes" : "Répétitions",
+        }),
+      ).getByRole("option", { name: new RegExp(`^${value}$`) }),
+    );
+  }
+  fireEvent.click(within(dialog).getByRole("button", { name: "Valider" }));
+}
 function fillSet(weight: string, index = 0) {
-  fireEvent.change(screen.getAllByLabelText("Charge (kg)")[index], {
-    target: { value: weight },
-  });
-  fireEvent.change(screen.getAllByLabelText("Répétitions")[index], {
-    target: { value: "8" },
-  });
+  chooseValue("Charge (kg)", Number(weight), index);
+  chooseValue("Répétitions", 8, index);
 }
 function selectExercise(name: string) {
   fireEvent.click(
@@ -109,16 +121,22 @@ it("exposes exactly the requested actions in each header sheet", async () => {
 it("confirms selected exercise deletion from the add menu", async () => {
   await openEmptyWorkout();
   createExercise("Squat");
+  fillSet("50");
   createExercise("Row");
-  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
   fireEvent.click(within(openAddMenu()).getByText("Supprimer l’exercice"));
-  expect(confirm).toHaveBeenCalledWith("Supprimer cet exercice ?");
+  const confirmation = screen.getByRole("alertdialog", {
+    name: "Supprimer cet exercice ?",
+  });
+  expect(
+    within(confirmation).getByRole("button", { name: "Annuler" }),
+  ).toHaveFocus();
   expect(
     storedWorkouts()[0].exercises.map((exercise) => exercise.name),
   ).toEqual(["Squat", "Row"]);
-  confirm.mockReturnValue(true);
-  fireEvent.click(screen.getByText("Supprimer l’exercice"));
-  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  fireEvent.click(
+    within(confirmation).getByRole("button", { name: "Supprimer" }),
+  );
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "Row" })).toBeInTheDocument();
   expect(
     storedWorkouts()[0].exercises.map((exercise) => exercise.name),
@@ -147,8 +165,14 @@ it("automatically selects the first exercise and displays its blank initial set"
   expect(screen.getByRole("button", { pressed: true })).toHaveTextContent(
     "Squat",
   );
-  expect(screen.getByLabelText("Répétitions")).toHaveValue(null);
-  expect(screen.getByLabelText("Charge (kg)")).toHaveValue(null);
+  expect(screen.getByLabelText("Répétitions")).toHaveAttribute(
+    "data-value",
+    "",
+  );
+  expect(screen.getByLabelText("Charge (kg)")).toHaveAttribute(
+    "data-value",
+    "",
+  );
   expect(
     screen.getByRole("button", { name: "Options avancées" }),
   ).toHaveTextContent(/^Options avancées$/);
@@ -157,8 +181,11 @@ it("automatically selects the first exercise and displays its blank initial set"
   expect(zone.getByRole("heading", { name: "SÉRIE 1" })).toBeInTheDocument();
   expect(zone.getByText("Squat")).toBeInTheDocument();
   expect(zone.getByText("À venir")).toBeInTheDocument();
-  expect(zone.getByLabelText("Charge (kg)")).toHaveValue(80);
-  expect(zone.getByText("1:30 · Repos prévu")).toBeInTheDocument();
+  expect(zone.getByLabelText("Charge (kg)")).toHaveAttribute(
+    "data-value",
+    "80",
+  );
+  expect(zone.queryByText("1:30 · Repos prévu")).not.toBeInTheDocument();
   expect(seriesRegion("Squat").lastElementChild).toHaveTextContent(
     "+ Ajouter une série",
   );
@@ -170,57 +197,93 @@ it("preserves selection when adding exercises and switches both exercise and set
   fillSet("80");
   createExercise("Row");
   expect(screen.getByRole("heading", { name: "Squat" })).toBeInTheDocument();
-  expect(screen.getByLabelText("Charge (kg)")).toHaveValue(80);
+  expect(screen.getByLabelText("Charge (kg)")).toHaveAttribute(
+    "data-value",
+    "80",
+  );
   selectExercise("Row");
   expect(
     screen.queryByRole("region", { name: "Séries de Squat" }),
   ).not.toBeInTheDocument();
-  expect(screen.getByLabelText("Charge (kg)")).toHaveValue(null);
+  expect(screen.getByLabelText("Charge (kg)")).toHaveAttribute(
+    "data-value",
+    "",
+  );
   fillSet("40");
   createExercise("Curl");
   expect(screen.getByRole("heading", { name: "Row" })).toBeInTheDocument();
-  expect(screen.getByLabelText("Charge (kg)")).toHaveValue(40);
+  expect(screen.getByLabelText("Charge (kg)")).toHaveAttribute(
+    "data-value",
+    "40",
+  );
   selectExercise("Squat");
-  expect(screen.getByLabelText("Charge (kg)")).toHaveValue(80);
+  expect(screen.getByLabelText("Charge (kg)")).toHaveAttribute(
+    "data-value",
+    "80",
+  );
 });
 
-it("edits set values inline, persists them, and rejects invalid values", async () => {
+it("selects bounded picker values and persists repetitions, half-kilograms and split rest", async () => {
   const view = await openEmptyWorkout();
   createExercise("Squat");
   fillSet("80");
-  for (const [label, value] of [
-    ["Répétitions", "12"],
-    ["Charge (kg)", "82.5"],
-    ["Repos (secondes)", "0"],
-  ]) {
-    fireEvent.change(screen.getByLabelText(label), { target: { value } });
-    fireEvent.blur(screen.getByLabelText(label));
-  }
+  chooseValue("Répétitions", 24);
+  chooseValue("Charge (kg)", 82.5);
+  chooseValue("Repos (secondes)", 419);
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  expect(screen.getByText("0:00 · Repos prévu")).toBeInTheDocument();
+  expect(screen.queryByText("6:59 · Repos prévu")).not.toBeInTheDocument();
   expect(storedWorkouts()[0].exercises[0].plannedSets[0]).toMatchObject({
-    repetitions: 12,
+    repetitions: 24,
     weightKg: 82.5,
-    restSeconds: 0,
+    restSeconds: 419,
   });
-  for (const [label, invalid, previous] of [
-    ["Répétitions", "0", 12],
-    ["Répétitions", "1.5", 12],
-    ["Charge (kg)", "-1", 82.5],
-    ["Repos (secondes)", "", 0],
-  ] as const) {
-    const input = screen.getByLabelText(label);
-    fireEvent.change(input, { target: { value: invalid } });
-    expect(input).toBeInvalid();
-    fireEvent.blur(input);
-    expect(input).toHaveValue(previous);
-  }
+  fireEvent.click(screen.getByLabelText("Répétitions"));
+  const repDialog = screen.getByRole("dialog", { name: "Choisir Répétitions" });
+  expect(within(repDialog).getAllByRole("option")).toHaveLength(25);
+  expect(
+    within(repDialog).getByRole("option", { name: /^24$/ }),
+  ).toHaveAttribute("aria-selected", "true");
+  fireEvent.click(screen.getByRole("button", { name: "Annuler" }));
+  fireEvent.click(screen.getByLabelText("Charge (kg)"));
+  const weightDialog = screen.getByRole("dialog", {
+    name: "Choisir Charge (kg)",
+  });
+  expect(within(weightDialog).getAllByRole("option")).toHaveLength(601);
+  expect(
+    within(weightDialog).getByRole("option", { name: /^82\.5$/ }),
+  ).toHaveAttribute("aria-selected", "true");
+  fireEvent.click(screen.getByRole("button", { name: "Annuler" }));
+  fireEvent.click(screen.getByLabelText("Repos (secondes)"));
+  const restDialog = screen.getByRole("dialog", {
+    name: "Choisir Repos (secondes)",
+  });
+  expect(within(restDialog).getAllByRole("listbox")).toHaveLength(2);
+  expect(
+    within(
+      within(restDialog).getByRole("listbox", { name: "Minutes" }),
+    ).getAllByRole("option"),
+  ).toHaveLength(7);
+  expect(
+    within(
+      within(restDialog).getByRole("listbox", { name: "Secondes" }),
+    ).getAllByRole("option"),
+  ).toHaveLength(60);
+  fireEvent.click(screen.getByRole("button", { name: "Annuler" }));
   view.unmount();
   render(<App />);
   fireEvent.click(await screen.findByText("Push"));
-  expect(screen.getByLabelText("Répétitions")).toHaveValue(12);
-  expect(screen.getByLabelText("Charge (kg)")).toHaveValue(82.5);
-  expect(screen.getByLabelText("Repos (secondes)")).toHaveValue(0);
+  expect(screen.getByLabelText("Répétitions")).toHaveAttribute(
+    "data-value",
+    "24",
+  );
+  expect(screen.getByLabelText("Charge (kg)")).toHaveAttribute(
+    "data-value",
+    "82.5",
+  );
+  expect(screen.getByLabelText("Repos (secondes)")).toHaveAttribute(
+    "data-value",
+    "419",
+  );
 });
 
 it("reorders exercises in a dedicated sheet and retains selection and persisted order", async () => {
@@ -268,23 +331,38 @@ it("keeps sets in their natural order and renumbers them after deletion", async 
   expect(screen.queryByLabelText(/Monter la série/)).not.toBeInTheDocument();
   expect(screen.queryByLabelText(/Descendre la série/)).not.toBeInTheDocument();
   expect(
-    screen
+    within(seriesRegion("Squat"))
       .getAllByLabelText("Charge (kg)")
-      .map((e) => (e as HTMLInputElement).value),
+      .map((e) => e.getAttribute("data-value")),
   ).toEqual(["80", "90"]);
   let blocks = within(seriesRegion("Squat")).getAllByRole("listitem");
   fireEvent.click(within(blocks[0]).getByText("Supprimer"));
-  expect(screen.getByLabelText("Charge (kg)")).toHaveValue(90);
+  fireEvent.click(
+    within(screen.getByRole("alertdialog")).getByRole("button", {
+      name: "Supprimer",
+    }),
+  );
+  expect(
+    within(seriesRegion("Squat")).getByLabelText("Charge (kg)"),
+  ).toHaveAttribute("data-value", "90");
   blocks = within(seriesRegion("Squat")).getAllByRole("listitem");
   fireEvent.click(within(blocks[0]).getByText("Supprimer"));
-  expect(seriesRegion("Squat").textContent).toBe("+ Ajouter une série");
+  fireEvent.click(
+    within(screen.getByRole("alertdialog")).getByRole("button", {
+      name: "Supprimer",
+    }),
+  );
+  expect(
+    within(seriesRegion("Squat")).queryByRole("listitem"),
+  ).not.toBeInTheDocument();
   selectExercise("Row");
-  expect(screen.getByLabelText("Charge (kg)")).toHaveValue(40);
+  expect(
+    within(seriesRegion("Row")).getByLabelText("Charge (kg)"),
+  ).toHaveAttribute("data-value", "40");
   expect(storedWorkouts()[0].exercises[1].plannedSets).toEqual([]);
 });
 
 it("selects a remaining exercise after deletion and restores the empty state after the last", async () => {
-  vi.spyOn(window, "confirm").mockReturnValue(true);
   await openEmptyWorkout();
   createExercise("Squat");
   createExercise("Row");
@@ -311,11 +389,11 @@ it("creates N blank sets with the requested rest and preserves blanks after relo
     within(seriesRegion("Développé couché")).getAllByRole("listitem"),
   ).toHaveLength(4);
   for (const field of screen.getAllByLabelText("Charge (kg)"))
-    expect(field).toHaveValue(null);
+    expect(field).toHaveAttribute("data-value", "");
   for (const field of screen.getAllByLabelText("Répétitions"))
-    expect(field).toHaveValue(null);
+    expect(field).toHaveAttribute("data-value", "");
   for (const field of screen.getAllByLabelText("Repos (secondes)"))
-    expect(field).toHaveValue(120);
+    expect(field).toHaveAttribute("data-value", "120");
   const sets = storedWorkouts()[0].exercises[0].plannedSets;
   expect(
     sets.map((s) => [s.position, s.weightKg, s.repetitions, s.restSeconds]),
@@ -331,11 +409,11 @@ it("creates N blank sets with the requested rest and preserves blanks after relo
   fireEvent.click(await screen.findByText("Push"));
   expect(screen.getAllByLabelText("Charge (kg)")).toHaveLength(4);
   for (const field of screen.getAllByLabelText("Charge (kg)"))
-    expect(field).toHaveValue(null);
+    expect(field).toHaveAttribute("data-value", "");
   for (const field of screen.getAllByLabelText("Répétitions"))
-    expect(field).toHaveValue(null);
+    expect(field).toHaveAttribute("data-value", "");
   for (const field of screen.getAllByLabelText("Repos (secondes)"))
-    expect(field).toHaveValue(120);
+    expect(field).toHaveAttribute("data-value", "120");
 });
 
 it.each(["", "0", "-1", "1.5"])(
@@ -361,14 +439,24 @@ it("appends a blank set immediately using the last set rest, including zero", as
   fillSet("80");
   fireEvent.click(screen.getByText("+ Ajouter une série"));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  expect(screen.getAllByLabelText("Charge (kg)")[1]).toHaveValue(null);
-  expect(screen.getAllByLabelText("Répétitions")[1]).toHaveValue(null);
-  expect(screen.getAllByLabelText("Repos (secondes)")[1]).toHaveValue(120);
-  fireEvent.change(screen.getAllByLabelText("Repos (secondes)")[1], {
-    target: { value: "0" },
-  });
+  expect(screen.getAllByLabelText("Charge (kg)")[1]).toHaveAttribute(
+    "data-value",
+    "",
+  );
+  expect(screen.getAllByLabelText("Répétitions")[1]).toHaveAttribute(
+    "data-value",
+    "",
+  );
+  expect(screen.getAllByLabelText("Repos (secondes)")[1]).toHaveAttribute(
+    "data-value",
+    "120",
+  );
+  chooseValue("Repos (secondes)", 0, 1);
   fireEvent.click(screen.getByText("+ Ajouter une série"));
-  expect(screen.getAllByLabelText("Repos (secondes)")[2]).toHaveValue(0);
+  expect(screen.getAllByLabelText("Repos (secondes)")[2]).toHaveAttribute(
+    "data-value",
+    "0",
+  );
   fillSet("42.5", 2);
   expect(storedWorkouts()[0].exercises[0].plannedSets[2]).toMatchObject({
     weightKg: 42.5,
@@ -377,25 +465,24 @@ it("appends a blank set immediately using the last set rest, including zero", as
   });
 });
 
-it("allows clearing reps and kg back to unspecified without confusing zero weight", async () => {
-  const view = await openEmptyWorkout();
+it("stores zero reps and zero kilograms as real selected values", async () => {
+  await openEmptyWorkout();
   createExercise("Squat");
   fillSet("0");
   expect(storedWorkouts()[0].exercises[0].plannedSets[0].weightKg).toBe(0);
-  for (const label of ["Répétitions", "Charge (kg)"]) {
-    fireEvent.change(screen.getByLabelText(label), { target: { value: "" } });
-    fireEvent.blur(screen.getByLabelText(label));
-    expect(screen.getByLabelText(label)).toHaveValue(null);
-  }
+  chooseValue("Répétitions", 0);
   expect(storedWorkouts()[0].exercises[0].plannedSets[0]).toMatchObject({
-    repetitions: null,
-    weightKg: null,
+    repetitions: 0,
+    weightKg: 0,
   });
-  view.unmount();
-  render(<App />);
-  fireEvent.click(await screen.findByText("Push"));
-  expect(screen.getByLabelText("Répétitions")).toHaveValue(null);
-  expect(screen.getByLabelText("Charge (kg)")).toHaveValue(null);
+  expect(screen.getByLabelText("Répétitions")).toHaveAttribute(
+    "data-value",
+    "0",
+  );
+  expect(screen.getByLabelText("Charge (kg)")).toHaveAttribute(
+    "data-value",
+    "0",
+  );
 });
 
 it("keeps fixed exercise zones outside a long series list", async () => {
@@ -440,16 +527,27 @@ it("shows an active series and advances it when its rest ends", async () => {
   ).toBeInTheDocument();
   expect(within(blocks[0]).getByLabelText("Répétitions")).toBeEnabled();
   expect(within(blocks[1]).getByLabelText("Répétitions")).toBeDisabled();
-  fireEvent.change(within(blocks[0]).getByLabelText("Répétitions"), {
-    target: { value: "10" },
-  });
-  fireEvent.change(within(blocks[0]).getByLabelText("Charge (kg)"), {
-    target: { value: "80" },
-  });
+  chooseValue("Répétitions", 10);
+  chooseValue("Charge (kg)", 80);
   fireEvent.click(within(blocks[0]).getByText("Lancer le repos"));
   expect(within(blocks[0]).getByText("Repos en cours")).toBeInTheDocument();
   expect(within(blocks[0]).getByLabelText("Répétitions")).toBeDisabled();
   fireEvent.click(within(blocks[0]).getByText("Terminer le repos"));
+  expect(
+    screen.getByRole("alertdialog", { name: "Mettre fin au repos ?" }),
+  ).toHaveTextContent(/Il reste \d+ secondes?/);
+  fireEvent.click(
+    within(screen.getByRole("alertdialog")).getByRole("button", {
+      name: "Annuler",
+    }),
+  );
+  expect(within(blocks[0]).getByText("Repos en cours")).toBeInTheDocument();
+  fireEvent.click(within(blocks[0]).getByText("Terminer le repos"));
+  fireEvent.click(
+    within(
+      screen.getByRole("alertdialog", { name: "Mettre fin au repos ?" }),
+    ).getByRole("button", { name: "Mettre fin" }),
+  );
   expect(within(blocks[0]).getByText("Effectuée")).toBeInTheDocument();
   expect(within(blocks[1]).getByText("Série active")).toBeInTheDocument();
   expect(storedWorkouts()[0].execution?.exercises[0].sets[0]).toMatchObject({
@@ -469,13 +567,11 @@ it("reveals a confirmed workout deletion action after a horizontal swipe", async
   };
   create("Push");
   create("Pull");
-  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
   const card = screen.getByText("Push").closest("li")!;
   fireEvent.pointerDown(card, { clientX: 160 });
   fireEvent.pointerMove(card, { clientX: 80 });
   fireEvent.pointerUp(card, { clientX: 80 });
   expect(card).toHaveClass("open");
-  expect(confirm).not.toHaveBeenCalled();
   const cardButton = card.querySelector(".workout-card")!;
   fireEvent.pointerDown(cardButton, { clientX: 80 });
   fireEvent.pointerUp(cardButton, { clientX: 80 });
@@ -486,17 +582,19 @@ it("reveals a confirmed workout deletion action after a horizontal swipe", async
   fireEvent.pointerMove(card, { clientX: 80 });
   fireEvent.pointerUp(card, { clientX: 80 });
   fireEvent.click(screen.getByRole("button", { name: "Supprimer Push" }));
-  expect(confirm).toHaveBeenCalledWith("Supprimer cette séance ?");
+  const deleteDialog = screen.getByRole("alertdialog", {
+    name: "Supprimer cette séance ?",
+  });
+  fireEvent.click(
+    within(deleteDialog).getByRole("button", { name: "Annuler" }),
+  );
   expect(screen.getByText("Push")).toBeInTheDocument();
-  fireEvent.pointerDown(card, { clientX: 80 });
-  fireEvent.pointerMove(card, { clientX: 160 });
-  fireEvent.pointerUp(card, { clientX: 160 });
-  expect(card).not.toHaveClass("open");
-  fireEvent.pointerDown(card, { clientX: 160 });
-  fireEvent.pointerMove(card, { clientX: 80 });
-  fireEvent.pointerUp(card, { clientX: 80 });
-  confirm.mockReturnValue(true);
   fireEvent.click(screen.getByRole("button", { name: "Supprimer Push" }));
+  fireEvent.click(
+    within(
+      screen.getByRole("alertdialog", { name: "Supprimer cette séance ?" }),
+    ).getByRole("button", { name: "Supprimer" }),
+  );
   expect(screen.queryByText("Push")).not.toBeInTheDocument();
   expect(storedWorkouts().map((workout) => workout.name)).toEqual(["Pull"]);
 });
@@ -508,15 +606,20 @@ it("adds an upcoming exercise during execution without losing the active series"
   expect(screen.getByLabelText("Gérer les exercices")).toBeInTheDocument();
   fireEvent.click(within(seriesRegion("Squat")).getByText("Lancer le repos"));
   fireEvent.click(within(seriesRegion("Squat")).getByText("Terminer le repos"));
+  fireEvent.click(
+    within(screen.getByRole("alertdialog")).getByRole("button", {
+      name: "Mettre fin",
+    }),
+  );
   expect(screen.getByLabelText("Gérer les exercices")).toBeInTheDocument();
   createExercise("Row", 2, 30);
   expect(
     within(seriesRegion("Squat")).getByText("Série active"),
   ).toBeInTheDocument();
-  const persisted = JSON.parse(localStorage.getItem(__storageKey) ?? "{}");
-  expect(persisted.templates[0].exercises).toHaveLength(1);
-  expect(persisted.sessions[0].snapshot.exercises).toHaveLength(2);
-  expect(persisted.sessions[0].execution.exercises[1].status).toBe("upcoming");
+  expect(storedWorkouts()[0].execution?.exercises).toMatchObject([
+    { exerciseId: storedWorkouts()[0].exercises[0].id, status: "active" },
+    { exerciseId: storedWorkouts()[0].exercises[1].id, status: "upcoming" },
+  ]);
 });
 
 it("only offers deletion for an upcoming series during execution", async () => {
@@ -526,6 +629,11 @@ it("only offers deletion for an upcoming series during execution", async () => {
   let blocks = within(seriesRegion("Squat")).getAllByRole("listitem");
   fireEvent.click(within(blocks[0]).getByText("Lancer le repos"));
   fireEvent.click(within(blocks[0]).getByText("Terminer le repos"));
+  fireEvent.click(
+    within(screen.getByRole("alertdialog")).getByRole("button", {
+      name: "Mettre fin",
+    }),
+  );
   blocks = within(seriesRegion("Squat")).getAllByRole("listitem");
   expect(within(blocks[0]).queryByText("Supprimer")).not.toBeInTheDocument();
   expect(within(blocks[2]).getByText("Supprimer")).toBeInTheDocument();
@@ -535,25 +643,70 @@ it("only offers deletion for an upcoming series during execution", async () => {
   );
 });
 
-it("keeps the template reusable after completing an independent session", async () => {
+it("never offers or performs deletion of the first series during execution", async () => {
+  await openEmptyWorkout();
+  createExercise("A", 2, 30);
+  createExercise("B", 2, 30);
+  fireEvent.click(screen.getByText("Démarrer la séance"));
+
+  selectExercise("B");
+  const firstExercise = seriesRegion("B");
+  expect(within(firstExercise).getAllByRole("listitem")[0]).toBeInTheDocument();
+  expect(
+    within(firstExercise).getAllByRole("listitem")[0].querySelector(".order"),
+  ).not.toBeInTheDocument();
+  expect(
+    within(within(firstExercise).getAllByRole("listitem")[1]).getByText(
+      "Supprimer",
+    ),
+  ).toBeInTheDocument();
+
+  selectExercise("A");
+  const activeBlocks = within(seriesRegion("A")).getAllByRole("listitem");
+  expect(
+    within(activeBlocks[0]).queryByText("Supprimer"),
+  ).not.toBeInTheDocument();
+  expect(within(activeBlocks[1]).getByText("Supprimer")).toBeInTheDocument();
+  fireEvent.click(within(activeBlocks[0]).getByText("Lancer le repos"));
+  fireEvent.click(within(activeBlocks[0]).getByText("Terminer le repos"));
+  fireEvent.click(
+    within(screen.getByRole("alertdialog")).getByRole("button", {
+      name: "Mettre fin",
+    }),
+  );
+  expect(within(activeBlocks[0]).getByText("Effectuée")).toBeInTheDocument();
+  expect(
+    within(activeBlocks[0]).queryByText("Supprimer"),
+  ).not.toBeInTheDocument();
+  expect(
+    within(activeBlocks[1]).queryByText("Supprimer"),
+  ).not.toBeInTheDocument();
+});
+
+it("keeps a completed workout final after returning home and reloading", async () => {
   const view = await openEmptyWorkout();
   createExercise("Squat", 1, 30);
   fireEvent.click(screen.getByText("Démarrer la séance"));
   fireEvent.click(screen.getByText("Lancer le repos"));
   expect(screen.getByText("Terminer la séance")).toBeInTheDocument();
   fireEvent.click(screen.getByText("Terminer la séance"));
-  expect(screen.getByText("Démarrer la séance")).toBeInTheDocument();
+  expect(storedWorkouts()[0].execution?.status).toBe("readyToFinish");
+  fireEvent.click(
+    within(
+      screen.getByRole("alertdialog", { name: "Terminer la séance ?" }),
+    ).getByRole("button", { name: "Terminer" }),
+  );
+  expect(screen.getByText("Séance terminée")).toBeInTheDocument();
+  expect(screen.queryByText("Démarrer la séance")).not.toBeInTheDocument();
   fireEvent.click(screen.getByLabelText("Retour aux séances"));
   fireEvent.click(screen.getByText("Push"));
-  expect(screen.getByText("Démarrer la séance")).toBeInTheDocument();
+  expect(screen.getByText("Séance terminée")).toBeInTheDocument();
   view.unmount();
   render(<App />);
   fireEvent.click(await screen.findByText("Push"));
-  expect(screen.getByText("Démarrer la séance")).toBeInTheDocument();
-  const persisted = JSON.parse(localStorage.getItem(__storageKey) ?? "{}");
-  expect(persisted.templates[0].execution).toBeUndefined();
-  expect(persisted.sessions).toHaveLength(1);
-  expect(persisted.sessions[0].status).toBe("completed");
+  expect(screen.getByText("Séance terminée")).toBeInTheDocument();
+  expect(screen.queryByText("Démarrer la séance")).not.toBeInTheDocument();
+  expect(storedWorkouts()[0].execution?.status).toBe("completed");
 });
 
 it("keeps future exercise states unchanged while browsing and starts them explicitly", async () => {
@@ -583,6 +736,35 @@ it("keeps future exercise states unchanged while browsing and starts them explic
   expect(
     storedWorkouts()[0].execution?.exercises.map((item) => item.status),
   ).toEqual(["active", "active", "upcoming"]);
+});
+
+it("locks every other rest button while a chrono runs across exercises", async () => {
+  await openEmptyWorkout();
+  createExercise("A", 2, 30);
+  createExercise("B", 2, 30);
+  fireEvent.click(screen.getByText("Démarrer la séance"));
+  selectExercise("A");
+  const a = seriesRegion("A");
+  fireEvent.click(within(a).getByText("Lancer le repos"));
+  const aSecond = within(a).getAllByRole("listitem")[1];
+  expect(
+    within(aSecond).queryByLabelText("Lancer le repos"),
+  ).not.toBeInTheDocument();
+  selectExercise("B");
+  const b = seriesRegion("B");
+  expect(within(b).getByLabelText("Lancer le repos")).toBeDisabled();
+  selectExercise("A");
+  expect(within(a).getByText("Repos en cours")).toBeInTheDocument();
+  fireEvent.click(within(a).getByText("Terminer le repos"));
+  fireEvent.click(
+    within(screen.getByRole("alertdialog")).getByRole("button", {
+      name: "Mettre fin",
+    }),
+  );
+  selectExercise("B");
+  expect(within(b).getByLabelText("Lancer le repos")).toBeEnabled();
+  fireEvent.click(within(b).getByText("Lancer le repos"));
+  expect(within(b).getByText("Repos en cours")).toBeInTheDocument();
 });
 
 it("keeps add set available after starting and appends a blank execution set", async () => {
