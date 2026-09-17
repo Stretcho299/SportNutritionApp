@@ -5,7 +5,14 @@
   "lang": "fr",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f7fbfa",
-  "theme_color": "#0f766e",
-  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+  "background_color": "#060608",
+  "theme_color": "#0F0F14",
+  "icons": [
+    {
+      "src": "/icons/app-logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
 }
