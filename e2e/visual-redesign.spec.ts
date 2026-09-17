@@ -312,17 +312,13 @@ for (const width of [390, 320]) {
       .getByRole("button", { name: "Terminer" })
       .click();
     await expect(
-      page.getByText("Séance terminée", { exact: true }),
+      page.getByRole("button", { name: "Démarrer la séance" }),
     ).toBeVisible();
     await screenshot(page, info, "completed");
     await page.reload();
-    await expect(page.locator(".workout-badge")).toContainText("Terminée");
     await page.locator(".workout-card").click();
     await expect(
-      page.getByText("Séance terminée", { exact: true }),
-    ).toBeVisible();
-    await expect(
       page.getByRole("button", { name: "Démarrer la séance" }),
-    ).toHaveCount(0);
+    ).toBeVisible();
   });
 }

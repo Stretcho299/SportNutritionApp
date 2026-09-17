@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
 
+type PersistedStore = {
+  templates: Array<{ id: string; execution?: unknown }>;
+  sessions: Array<{ id: string; status: string; templateId: string }>;
+};
+
 async function prepareWorkout(page, setCount = "2") {
   await page.goto("/");
   await page.evaluate(() => localStorage.clear());
@@ -17,7 +22,7 @@ async function prepareWorkout(page, setCount = "2") {
   await page.getByLabel(/Nombre de séries initiales/i).fill(setCount);
   await page
     .getByRole("spinbutton", { name: "Repos par défaut (secondes)" })
-    .fill("30");
+    .fill("90");
   await page.getByRole("button", { name: /Enregistrer/i }).click();
 }
 
@@ -59,7 +64,7 @@ test("does not activate the next exercise when deleting an upcoming set", async 
   await page.getByLabel(/Nombre de séries initiales/i).fill("1");
   await page
     .getByRole("spinbutton", { name: "Repos par défaut (secondes)" })
-    .fill("30");
+    .fill("90");
   await page.getByRole("button", { name: /Enregistrer/i }).click();
   await page.getByRole("button", { name: /Démarrer la séance/i }).click();
   const aRegion = page.getByRole("region", { name: "Séries de Exercice A" });
@@ -95,7 +100,7 @@ test("starts from the selected exercise and keeps other tabs upcoming", async ({
     await page.getByLabel(/Nombre de séries initiales/i).fill("2");
     await page
       .getByRole("spinbutton", { name: "Repos par défaut (secondes)" })
-      .fill("30");
+      .fill("90");
     await page.getByRole("button", { name: /Enregistrer/i }).click();
   }
 
@@ -111,4 +116,92 @@ test("starts from the selected exercise and keeps other tabs upcoming", async ({
   await tabs.nth(2).getByRole("button").click();
   await expect(tabs.nth(2)).toHaveClass(/execution-upcoming/);
   await expect(tabs.nth(1)).toHaveClass(/execution-active/);
+});
+
+test("reuses a template and persists independent session snapshots", async ({
+  page,
+}) => {
+  await prepareWorkout(page, "2");
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  const region = page.getByRole("region", { name: "Séries de Exercice A" });
+  await region
+    .getByRole("listitem")
+    .nth(0)
+    .getByRole("button", { name: "Répétitions" })
+    .click();
+  await page
+    .getByRole("dialog", { name: /Choisir Répétitions/i })
+    .getByRole("option", { name: "8", exact: true })
+    .click();
+  await page
+    .getByRole("dialog", { name: /Choisir Répétitions/i })
+    .getByRole("button", { name: "Valider" })
+    .click();
+  await region.getByRole("button", { name: "Lancer le repos" }).click();
+  await region.getByRole("button", { name: "Mettre fin au repos" }).click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Mettre fin" })
+    .click();
+  await region
+    .getByRole("listitem")
+    .nth(1)
+    .getByRole("button", { name: "Lancer le repos" })
+    .click();
+  await page.getByRole("button", { name: "Terminer la séance" }).click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Terminer" })
+    .click();
+  await page.getByRole("button", { name: "Retour aux séances" }).click();
+  await page.locator(".workout-card").click();
+  await expect(
+    page.getByRole("button", { name: "Démarrer la séance" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Démarrer la séance" }).click();
+  const stored = await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("sport-nutrition", 2);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    return await new Promise<PersistedStore>((resolve, reject) => {
+      const request = db
+        .transaction("data")
+        .objectStore("data")
+        .get("sport-nutrition-workouts");
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  });
+  expect(stored.templates).toHaveLength(1);
+  expect(stored.sessions).toHaveLength(2);
+  expect(stored.sessions[0].id).not.toBe(stored.sessions[1].id);
+  expect(stored.sessions[0].status).toBe("completed");
+  expect(stored.sessions[1].status).toBe("inProgress");
+  expect(stored.sessions[0].templateId).toBe(stored.sessions[1].templateId);
+  expect(stored.templates[0].execution).toBeUndefined();
+  await page.reload();
+  const afterReload = await page.evaluate(
+    () =>
+      new Promise<PersistedStore>((resolve, reject) => {
+        const request = indexedDB.open("sport-nutrition", 2);
+        request.onsuccess = () => {
+          const db = request.result;
+          const get = db
+            .transaction("data")
+            .objectStore("data")
+            .get("sport-nutrition-workouts");
+          get.onsuccess = () => resolve(get.result);
+          get.onerror = () => reject(get.error);
+        };
+        request.onerror = () => reject(request.error);
+      }),
+  );
+  expect(afterReload.sessions).toHaveLength(2);
+  expect(
+    afterReload.sessions.filter(
+      (session: { status: string }) => session.status === "inProgress",
+    ),
+  ).toHaveLength(1);
 });

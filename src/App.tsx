@@ -18,14 +18,15 @@ import {
   createWorkout,
   defaultRestSeconds,
   finishExecutedRest,
-  loadWorkouts,
+  loadWorkoutStore,
+  type WorkoutStore,
   removeExecutedUpcomingSet,
   reorder,
   saveWorkouts,
   skipExecutedExercise,
   sort,
   startExecutedSetRest,
-  startWorkoutExecution,
+  createWorkoutSession,
   updateExecutedSet,
   type ExecutedSet,
   type WorkoutExecution,
@@ -55,7 +56,21 @@ export default function App() {
     null,
   );
   useEffect(() => {
-    void loadWorkouts().then(setWorkouts);
+    void loadWorkoutStore().then((store: WorkoutStore) => {
+      const active = store.sessions
+        .filter((session) => session.status !== "completed")
+        .sort((a, b) => b.startedAt - a.startedAt);
+      setWorkouts(
+        store.templates.map((template) => {
+          const session = active.find(
+            (item) => item.templateId === template.id,
+          );
+          return session
+            ? { ...session.snapshot, execution: session.execution }
+            : template;
+        }),
+      );
+    });
   }, []);
   const update = useCallback((next: Workout[]) => {
     setWorkouts(next);
@@ -83,8 +98,19 @@ export default function App() {
     [update, workoutId, workouts],
   );
   const startExecution = () => {
-    if (workout)
-      updateExecution(startWorkoutExecution(workout, undefined, exerciseId));
+    if (!workout || workout.execution) return;
+    if (
+      workouts.some(
+        (item) =>
+          item.execution &&
+          (item.execution.status === "inProgress" ||
+            item.execution.status === "readyToFinish"),
+      )
+    )
+      return;
+    updateExecution(
+      createWorkoutSession(workout, undefined, exerciseId).execution,
+    );
   };
   const startRest = (targetExerciseId: string, targetSetId: string) => {
     if (!execution) return;
@@ -101,7 +127,18 @@ export default function App() {
 
     // Re-read after the immediate local transition so another tab cannot
     // start from a stale snapshot and overwrite the session's active clock.
-    void loadWorkouts().then((latestWorkouts) => {
+    void loadWorkoutStore().then((store) => {
+      const latestWorkouts: Workout[] = store.templates.map((template) => {
+        const session = store.sessions
+          .filter(
+            (item) =>
+              item.templateId === template.id && item.status !== "completed",
+          )
+          .sort((a, b) => b.startedAt - a.startedAt)[0];
+        return session
+          ? { ...session.snapshot, execution: session.execution }
+          : template;
+      });
       const latestExecution = latestWorkouts.find(
         (item) => item.id === workoutId,
       )?.execution;
@@ -135,7 +172,14 @@ export default function App() {
         title: "Terminer la séance ?",
         description: "Cette séance sera clôturée définitivement.",
         confirmLabel: "Terminer",
-        onConfirm: () => updateExecution(completeWorkoutExecution(execution)),
+        onConfirm: () => {
+          updateExecution(completeWorkoutExecution(execution));
+          setWorkouts((current) =>
+            current.map((item) =>
+              item.id === workoutId ? { ...item, execution: undefined } : item,
+            ),
+          );
+        },
       });
   };
   const requestConfirmation = (request: ConfirmationRequest) =>

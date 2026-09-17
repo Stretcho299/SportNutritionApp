@@ -245,7 +245,7 @@ export async function saveWorkouts(workouts: Workout[]) {
         name: workout.name,
         exercises: workout.exercises,
       }),
-      execution: { ...workout.execution, sessionId },
+      execution: { ...normalizeExecution(workout.execution), sessionId },
     };
     if (index >= 0) sessions[index] = session;
     else sessions.push(session);
@@ -286,13 +286,22 @@ const isTerminalSet = (set: ExecutedSet) =>
 
 const normalizeExecution = (execution: WorkoutExecution): WorkoutExecution => {
   if (execution.status === "completed") return execution;
+  let restingSeen = false;
   const exercises: ExecutedExercise[] = execution.exercises.map((exercise) => {
-    const completed = exercise.sets.every(isTerminalSet);
+    const sets = exercise.sets.map((set) => {
+      if (set.status !== "resting") return set;
+      if (restingSeen)
+        return { ...set, status: "active" as const, restEndsAt: undefined };
+      restingSeen = true;
+      return set;
+    });
+    const completed = sets.every(isTerminalSet);
     return {
       ...exercise,
+      sets,
       status: completed
         ? "completed"
-        : exercise.sets.some(
+        : sets.some(
               (set) =>
                 set.status === "active" ||
                 set.status === "resting" ||
@@ -499,6 +508,12 @@ export const startExecutedSetRest = (
   now = Date.now(),
 ): WorkoutExecution => {
   if (execution.status !== "inProgress") return execution;
+  if (
+    execution.exercises.some((exercise) =>
+      exercise.sets.some((set) => set.status === "resting"),
+    )
+  )
+    return execution;
   const target = execution.exercises
     .find((exercise) => exercise.exerciseId === exerciseId)
     ?.sets.find((set) => set.setId === setId);

@@ -6,8 +6,19 @@ import { __storageKey, type Workout } from "./storage/database";
 beforeEach(() => localStorage.clear());
 afterEach(() => vi.restoreAllMocks());
 
-const storedWorkouts = (): Workout[] =>
-  JSON.parse(localStorage.getItem(__storageKey) ?? "[]");
+const storedWorkouts = (): Workout[] => {
+  const raw = JSON.parse(localStorage.getItem(__storageKey) ?? "[]");
+  if (Array.isArray(raw)) return raw;
+  return raw.templates.map((template: Workout) => {
+    const session = raw.sessions
+      .filter((item: { templateId: string }) => item.templateId === template.id)
+      .sort(
+        (a: { startedAt: number }, b: { startedAt: number }) =>
+          b.startedAt - a.startedAt,
+      )[0];
+    return session ? { ...template, execution: session.execution } : template;
+  });
+};
 async function openEmptyWorkout() {
   const view = render(<App />);
   await screen.findByText("Aucune séance");
@@ -616,9 +627,16 @@ it("adds an upcoming exercise during execution without losing the active series"
   expect(
     within(seriesRegion("Squat")).getByText("Série active"),
   ).toBeInTheDocument();
-  expect(storedWorkouts()[0].execution?.exercises).toMatchObject([
-    { exerciseId: storedWorkouts()[0].exercises[0].id, status: "active" },
-    { exerciseId: storedWorkouts()[0].exercises[1].id, status: "upcoming" },
+  const stored = JSON.parse(localStorage.getItem(__storageKey) ?? "{}");
+  expect(stored.sessions[0].execution.exercises).toMatchObject([
+    {
+      exerciseId: stored.sessions[0].snapshot.exercises[0].id,
+      status: "active",
+    },
+    {
+      exerciseId: stored.sessions[0].snapshot.exercises[1].id,
+      status: "upcoming",
+    },
   ]);
 });
 
@@ -696,16 +714,14 @@ it("keeps a completed workout final after returning home and reloading", async (
       screen.getByRole("alertdialog", { name: "Terminer la séance ?" }),
     ).getByRole("button", { name: "Terminer" }),
   );
-  expect(screen.getByText("Séance terminée")).toBeInTheDocument();
-  expect(screen.queryByText("Démarrer la séance")).not.toBeInTheDocument();
+  expect(screen.getByText("Démarrer la séance")).toBeInTheDocument();
   fireEvent.click(screen.getByLabelText("Retour aux séances"));
   fireEvent.click(screen.getByText("Push"));
-  expect(screen.getByText("Séance terminée")).toBeInTheDocument();
+  expect(screen.getByText("Démarrer la séance")).toBeInTheDocument();
   view.unmount();
   render(<App />);
   fireEvent.click(await screen.findByText("Push"));
-  expect(screen.getByText("Séance terminée")).toBeInTheDocument();
-  expect(screen.queryByText("Démarrer la séance")).not.toBeInTheDocument();
+  expect(screen.getByText("Démarrer la séance")).toBeInTheDocument();
   expect(storedWorkouts()[0].execution?.status).toBe("completed");
 });
 
