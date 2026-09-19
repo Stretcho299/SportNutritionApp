@@ -1,8 +1,32 @@
 import { expect, test } from "@playwright/test";
 
 type PersistedStore = {
-  templates: Array<{ id: string; execution?: unknown }>;
-  sessions: Array<{ id: string; status: string; templateId: string }>;
+  templates: Array<{
+    id: string;
+    execution?: unknown;
+    exercises: Array<{
+      plannedSets: Array<{
+        repetitions: number | null;
+        weightKg: number | null;
+        restSeconds: number;
+      }>;
+    }>;
+  }>;
+  sessions: Array<{
+    id: string;
+    status: string;
+    templateId: string;
+    snapshot: PersistedStore["templates"][number];
+    execution: {
+      exercises: Array<{
+        sets: Array<{
+          repetitions: number | null;
+          weightKg: number | null;
+          restSeconds: number;
+        }>;
+      }>;
+    };
+  }>;
 };
 
 async function prepareWorkout(page, setCount = "2") {
@@ -176,11 +200,35 @@ test("reuses a template and persists independent session snapshots", async ({
   });
   expect(stored.templates).toHaveLength(1);
   expect(stored.sessions).toHaveLength(2);
-  expect(stored.sessions[0].id).not.toBe(stored.sessions[1].id);
-  expect(stored.sessions[0].status).toBe("completed");
-  expect(stored.sessions[1].status).toBe("inProgress");
-  expect(stored.sessions[0].templateId).toBe(stored.sessions[1].templateId);
+  const sessionA = stored.sessions.find(
+    (session) => session.status === "completed",
+  );
+  const sessionB = stored.sessions.find(
+    (session) => session.status === "inProgress",
+  );
+  expect(sessionA).toBeDefined();
+  expect(sessionB).toBeDefined();
+  expect(sessionA!.id).not.toBe(sessionB!.id);
+  expect(sessionA!.templateId).toBe(sessionB!.templateId);
   expect(stored.templates[0].execution).toBeUndefined();
+  expect(stored.templates[0].exercises[0].plannedSets[0]).toMatchObject({
+    repetitions: null,
+    weightKg: null,
+    restSeconds: 90,
+  });
+  expect(sessionA!.execution.exercises[0].sets[0]).toMatchObject({
+    repetitions: 8,
+  });
+  expect(sessionB!.snapshot.exercises[0].plannedSets[0]).toMatchObject({
+    repetitions: null,
+    weightKg: null,
+    restSeconds: 90,
+  });
+  expect(sessionB!.execution.exercises[0].sets[0]).toMatchObject({
+    repetitions: null,
+    weightKg: null,
+    restSeconds: 90,
+  });
   await page.reload();
   const afterReload = await page.evaluate(
     () =>
@@ -204,4 +252,8 @@ test("reuses a template and persists independent session snapshots", async ({
       (session: { status: string }) => session.status === "inProgress",
     ),
   ).toHaveLength(1);
+  expect(afterReload.sessions.map((session) => session.id)).toEqual(
+    expect.arrayContaining([sessionA!.id, sessionB!.id]),
+  );
+  expect(afterReload.sessions).toHaveLength(2);
 });
