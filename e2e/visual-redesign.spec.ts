@@ -1,6 +1,6 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 
-async function addExercise(page: Page, name: string, count = "2") {
+async function addExercise(page: Page, name: string, count = "2", rest = "90") {
   await page.getByRole("button", { name: "Gérer les exercices" }).click();
   await page
     .getByRole("dialog", { name: "Actions de la séance" })
@@ -8,7 +8,7 @@ async function addExercise(page: Page, name: string, count = "2") {
     .click();
   await page.getByRole("textbox", { name: "Nom" }).fill(name);
   await page.getByLabel("Nombre de séries initiales").fill(count);
-  await page.getByLabel("Repos par défaut (secondes)").fill("90");
+  await page.getByLabel("Repos par défaut (secondes)").fill(rest);
   await page.getByRole("button", { name: "Enregistrer" }).click();
 }
 
@@ -26,6 +26,13 @@ async function choosePickerValue(page: Page, label: string, value: number) {
       selected: true,
     }),
   ).toBeVisible();
+  const close = picker.getByRole("button", { name: "Fermer" });
+  const closeBox = await close.boundingBox();
+  expect(closeBox?.width).toBeGreaterThanOrEqual(42);
+  expect(closeBox?.height).toBeGreaterThanOrEqual(42);
+  expect(
+    Math.abs((closeBox?.width ?? 0) - (closeBox?.height ?? 0)),
+  ).toBeLessThan(2);
   if (label === "Repos (secondes)") {
     await picker
       .getByRole("listbox", { name: "Minutes" })
@@ -138,7 +145,6 @@ for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
     await page.goto("/");
     await page.evaluate(() => document.fonts.ready);
-    await screenshot(page, info, "empty");
     await page.getByRole("button", { name: "Créer une séance" }).click();
     await page
       .getByRole("textbox", { name: "Nom" })
@@ -161,13 +167,27 @@ for (const width of [390, 320]) {
     const weightPicker = page.getByRole("dialog", {
       name: "Choisir Charge (kg)",
     });
+    await screenshot(page, info, "picker-weight");
     await flickWheel(
       page,
       weightPicker.getByRole("listbox", { name: "Kilogrammes" }),
     );
     await weightPicker.getByRole("button", { name: "Annuler" }).click();
     await choosePickerValue(page, "Charge (kg)", 62.5);
+    await page.getByRole("button", { name: "Répétitions" }).first().click();
+    await page
+      .getByRole("dialog", { name: "Choisir Répétitions" })
+      .getByRole("button", { name: "Fermer" })
+      .click();
     await choosePickerValue(page, "Répétitions", 10);
+    await page
+      .getByRole("button", { name: "Repos (secondes)" })
+      .first()
+      .click();
+    await page
+      .getByRole("dialog", { name: "Choisir Repos (secondes)" })
+      .getByRole("button", { name: "Fermer" })
+      .click();
     await choosePickerValue(page, "Repos (secondes)", 90);
     await noOverflow(page);
     await screenshot(page, info, "preparation");
@@ -181,7 +201,6 @@ for (const width of [390, 320]) {
     ).toBeVisible();
     expect(await rail.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
     await noOverflow(page);
-    await screenshot(page, info, "long-name");
     await rail.getByRole("button").first().click();
     const fixedBefore = await page
       .locator(".workout-fixed-zones")
@@ -202,8 +221,8 @@ for (const width of [390, 320]) {
       .boundingBox();
     const navBounds = await page.getByRole("navigation").boundingBox();
     expect(addBounds!.y + addBounds!.height).toBeLessThanOrEqual(navBounds!.y);
-    await screenshot(page, info, "scrolled");
     await page.getByRole("button", { name: "Démarrer la séance" }).click();
+    await first.scrollIntoViewIfNeeded();
     await expect(first.locator(".order")).toHaveCount(1);
     await expect(
       page.locator(".set-block").nth(1).locator(".order"),
@@ -211,18 +230,17 @@ for (const width of [390, 320]) {
     await first.getByRole("button", { name: "Lancer le repos" }).click();
     const timer = page.getByRole("timer");
     await expect(timer).toBeVisible();
+    const ringProgress = timer.locator(".countdown-value");
     const initialOffset = Number(
-      await timer.locator(".countdown-value").getAttribute("stroke-dashoffset"),
+      await ringProgress.getAttribute("stroke-dashoffset"),
     );
     await expect
-      .poll(async () =>
-        Number(
-          await timer
-            .locator(".countdown-value")
-            .getAttribute("stroke-dashoffset"),
-        ),
-      )
+      .poll(() => ringProgress.getAttribute("stroke-dashoffset").then(Number))
       .toBeGreaterThan(initialOffset);
+    await expect(timer).toHaveAttribute("data-reference-seconds", "90");
+    await expect(
+      page.getByRole("dialog", { name: "Détail du repos" }),
+    ).toHaveCount(0);
     await expect(first.getByLabel("Charge (kg)")).toBeEnabled();
     await rail.getByRole("button").nth(1).click();
     await expect(rail.locator("li").nth(1)).toHaveClass(/execution-upcoming/);
@@ -240,6 +258,7 @@ for (const width of [390, 320]) {
     await expect(timer).toBeInViewport();
     // Reload restores the deadline and numeric execution data from IndexedDB.
     await page.reload();
+    await expect(page.locator(".workout-card")).toBeVisible();
     await page.locator(".workout-card").click();
     await expect(timer).toBeVisible();
     await expect(first.getByLabel("Charge (kg)")).toHaveAttribute(
@@ -291,7 +310,6 @@ for (const width of [390, 320]) {
       page.getByRole("button", { name: "Annuler", exact: true }),
     ).toBeInViewport();
     await noOverflow(page);
-    await screenshot(page, info, "short-screen-sheet");
     await page.getByRole("button", { name: "Enregistrer" }).click();
     await page.getByRole("button", { name: "+ Ajouter une série" }).click();
     await noOverflow(page);
@@ -322,3 +340,65 @@ for (const width of [390, 320]) {
     ).toBeVisible();
   });
 }
+
+test("finishing the rest marks the set performed and advances progress", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Créer une séance" }).click();
+  await page.getByRole("textbox", { name: "Nom" }).fill("Tempo");
+  await page.getByRole("button", { name: "Enregistrer" }).click();
+  await page.locator(".workout-card").click();
+  await addExercise(page, "Squat", "2", "1");
+  await page.getByRole("button", { name: "Démarrer la séance" }).click();
+  const firstSet = page
+    .getByRole("region", { name: "Séries de Squat" })
+    .getByRole("listitem")
+    .first();
+  await firstSet.getByRole("button", { name: "Lancer le repos" }).click();
+  await expect(page.getByRole("timer")).toBeVisible();
+  await expect(firstSet).toHaveClass(/status-resting/);
+  await expect(firstSet).toHaveClass(/status-performed/, { timeout: 5_000 });
+  await expect(page.getByRole("progressbar")).toHaveAttribute("value", "1");
+});
+
+test("exercise navigation animates according to workout order without changing execution state", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Créer une séance" }).click();
+  await page.getByRole("textbox", { name: "Nom" }).fill("Direction");
+  await page.getByRole("button", { name: "Enregistrer" }).click();
+  await page.locator(".workout-card").click();
+  await addExercise(page, "Premier", "1");
+  await addExercise(page, "Deuxième", "1");
+  await addExercise(page, "Troisième", "1");
+
+  const rail = page.getByRole("list", { name: "Exercices" });
+  const preparation = page.locator(".workout-preparation");
+  const statusesBefore = await rail
+    .locator("li")
+    .evaluateAll((items) => items.map((item) => item.className));
+
+  await rail.getByRole("button").nth(1).click();
+  await expect(preparation).toHaveClass(/transition-next/);
+  await expect(page.getByRole("heading", { name: "Deuxième" })).toBeVisible();
+
+  await rail.getByRole("button").nth(2).click();
+  await expect(preparation).toHaveClass(/transition-next/);
+  await expect(page.getByRole("heading", { name: "Troisième" })).toBeVisible();
+
+  await rail.getByRole("button").nth(1).click();
+  await expect(preparation).toHaveClass(/transition-previous/);
+  await expect(page.getByRole("heading", { name: "Deuxième" })).toBeVisible();
+  expect(
+    await rail
+      .locator("li")
+      .evaluateAll((items) =>
+        items.map((item) => item.className.replace("selected ", "")),
+      ),
+  ).toEqual(statusesBefore.map((status) => status.replace("selected ", "")));
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});

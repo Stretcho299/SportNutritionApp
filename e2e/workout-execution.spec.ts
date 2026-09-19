@@ -272,9 +272,8 @@ test("removing an untouched four-set exercise removes its work from progress", a
     .getByRole("dialog", { name: /Actions de la séance/i })
     .getByRole("button", { name: /Supprimer l’exercice/i })
     .click();
-  await expect(
-    page.getByRole("region", { name: "Progression de la séance" }),
-  ).toContainText("0/1");
+  await expect(page.getByRole("progressbar")).toHaveAttribute("value", "0");
+  await expect(page.getByRole("progressbar")).toHaveAttribute("max", "1");
 });
 
 test("removing an exercise keeps performed sets in session progress", async ({
@@ -295,9 +294,8 @@ test("removing an exercise keeps performed sets in session progress", async ({
     .getByRole("alertdialog", { name: "Supprimer cet exercice ?" })
     .getByRole("button", { name: "Supprimer" })
     .click();
-  await expect(
-    page.getByRole("region", { name: "Progression de la séance" }),
-  ).toContainText("2/3");
+  await expect(page.getByRole("progressbar")).toHaveAttribute("value", "2");
+  await expect(page.getByRole("progressbar")).toHaveAttribute("max", "3");
 });
 
 test("adding work after all exercises are done hides the finish-session action", async ({
@@ -573,6 +571,12 @@ test("syncs planned rest without changing an active chrono", async ({
   const before = await readPersistedStore(page);
   const restEndsAt =
     before.sessions[0].execution.exercises[0].sets[0].restEndsAt;
+  const timer = page.getByRole("timer");
+  await expect(timer).toHaveAttribute("data-reference-seconds", "30");
+  const beforeProgress = await timer
+    .locator(".countdown-value")
+    .getAttribute("stroke-dashoffset")
+    .then(Number);
   await chooseValue(page, "Repos (secondes)", 60);
   await expect
     .poll(async () => {
@@ -585,10 +589,21 @@ test("syncs planned rest without changing an active chrono", async ({
       ];
     })
     .toEqual([60, 60, restEndsAt, 30]);
-  await expect(page.getByRole("timer")).toBeVisible();
+  await expect(timer).toBeVisible();
+  await expect(timer).toHaveAttribute("data-reference-seconds", "30");
+  const afterProgress = await timer
+    .locator(".countdown-value")
+    .getAttribute("stroke-dashoffset")
+    .then(Number);
+  expect(afterProgress).toBeGreaterThanOrEqual(beforeProgress);
+  expect(afterProgress).toBeLessThan(50);
   await page.reload();
   await page.locator(".workout-card").click();
   await expect(page.getByRole("timer")).toBeVisible();
+  await expect(page.getByRole("timer")).toHaveAttribute(
+    "data-reference-seconds",
+    "30",
+  );
   await expect
     .poll(async () => {
       const store = await readPersistedStore(page);

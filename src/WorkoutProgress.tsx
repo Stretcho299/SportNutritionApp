@@ -1,46 +1,17 @@
+import { ActiveRestTimer } from "./ActiveRestTimer";
 import type { WorkoutExecution, Workout } from "./storage/database";
-
-export function RestCountdown({
-  remaining,
-  total,
-}: {
-  remaining: number;
-  total: number;
-}) {
-  const ratio = total > 0 ? Math.min(1, Math.max(0, remaining / total)) : 0;
-  return (
-    <div className="countdown" role="timer" aria-label="Temps de repos restant">
-      <svg viewBox="0 0 80 80" aria-hidden="true">
-        <circle className="countdown-track" cx="40" cy="40" r="35" />
-        <circle
-          className="countdown-value"
-          cx="40"
-          cy="40"
-          r="35"
-          pathLength="100"
-          strokeDasharray="100"
-          strokeDashoffset={100 * (1 - ratio)}
-        />
-      </svg>
-      <div>
-        <strong>
-          {Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, "0")}
-        </strong>
-        <span>Repos</span>
-      </div>
-    </div>
-  );
-}
 
 export function WorkoutProgress({
   execution,
   workout,
   clock,
+  onFinishRest,
   selectedExerciseId,
 }: {
   execution: WorkoutExecution;
   workout: Workout;
   clock: number;
+  onFinishRest?: () => void;
   selectedExerciseId: string;
 }) {
   const sets = [
@@ -68,35 +39,46 @@ export function WorkoutProgress({
   const name = workout.exercises.find(
     (exercise) => exercise.id === currentExercise?.exerciseId,
   )?.name;
+  const ratio = sets.length > 0 ? settled / sets.length : 0;
   return (
-    <section className="workout-progress" aria-label="Progression de la séance">
+    <section
+      className={`workout-progress${resting && onFinishRest ? " has-rest" : ""}`}
+      aria-label="Progression de la séance"
+    >
       <div className="progress-copy">
         <div className="progress-label">
           <span>
-            {execution.status === "completed" ? "Terminée" : "Séries traitées"}
+            {execution.status === "completed" ? "Terminée" : "Progression"}
           </span>
           <strong>
-            {settled}/{sets.length}
+            {settled} / {sets.length}
           </strong>
         </div>
         <progress
+          className="sr-only"
           aria-label="Séries traitées"
           max={Math.max(1, sets.length)}
           value={settled}
         />
-        <small>
+        <div className="progress-track" aria-hidden="true">
+          <span style={{ width: `${ratio * 100}%` }}>
+            <i />
+          </span>
+        </div>
+        <small className="sr-only">
           {currentSet
             ? `${name} · Série ${(currentExercise?.sets.indexOf(currentSet) ?? 0) + 1}${resting ? "" : " active"}`
             : "Séries effectuées ou skippées"}
         </small>
       </div>
-      {resting && (
-        <RestCountdown
+      {resting && onFinishRest && (
+        <ActiveRestTimer
           remaining={Math.max(
             0,
             Math.ceil(((resting.restEndsAt ?? clock) - clock) / 1000),
           )}
           total={resting.restDurationSeconds ?? resting.restSeconds}
+          onFinish={onFinishRest}
         />
       )}
     </section>
