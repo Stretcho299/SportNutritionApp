@@ -85,6 +85,7 @@ export default function App() {
                                 ...set,
                                 weightKg: templateSet.weightKg,
                                 repetitions: templateSet.repetitions,
+                                restSeconds: templateSet.restSeconds,
                               }
                             : set;
                         }),
@@ -384,7 +385,9 @@ export default function App() {
           : {
               ...w,
               exercises:
-                field === "weightKg" || field === "repetitions"
+                field === "weightKg" ||
+                field === "repetitions" ||
+                field === "restSeconds"
                   ? w.exercises.map((item) =>
                       item.id !== exercise.id
                         ? item
@@ -842,10 +845,7 @@ export default function App() {
                           formatValue={(value) =>
                             value === null ? "—" : formatRest(value)
                           }
-                          disabled={
-                            !!execution &&
-                            executionSet(s.id)?.status !== "active"
-                          }
+                          disabled={execution?.status === "completed"}
                           onSave={(value) =>
                             saveSetValue(s.id, "restSeconds", value)
                           }

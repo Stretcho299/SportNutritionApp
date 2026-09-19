@@ -15,6 +15,7 @@ import {
   removeExecutedExercise,
   removeExecutedSet,
   removeExecutedUpcomingSet,
+  reorder,
   saveWorkouts,
   saveWorkoutStore,
   skipExecutedExercise,
@@ -440,20 +441,125 @@ it("edits upcoming and performed values without changing execution state", () =>
   });
 });
 
-it("does not create template structure for session-only changes", async () => {
+it("synchronizes session structure to the template without sharing objects", async () => {
   const template = addExercise(createWorkout("Push"), "Bench", 1, 30);
-  const addedExercise = addExercise(createWorkout("Push"), "Row", 1, 30)
-    .exercises[0];
+  const sessionWorkout = addExercise(template, "Row", 1, 30);
+  sessionWorkout.exercises[0] = addSet(sessionWorkout.exercises[0]);
+  const addedExercise = sessionWorkout.exercises[1];
   let execution = startWorkoutExecution(template, 1000);
   execution = addExerciseToExecution(execution, addedExercise);
-  const extraSet = addSet(template.exercises[0]).plannedSets[1];
-  execution = addSetToExecution(execution, template.exercises[0].id, extraSet);
-  await saveWorkouts([{ ...template, execution }]);
+  execution = addSetToExecution(
+    execution,
+    template.exercises[0].id,
+    sessionWorkout.exercises[0].plannedSets[1],
+  );
+  await saveWorkouts([{ ...sessionWorkout, execution }]);
   const store = await loadWorkoutStore();
-  expect(store.templates[0].exercises).toHaveLength(1);
-  expect(store.templates[0].exercises[0].plannedSets).toHaveLength(1);
+  expect(store.templates[0].exercises).toHaveLength(2);
+  expect(store.templates[0].exercises[0].plannedSets).toHaveLength(2);
   expect(store.sessions[0].execution.exercises).toHaveLength(2);
   expect(store.sessions[0].execution.exercises[0].sets).toHaveLength(2);
+  expect(store.templates[0]).not.toBe(store.sessions[0].snapshot);
+  expect(store.templates[0].exercises[0]).not.toBe(
+    store.sessions[0].snapshot.exercises[0],
+  );
+});
+
+it("synchronizes removed and reordered session structure to the template", async () => {
+  let template = addExercise(createWorkout("Push"), "Bench", 1, 30);
+  template = addExercise(template, "Row", 1, 30);
+  let sessionWorkout = {
+    ...template,
+    exercises: reorder(template.exercises, 1, 0),
+  };
+  let execution = startWorkoutExecution(template, 1000);
+  execution = {
+    ...execution,
+    exercises: sessionWorkout.exercises.map((exercise) =>
+      execution.exercises.find((item) => item.exerciseId === exercise.id)!,
+    ),
+  };
+  sessionWorkout = {
+    ...sessionWorkout,
+    exercises: sessionWorkout.exercises.filter(
+      (exercise) => exercise.name !== "Bench",
+    ),
+  };
+  execution = removeExecutedExercise(
+    execution,
+    template.exercises.find((exercise) => exercise.name === "Bench")!.id,
+  );
+  await saveWorkouts([{ ...sessionWorkout, execution }]);
+  const store = await loadWorkoutStore();
+  expect(store.templates[0].exercises).toHaveLength(1);
+  expect(store.templates[0].exercises[0].name).toBe("Row");
+  expect(store.templates[0].exercises[0].position).toBe(0);
+  expect(store.sessions[0].execution.archivedExercises).toBeUndefined();
+});
+
+it("edits planned rest on upcoming and performed sets", () => {
+  let workout = addExercise(createWorkout("Push"), "Bench", 1, 120);
+  workout = addExercise(workout, "Row", 1, 120);
+  const bench = workout.exercises[0];
+  const row = workout.exercises[1];
+  let execution = startWorkoutExecution(workout, 1000);
+  execution = updateExecutedSet(
+    execution,
+    row.id,
+    row.plannedSets[0].id,
+    "restSeconds",
+    150,
+  );
+  execution = startExecutedSetRest(
+    execution,
+    bench.id,
+    bench.plannedSets[0].id,
+    1000,
+  );
+  const restEndsAt = execution.exercises[0].sets[0].restEndsAt;
+  execution = updateExecutedSet(
+    execution,
+    bench.id,
+    bench.plannedSets[0].id,
+    "restSeconds",
+    150,
+  );
+  expect(execution.exercises[0].sets[0]).toMatchObject({
+    status: "resting",
+    restSeconds: 150,
+    restEndsAt,
+  });
+  execution = finishExecutedRest(execution);
+  execution = updateExecutedSet(
+    execution,
+    bench.id,
+    bench.plannedSets[0].id,
+    "restSeconds",
+    180,
+  );
+  expect(execution.exercises[0].sets[0]).toMatchObject({
+    status: "performed",
+    restSeconds: 180,
+    restEndsAt: undefined,
+  });
+});
+
+it("reopens a ready session when a new set is added", () => {
+  const workout = addExercise(createWorkout("Push"), "Bench", 1, 30);
+  const bench = workout.exercises[0];
+  let execution = startWorkoutExecution(workout, 1000);
+  execution = startExecutedSetRest(
+    execution,
+    bench.id,
+    bench.plannedSets[0].id,
+    1000,
+  );
+  expect(execution.status).toBe("readyToFinish");
+  const nextSet = addSet(bench).plannedSets[1];
+  const reopened = addSetToExecution(execution, bench.id, nextSet);
+  expect(reopened.status).toBe("inProgress");
+  expect(reopened.exercises[0].sets).toHaveLength(2);
+  expect(reopened.exercises[0].sets[1].status).toBe("upcoming");
 });
 
 it("keeps completed execution final and omits the final rest", async () => {

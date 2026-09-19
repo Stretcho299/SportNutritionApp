@@ -268,6 +268,7 @@ const syncTemplateWorkValues = (
               ...set,
               weightKg: executedSet.weightKg,
               repetitions: executedSet.repetitions,
+              restSeconds: executedSet.restSeconds,
             }
           : set;
       }),
@@ -279,12 +280,9 @@ async function persistWorkouts(workouts: Workout[]) {
   const existing = globalThis.indexedDB
     ? await loadWorkoutStore()
     : migrateStore(JSON.parse(localStorage.getItem(key) ?? "[]"));
-  const templates = workouts.map(({ execution, ...template }) => {
-    const previous = existing.templates.find((item) => item.id === template.id);
-    return execution
-      ? syncTemplateWorkValues(previous ?? template, execution)
-      : template;
-  });
+  const templates = workouts.map(({ execution, ...template }) =>
+    execution ? syncTemplateWorkValues(template, execution) : template,
+  );
   const sessions = [...existing.sessions];
   for (const workout of workouts) {
     if (!workout.execution) continue;
@@ -523,10 +521,7 @@ export const updateExecutedSet = (
         : {
             ...exercise,
             sets: exercise.sets.map((set) =>
-              set.setId !== setId ||
-              (field === "restSeconds" && set.status !== "active")
-                ? set
-                : { ...set, [field]: value },
+              set.setId !== setId ? set : { ...set, [field]: value },
             ),
           },
     ),
@@ -538,14 +533,17 @@ export const addSetToExecution = (
   exerciseId: string,
   set: PlannedSet,
 ): WorkoutExecution => {
-  if (execution.status !== "inProgress") return execution;
-  return {
+  if (execution.status === "completed") return execution;
+  return normalizeExecution({
     ...execution,
+    status: "inProgress",
     exercises: execution.exercises.map((exercise) =>
-      exercise.exerciseId !== exerciseId || exercise.status === "completed"
+      exercise.exerciseId !== exerciseId
         ? exercise
         : {
             ...exercise,
+            status:
+              exercise.status === "completed" ? "upcoming" : exercise.status,
             sets: [
               ...exercise.sets,
               {
@@ -558,7 +556,7 @@ export const addSetToExecution = (
             ],
           },
     ),
-  };
+  });
 };
 
 export const startExecutedSetRest = (

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 type PersistedStore = {
   templates: Array<{
@@ -23,6 +23,7 @@ type PersistedStore = {
           repetitions: number | null;
           weightKg: number | null;
           restSeconds: number;
+          restEndsAt?: number;
         }>;
       }>;
     };
@@ -46,11 +47,25 @@ async function addExercise(page: Page, name: string, count = "1") {
 async function chooseValue(page: Page, label: string, value: number) {
   await page.getByRole("button", { name: label, exact: true }).first().click();
   const dialog = page.getByRole("dialog", { name: `Choisir ${label}` });
-  const listbox = label === "Charge (kg)" ? "Kilogrammes" : "Répétitions";
-  await dialog
-    .getByRole("listbox", { name: listbox })
-    .getByRole("option", { name: String(value), exact: true })
-    .click();
+  if (label === "Repos (secondes)") {
+    await dialog
+      .getByRole("listbox", { name: "Minutes" })
+      .getByRole("option", {
+        name: String(Math.floor(value / 60)),
+        exact: true,
+      })
+      .click();
+    await dialog
+      .getByRole("listbox", { name: "Secondes" })
+      .getByRole("option", { name: String(value % 60), exact: true })
+      .click();
+  } else {
+    const listbox = label === "Charge (kg)" ? "Kilogrammes" : "Répétitions";
+    await dialog
+      .getByRole("listbox", { name: listbox })
+      .getByRole("option", { name: String(value), exact: true })
+      .click();
+  }
   await dialog.getByRole("button", { name: "Valider" }).click();
 }
 
@@ -64,6 +79,25 @@ async function finishRest(
     .getByRole("alertdialog", { name: "Mettre fin au repos ?" })
     .getByRole("button", { name: "Mettre fin" })
     .click();
+}
+
+async function readPersistedStore(page: Page): Promise<PersistedStore> {
+  return page.evaluate(
+    () =>
+      new Promise<PersistedStore>((resolve, reject) => {
+        const request = indexedDB.open("sport-nutrition", 2);
+        request.onsuccess = () => {
+          const db = request.result;
+          const get = db
+            .transaction("data")
+            .objectStore("data")
+            .get("sport-nutrition-workouts");
+          get.onsuccess = () => resolve(get.result);
+          get.onerror = () => reject(get.error);
+        };
+        request.onerror = () => reject(request.error);
+      }),
+  );
 }
 
 async function prepareWorkout(page, setCount = "2") {
@@ -458,6 +492,123 @@ test("edits upcoming and performed sets and carries values into the next session
       .getByRole("region", { name: "Séries de Exercice B" })
       .getByLabel("Charge (kg)"),
   ).toHaveAttribute("data-value", "72.5");
+});
+
+test("persists structural session changes in the template and next session", async ({
+  page,
+}) => {
+  await prepareWorkout(page, "3");
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  await page.getByRole("button", { name: "+ Ajouter une série" }).click();
+  await expect(page.locator(".set-block")).toHaveCount(4);
+  await addExercise(page, "Exercice B", "1");
+  await expect(
+    page.getByRole("list", { name: "Exercices" }).getByRole("button"),
+  ).toHaveCount(2);
+  await expect
+    .poll(async () => {
+      const store = await readPersistedStore(page);
+      return [
+        store.templates[0].exercises[0].plannedSets.length,
+        store.templates[0].exercises.length,
+      ];
+    })
+    .toEqual([4, 2]);
+
+  await page
+    .getByRole("list", { name: "Exercices" })
+    .getByRole("button")
+    .first()
+    .click();
+  await page.getByRole("button", { name: "Terminer l’exercice" }).click();
+  await page
+    .getByRole("alertdialog", { name: "Mettre fin à cet exercice ?" })
+    .getByRole("button", { name: "Mettre fin" })
+    .click();
+  await page
+    .getByRole("list", { name: "Exercices" })
+    .getByRole("button")
+    .nth(1)
+    .click();
+  await page.getByRole("button", { name: "Terminer l’exercice" }).click();
+  await page
+    .getByRole("alertdialog", { name: "Mettre fin à cet exercice ?" })
+    .getByRole("button", { name: "Mettre fin" })
+    .click();
+  await page.getByRole("button", { name: "Terminer la séance" }).click();
+  await page
+    .getByRole("alertdialog", { name: "Terminer la séance ?" })
+    .getByRole("button", { name: "Terminer" })
+    .click();
+  await page.getByRole("button", { name: "Retour aux séances" }).click();
+  await page.locator(".workout-card").click();
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  await page
+    .getByRole("list", { name: "Exercices" })
+    .getByRole("button")
+    .first()
+    .click();
+  await expect(page.locator(".set-block")).toHaveCount(4);
+  await expect(
+    page.getByRole("list", { name: "Exercices" }).getByRole("button"),
+  ).toHaveCount(2);
+});
+
+test("syncs planned rest without changing an active chrono", async ({
+  page,
+}) => {
+  await prepareWorkout(page, "1");
+  await addExercise(page, "Exercice B", "1");
+  await chooseValue(page, "Repos (secondes)", 120);
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  const a = page.getByRole("region", { name: "Séries de Exercice A" });
+  await a.getByRole("button", { name: "Lancer le repos" }).click();
+  await expect
+    .poll(async () => {
+      const store = await readPersistedStore(page);
+      return store.sessions[0].execution.exercises[0].sets[0].restEndsAt;
+    })
+    .toBeDefined();
+  const before = await readPersistedStore(page);
+  const restEndsAt =
+    before.sessions[0].execution.exercises[0].sets[0].restEndsAt;
+  await chooseValue(page, "Repos (secondes)", 150);
+  await expect
+    .poll(async () => {
+      const store = await readPersistedStore(page);
+      return [
+        store.templates[0].exercises[0].plannedSets[0].restSeconds,
+        store.sessions[0].execution.exercises[0].sets[0].restSeconds,
+        store.sessions[0].execution.exercises[0].sets[0].restEndsAt,
+      ];
+    })
+    .toEqual([150, 150, restEndsAt]);
+  await expect(page.getByRole("timer")).toBeVisible();
+  await a.getByRole("button", { name: "Mettre fin au repos" }).click();
+  await page
+    .getByRole("alertdialog", { name: "Mettre fin au repos ?" })
+    .getByRole("button", { name: "Mettre fin" })
+    .click();
+  await chooseValue(page, "Repos (secondes)", 180);
+  await expect(a.locator(".set-block").first()).toHaveClass(/status-performed/);
+  await expect(page.getByRole("progressbar")).toHaveAttribute("value", "1");
+  await page
+    .getByRole("list", { name: "Exercices" })
+    .getByRole("button")
+    .nth(1)
+    .click();
+  await chooseValue(page, "Repos (secondes)", 90);
+  await expect
+    .poll(async () => {
+      const store = await readPersistedStore(page);
+      return [
+        store.templates[0].exercises[0].plannedSets[0].restSeconds,
+        store.templates[0].exercises[1].plannedSets[0].restSeconds,
+        store.sessions[0].execution.exercises[0].sets[0].status,
+        store.sessions[0].execution.exercises[0].sets[0].restSeconds,
+      ];
+    })
+    .toEqual([180, 90, "performed", 180]);
 });
 
 test("reuses a template and persists independent session snapshots", async ({
