@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <radialGradient id="bg_shield" cx="50%" cy="40%" r="75%">
+      <stop offset="0%" stop-color="#191A22" />
+      <stop offset="60%" stop-color="#0F0F14" />
+      <stop offset="100%" stop-color="#060608" />
+    </radialGradient>
+
+    <linearGradient id="gradOrangeShield" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFA400" />
+      <stop offset="50%" stop-color="#FF5500" />
+      <stop offset="100%" stop-color="#E02800" />
+    </linearGradient>
+
+    <linearGradient id="gradGreenShield" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#00FFA8" />
+      <stop offset="50%" stop-color="#00FF87" />
+      <stop offset="100%" stop-color="#00B853" />
+    </linearGradient>
+
+    <filter id="glowOrangeShield" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0" stdDeviation="14" flood-color="#FF5500" flood-opacity="0.6"/>
+    </filter>
+    <filter id="glowGreenShield" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0" stdDeviation="14" flood-color="#00FF87" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+
+  <!-- Container -->
+  <rect width="512" height="512" rx="116" fill="url(#bg_shield)" />
+  <rect width="510" height="510" x="1" y="1" rx="115" stroke="#262734" stroke-width="2" />
+
+  <!-- Ambient Glows -->
+  <circle cx="190" cy="256" r="130" fill="#FF5500" opacity="0.13" filter="blur(40px)" />
+  <circle cx="322" cy="256" r="130" fill="#00FF87" opacity="0.13" filter="blur(40px)" />
+
+  <!-- DUAL HEXAGONAL MUSCLE & ORGANIC LEAF SHIELD (SANS TRAIT GRIS NI POINT BLANC) -->
+  <g transform="translate(0, 0)">
+    
+    <!-- GAUCHE : FORCE / POIDS HEXAGONAL (Dumbbell Hex / Musculation) -->
+    <!-- Demi-hexagone massif en néon orange -->
+    <path d="M 256 120 L 140 186 V 326 L 256 392" 
+          stroke="url(#gradOrangeShield)" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" filter="url(#glowOrangeShield)" />
+
+    <!-- Disque de fonte interne (géométrie prismatique biseautée) -->
+    <path d="M 230 180 L 175 212 V 300 L 230 332" 
+          stroke="url(#gradOrangeShield)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" opacity="0.85" filter="url(#glowOrangeShield)" />
+
+    <!-- Crantage / Poignée moletée de l'haltère -->
+    <rect x="236" y="240" width="12" height="32" rx="4" fill="url(#gradOrangeShield)" />
+
+    <!-- DROITE : NUTRITION / POMME & FEUILLE GÉOMÉTRIQUE BIOLOGIQUE (Vert Néon) -->
+    <!-- Arche organique dessinant à la fois le bouclier et la silhouette d'une pomme / fruit sain -->
+    <path d="M 256 120 C 340 120, 400 170, 400 240 C 400 320, 320 375, 256 392" 
+          stroke="url(#gradGreenShield)" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" filter="url(#glowGreenShield)" />
+
+    <!-- Feuille supérieure et tige de nutrition -->
+    <path d="M 256 120 C 265 80, 310 70, 335 85 C 335 115, 295 125, 256 120 Z" 
+          fill="url(#gradGreenShield)" filter="url(#glowGreenShield)" />
+
+    <!-- Tranche d'avocat / contour micronutriments interne -->
+    <path d="M 275 190 C 330 205, 345 270, 310 315 C 290 340, 275 330, 275 330" 
+          stroke="url(#gradGreenShield)" stroke-width="14" stroke-linecap="round" opacity="0.85" filter="url(#glowGreenShield)" />
+    
+    <!-- Noyau végétal bio-actif -->
+    <circle cx="295" cy="265" r="14" fill="url(#gradGreenShield)" filter="url(#glowGreenShield)" />
+
+  </g>
+</svg>
