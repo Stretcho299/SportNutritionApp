@@ -24,6 +24,7 @@ type PersistedStore = {
           weightKg: number | null;
           restSeconds: number;
           restEndsAt?: number;
+          restDurationSeconds?: number;
         }>;
       }>;
     };
@@ -559,7 +560,7 @@ test("syncs planned rest without changing an active chrono", async ({
 }) => {
   await prepareWorkout(page, "1");
   await addExercise(page, "Exercice B", "1");
-  await chooseValue(page, "Repos (secondes)", 120);
+  await chooseValue(page, "Repos (secondes)", 30);
   await page.getByRole("button", { name: /Démarrer la séance/i }).click();
   const a = page.getByRole("region", { name: "Séries de Exercice A" });
   await a.getByRole("button", { name: "Lancer le repos" }).click();
@@ -572,7 +573,7 @@ test("syncs planned rest without changing an active chrono", async ({
   const before = await readPersistedStore(page);
   const restEndsAt =
     before.sessions[0].execution.exercises[0].sets[0].restEndsAt;
-  await chooseValue(page, "Repos (secondes)", 150);
+  await chooseValue(page, "Repos (secondes)", 60);
   await expect
     .poll(async () => {
       const store = await readPersistedStore(page);
@@ -580,10 +581,21 @@ test("syncs planned rest without changing an active chrono", async ({
         store.templates[0].exercises[0].plannedSets[0].restSeconds,
         store.sessions[0].execution.exercises[0].sets[0].restSeconds,
         store.sessions[0].execution.exercises[0].sets[0].restEndsAt,
+        store.sessions[0].execution.exercises[0].sets[0].restDurationSeconds,
       ];
     })
-    .toEqual([150, 150, restEndsAt]);
+    .toEqual([60, 60, restEndsAt, 30]);
   await expect(page.getByRole("timer")).toBeVisible();
+  await page.reload();
+  await page.locator(".workout-card").click();
+  await expect(page.getByRole("timer")).toBeVisible();
+  await expect
+    .poll(async () => {
+      const store = await readPersistedStore(page);
+      const set = store.sessions[0].execution.exercises[0].sets[0];
+      return [set.restEndsAt, set.restDurationSeconds, set.restSeconds];
+    })
+    .toEqual([restEndsAt, 30, 60]);
   await a.getByRole("button", { name: "Mettre fin au repos" }).click();
   await page
     .getByRole("alertdialog", { name: "Mettre fin au repos ?" })

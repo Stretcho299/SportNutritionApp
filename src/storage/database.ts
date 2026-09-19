@@ -337,6 +337,7 @@ export type ExecutedSet = {
   weightKg: number | null;
   restSeconds: number;
   restEndsAt?: number;
+  restDurationSeconds?: number;
 };
 export type ExecutedExercise = {
   exerciseId: string;
@@ -612,6 +613,7 @@ export const startExecutedSetRest = (
                     ...set,
                     status: "resting",
                     restEndsAt: now + set.restSeconds * 1000,
+                    restDurationSeconds: set.restSeconds,
                   }
                 : set,
             ),

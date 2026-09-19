@@ -96,7 +96,7 @@ export function WorkoutProgress({
             0,
             Math.ceil(((resting.restEndsAt ?? clock) - clock) / 1000),
           )}
-          total={resting.restSeconds}
+          total={resting.restDurationSeconds ?? resting.restSeconds}
         />
       )}
     </section>

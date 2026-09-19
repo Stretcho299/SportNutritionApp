@@ -19,11 +19,12 @@ it("counts only treated sets and keeps the real rest visible when another exerci
   execution.exercises[0].sets[2] = {
     ...execution.exercises[0].sets[2],
     status: "resting",
-    restSeconds: 90,
+    restSeconds: 150,
     restEndsAt: 91000,
+    restDurationSeconds: 90,
   };
   const before = structuredClone(execution);
-  render(
+  const { container } = render(
     <WorkoutProgress
       workout={workout}
       execution={execution}
@@ -35,6 +36,13 @@ it("counts only treated sets and keeps the real rest visible when another exerci
   expect(screen.getByRole("progressbar")).toHaveAttribute("max", "5");
   expect(screen.getByText("Squat · Série 3")).toBeInTheDocument();
   expect(screen.getByRole("timer")).toHaveTextContent("1:00");
+  expect(
+    Number(
+      container
+        .querySelector(".countdown-value")
+        ?.getAttribute("stroke-dashoffset"),
+    ),
+  ).toBeCloseTo(100 * (1 - 60 / 90));
   expect(execution).toEqual(before);
 });
 
