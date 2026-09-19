@@ -11,6 +11,8 @@ import {
   finishExecutedRest,
   loadWorkouts,
   loadWorkoutStore,
+  removeExecutedExercise,
+  removeExecutedSet,
   removeExecutedUpcomingSet,
   saveWorkouts,
   saveWorkoutStore,
@@ -18,6 +20,7 @@ import {
   startExecutedSetRest,
   startWorkoutExecution,
   type Workout,
+  updateExecutedSet,
 } from "./database";
 
 beforeEach(() => vi.stubGlobal("indexedDB", new IDBFactory()));
@@ -249,6 +252,128 @@ it("preserves independent exercise progress when changing exercises", () => {
   ).toBe("active");
 });
 
+it("does not activate another exercise after finishing a rest", () => {
+  let workout = addExercise(createWorkout("Push"), "Bench", 1, 30);
+  workout = addExercise(workout, "Row", 1, 30);
+  const first = workout.exercises[0];
+  let execution = startWorkoutExecution(workout, 1000);
+  execution = startExecutedSetRest(
+    execution,
+    first.id,
+    first.plannedSets[0].id,
+    1000,
+  );
+  execution = finishExecutedRest(execution);
+  expect(execution.exercises.map((exercise) => exercise.status)).toEqual([
+    "completed",
+    "upcoming",
+  ]);
+});
+
+it("does not activate another exercise after finishing an exercise", () => {
+  let workout = addExercise(createWorkout("Push"), "Bench", 1, 30);
+  workout = addExercise(workout, "Row", 1, 30);
+  const first = workout.exercises[0];
+  const execution = skipExecutedExercise(
+    startWorkoutExecution(workout, 1000),
+    first.id,
+  );
+  expect(execution.exercises.map((exercise) => exercise.status)).toEqual([
+    "completed",
+    "upcoming",
+  ]);
+});
+
+it("removes an active non-performed set without advancing the session", () => {
+  let workout = addExercise(createWorkout("Push"), "Bench", 2, 30);
+  workout = addExercise(workout, "Row", 1, 30);
+  const execution = startWorkoutExecution(workout, 1000);
+  const next = removeExecutedSet(
+    execution,
+    workout.exercises[0].id,
+    workout.exercises[0].plannedSets[0].id,
+  );
+  expect(next.exercises[0]).toMatchObject({ status: "upcoming" });
+  expect(next.exercises[0].sets).toHaveLength(1);
+  expect(next.exercises[0].sets[0].status).toBe("upcoming");
+  expect(next.exercises[1].status).toBe("upcoming");
+});
+
+it("archives performed sets when their exercise is removed", () => {
+  const workout = addExercise(
+    addExercise(createWorkout("Push"), "Bench", 4, 30),
+    "Row",
+    1,
+    30,
+  );
+  const bench = workout.exercises[0];
+  let execution = startWorkoutExecution(workout, 1000);
+  for (const set of bench.plannedSets.slice(0, 2)) {
+    execution = startExecutedSetRest(execution, bench.id, set.id, 1000);
+    execution = finishExecutedRest(execution);
+  }
+  execution = removeExecutedExercise(execution, bench.id);
+  expect(execution.exercises.map((exercise) => exercise.exerciseId)).toEqual([
+    workout.exercises[1].id,
+  ]);
+  expect(execution.archivedExercises?.[0].sets).toHaveLength(2);
+  expect(execution.archivedExercises?.[0].sets).toEqual(
+    expect.arrayContaining([expect.objectContaining({ status: "performed" })]),
+  );
+});
+
+it("reopens a ready session when a new exercise is added", () => {
+  const workout = addExercise(createWorkout("Push"), "Bench", 1, 30);
+  const completedExercise = workout.exercises[0];
+  let execution = startWorkoutExecution(workout, 1000);
+  execution = startExecutedSetRest(
+    execution,
+    completedExercise.id,
+    completedExercise.plannedSets[0].id,
+    1000,
+  );
+  expect(execution.status).toBe("readyToFinish");
+  const expanded = addExercise(workout, "Row", 1, 30);
+  const reopened = addExerciseToExecution(execution, expanded.exercises[1]);
+  expect(reopened.status).toBe("inProgress");
+  expect(reopened.exercises[1].status).toBe("upcoming");
+});
+
+it("persists session values without changing the template", async () => {
+  const template = addExercise(createWorkout("Push"), "Bench", 1, 30);
+  const set = template.exercises[0].plannedSets[0];
+  const sessionExecution = updateExecutedSet(
+    startWorkoutExecution(template, 1000),
+    template.exercises[0].id,
+    set.id,
+    "weightKg",
+    80,
+  );
+  const withReps = updateExecutedSet(
+    sessionExecution,
+    template.exercises[0].id,
+    set.id,
+    "repetitions",
+    8,
+  );
+  await saveWorkouts([{ ...template, execution: withReps }]);
+  const store = await loadWorkoutStore();
+  expect(store.templates[0].exercises[0].plannedSets[0]).toMatchObject({
+    weightKg: null,
+    repetitions: null,
+  });
+  expect(store.sessions[0].execution.exercises[0].sets[0]).toMatchObject({
+    weightKg: 80,
+    repetitions: 8,
+  });
+  expect(
+    createWorkoutSession(template, 2000).execution.exercises[0].sets[0],
+  ).toMatchObject({
+    weightKg: null,
+    repetitions: null,
+  });
+});
+
 it("keeps completed execution final and omits the final rest", async () => {
   let workout = addExercise(createWorkout("Push"), "Bench", 1, 30);
   workout = addExercise(workout, "Row", 1, 30);
@@ -263,7 +388,8 @@ it("keeps completed execution final and omits the final rest", async () => {
   );
   expect(execution.exercises[0].sets[0].status).toBe("resting");
   execution = finishExecutedRest(execution);
-  expect(execution.exercises[1].sets[0].status).toBe("active");
+  expect(execution.exercises[1].sets[0].status).toBe("upcoming");
+  execution = activateExecutedExercise(execution, row.id);
   execution = startExecutedSetRest(
     execution,
     row.id,
@@ -285,7 +411,7 @@ it("keeps completed execution final and omits the final rest", async () => {
   expect((await loadWorkouts())[0].execution).toEqual(completed);
 });
 
-it("does not complete an exercise or activate the next one when its last upcoming set is removed", () => {
+it("marks an exercise without remaining sets complete without activating the next one", () => {
   let workout = addExercise(createWorkout("Push"), "Bench", 3, 30);
   workout = addExercise(workout, "Row", 1, 30);
   const bench = workout.exercises[0];
@@ -310,7 +436,7 @@ it("does not complete an exercise or activate the next one when its last upcomin
     bench.id,
     bench.plannedSets[2].id,
   );
-  expect(next.exercises[0].status).toBe("active");
+  expect(next.exercises[0].status).toBe("completed");
   expect(next.exercises[1].status).toBe("upcoming");
   expect(next.exercises[1].sets[0].status).toBe("upcoming");
 });

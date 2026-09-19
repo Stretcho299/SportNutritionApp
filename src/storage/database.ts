@@ -218,7 +218,7 @@ export async function loadWorkouts(): Promise<Workout[]> {
   });
 }
 
-export async function saveWorkouts(workouts: Workout[]) {
+async function persistWorkouts(workouts: Workout[]) {
   const existing = globalThis.indexedDB
     ? await loadWorkoutStore()
     : migrateStore(JSON.parse(localStorage.getItem(key) ?? "[]"));
@@ -252,11 +252,20 @@ export async function saveWorkouts(workouts: Workout[]) {
   }
   const nextStore = { version: 2 as const, templates, sessions };
   if (!globalThis.indexedDB) {
-    void saveWorkoutStore(nextStore);
+    await saveWorkoutStore(nextStore);
     return;
   }
   await saveWorkoutStore(nextStore);
 }
+
+let saveWorkoutsQueue: Promise<void> = Promise.resolve();
+
+export function saveWorkouts(workouts: Workout[]) {
+  if (!globalThis.indexedDB) return persistWorkouts(workouts);
+  saveWorkoutsQueue = saveWorkoutsQueue.then(() => persistWorkouts(workouts));
+  return saveWorkoutsQueue;
+}
+
 export const __storageKey = key;
 export type SetExecutionStatus =
   "upcoming" | "active" | "resting" | "performed" | "skipped";
@@ -280,6 +289,7 @@ export type WorkoutExecution = {
   startedAt: number;
   completedAt?: number;
   exercises: ExecutedExercise[];
+  archivedExercises?: ExecutedExercise[];
 };
 const isTerminalSet = (set: ExecutedSet) =>
   set.status === "performed" || set.status === "skipped";
@@ -295,7 +305,7 @@ const normalizeExecution = (execution: WorkoutExecution): WorkoutExecution => {
       restingSeen = true;
       return set;
     });
-    const completed = sets.every(isTerminalSet);
+    const completed = sets.length === 0 || sets.every(isTerminalSet);
     return {
       ...exercise,
       sets,
@@ -350,19 +360,6 @@ export const activateExecutedExercise = (
         : exercise;
     }),
   };
-};
-
-const activateNextUpcomingExercise = (execution: WorkoutExecution) => {
-  const normalized = normalizeExecution(execution);
-  if (normalized.status !== "inProgress") return normalized;
-  const next = normalized.exercises.find(
-    (exercise) =>
-      exercise.status === "upcoming" &&
-      exercise.sets.some((set) => set.status === "upcoming"),
-  );
-  return next
-    ? activateExecutedExercise(normalized, next.exerciseId)
-    : normalized;
 };
 
 export const startWorkoutExecution = (
@@ -582,9 +579,9 @@ export const finishExecutedRest = (
   const currentExercise = settled.exercises.find(
     (exercise) => exercise.exerciseId === current,
   )!;
-  if (currentExercise.status === "completed")
-    return activateNextUpcomingExercise(settled);
-  return activateExecutedExercise(settled, current);
+  return currentExercise.status === "completed"
+    ? settled
+    : activateExecutedExercise(settled, current);
 };
 
 export const skipExecutedExercise = (
@@ -613,10 +610,10 @@ export const skipExecutedExercise = (
           },
     ),
   });
-  return activateNextUpcomingExercise(skipped);
+  return skipped;
 };
 
-export const removeExecutedUpcomingSet = (
+export const removeExecutedSet = (
   execution: WorkoutExecution,
   exerciseId: string,
   setId: string,
@@ -625,8 +622,8 @@ export const removeExecutedUpcomingSet = (
   const target = execution.exercises
     .find((exercise) => exercise.exerciseId === exerciseId)
     ?.sets.find((set) => set.setId === setId);
-  if (target?.status !== "upcoming") return execution;
-  return {
+  if (!target || isTerminalSet(target)) return execution;
+  return normalizeExecution({
     ...execution,
     exercises: execution.exercises.map((exercise) =>
       exercise.exerciseId !== exerciseId
@@ -636,7 +633,33 @@ export const removeExecutedUpcomingSet = (
             sets: exercise.sets.filter((set) => set.setId !== setId),
           },
     ),
-  };
+  });
+};
+
+export const removeExecutedUpcomingSet = removeExecutedSet;
+
+export const removeExecutedExercise = (
+  execution: WorkoutExecution,
+  exerciseId: string,
+): WorkoutExecution => {
+  if (execution.status !== "inProgress") return execution;
+  const target = execution.exercises.find(
+    (exercise) => exercise.exerciseId === exerciseId,
+  );
+  if (!target) return execution;
+  const performed = target.sets.filter(isTerminalSet);
+  return normalizeExecution({
+    ...execution,
+    exercises: execution.exercises.filter(
+      (exercise) => exercise.exerciseId !== exerciseId,
+    ),
+    archivedExercises: performed.length
+      ? [
+          ...(execution.archivedExercises ?? []),
+          { ...target, status: "completed", sets: performed },
+        ]
+      : execution.archivedExercises,
+  });
 };
 
 export const completeWorkoutExecution = (

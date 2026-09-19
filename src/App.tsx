@@ -20,7 +20,8 @@ import {
   finishExecutedRest,
   loadWorkoutStore,
   type WorkoutStore,
-  removeExecutedUpcomingSet,
+  removeExecutedExercise,
+  removeExecutedSet,
   reorder,
   saveWorkouts,
   skipExecutedExercise,
@@ -220,7 +221,7 @@ export default function App() {
       );
       const addedExercise = nextWorkout.exercises.at(-1)!;
       const nextExecution =
-        workout.execution?.status === "inProgress"
+        workout.execution && workout.execution.status !== "completed"
           ? addExerciseToExecution(workout.execution, addedExercise)
           : workout.execution;
       update(
@@ -285,6 +286,9 @@ export default function App() {
                 exercises: sort(w.exercises)
                   .filter((x) => x.id !== exercise.id)
                   .map((x, position) => ({ ...x, position })),
+                execution: w.execution
+                  ? removeExecutedExercise(w.execution, exercise.id)
+                  : undefined,
               }
             : w,
         ),
@@ -364,7 +368,7 @@ export default function App() {
               ...w,
               exercises: nextExercises,
               execution:
-                execution?.status === "inProgress"
+                execution && execution.status !== "completed"
                   ? addSetToExecution(
                       execution,
                       exercise.id,
@@ -378,9 +382,13 @@ export default function App() {
   const removeSet = (id: string) => {
     if (!workout || !exercise) return;
     const current = executionSet(id);
-    const firstSetId = sort(exercise.plannedSets)[0]?.id;
-    if (execution?.status === "inProgress" && id === firstSetId) return;
-    if (execution && current?.status !== "upcoming") return;
+    if (
+      execution &&
+      (!current ||
+        current.status === "performed" ||
+        current.status === "skipped")
+    )
+      return;
     const set = exercise.plannedSets.find((item) => item.id === id);
     if (!set) return;
     const hasData =
@@ -405,7 +413,7 @@ export default function App() {
                       },
                 ),
                 execution: w.execution
-                  ? removeExecutedUpcomingSet(w.execution, exercise.id, id)
+                  ? removeExecutedSet(w.execution, exercise.id, id)
                   : undefined,
               },
         ),
@@ -447,6 +455,17 @@ export default function App() {
     );
   };
   const isWorkoutDetail = screen === "detail" && !!workout;
+  const displayedSets = exercise ? sort(exercise.plannedSets) : [];
+  const isFirstPendingSet = (setId: string) => {
+    const index = displayedSets.findIndex((set) => set.id === setId);
+    return (
+      index >= 0 &&
+      displayedSets.slice(0, index).every((set) => {
+        const status = executionSet(set.id)?.status;
+        return status === "performed" || status === "skipped";
+      })
+    );
+  };
   const isMenu =
     dialog === "addMenu" || dialog === "organizeMenu" || dialog === "reorder";
   return (
@@ -602,7 +621,7 @@ export default function App() {
                           requestConfirmation({
                             title: "Mettre fin à cet exercice ?",
                             description:
-                              "Les séries restantes seront ignorées et vous passerez à l’exercice suivant.",
+                              "Les séries restantes seront ignorées.",
                             confirmLabel: "Mettre fin",
                             onConfirm: () =>
                               updateExecution(
@@ -662,7 +681,7 @@ export default function App() {
                   <p className="set-exercise-name">{exercise.name}</p>
                 )}
                 <ul>
-                  {sort(exercise.plannedSets).map((s, i) => (
+                  {displayedSets.map((s, i) => (
                     <li
                       className={
                         "set-block status-" +
@@ -803,7 +822,7 @@ export default function App() {
                       )}
                       {(executionSet(s.id)?.status === "active" ||
                         (executionSet(s.id)?.status === "upcoming" &&
-                          i === 0)) && (
+                          isFirstPendingSet(s.id))) && (
                         <button
                           className="rest-icon-button rest-start-button"
                           aria-label="Lancer le repos"
@@ -847,8 +866,9 @@ export default function App() {
                         </button>
                       )}
                       {(!execution ||
-                        (executionSet(s.id)?.status === "upcoming" &&
-                          i > 0)) && (
+                        (executionSet(s.id) &&
+                          executionSet(s.id)?.status !== "performed" &&
+                          executionSet(s.id)?.status !== "skipped")) && (
                         <div className="order">
                           <button onClick={() => removeSet(s.id)}>
                             <Icon name="trash" size={15} />

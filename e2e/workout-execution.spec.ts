@@ -29,6 +29,43 @@ type PersistedStore = {
   }>;
 };
 
+async function addExercise(page: Page, name: string, count = "1") {
+  await page.getByRole("button", { name: /Gérer les exercices/i }).click();
+  await page
+    .getByRole("dialog", { name: /Actions de la séance/i })
+    .getByRole("button", { name: /Ajouter un exercice/i })
+    .click();
+  await page.getByRole("textbox", { name: "Nom" }).fill(name);
+  await page.getByLabel(/Nombre de séries initiales/i).fill(count);
+  await page
+    .getByRole("spinbutton", { name: "Repos par défaut (secondes)" })
+    .fill("30");
+  await page.getByRole("button", { name: /Enregistrer/i }).click();
+}
+
+async function chooseValue(page: Page, label: string, value: number) {
+  await page.getByRole("button", { name: label, exact: true }).first().click();
+  const dialog = page.getByRole("dialog", { name: `Choisir ${label}` });
+  const listbox = label === "Charge (kg)" ? "Kilogrammes" : "Répétitions";
+  await dialog
+    .getByRole("listbox", { name: listbox })
+    .getByRole("option", { name: String(value), exact: true })
+    .click();
+  await dialog.getByRole("button", { name: "Valider" }).click();
+}
+
+async function finishRest(
+  page: Page,
+  region: import("@playwright/test").Locator,
+) {
+  await region.getByRole("button", { name: "Lancer le repos" }).click();
+  await region.getByRole("button", { name: "Mettre fin au repos" }).click();
+  await page
+    .getByRole("alertdialog", { name: "Mettre fin au repos ?" })
+    .getByRole("button", { name: "Mettre fin" })
+    .click();
+}
+
 async function prepareWorkout(page, setCount = "2") {
   await page.goto("/");
   await page.evaluate(() => localStorage.clear());
@@ -107,7 +144,7 @@ test("does not activate the next exercise when deleting an upcoming set", async 
     .getByRole("button", { name: "Mettre fin" })
     .click();
   await expect(tabs.nth(0)).toHaveClass(/execution-completed/);
-  await expect(tabs.nth(1)).toHaveClass(/execution-active/);
+  await expect(tabs.nth(1)).toHaveClass(/execution-upcoming/);
 });
 
 test("starts from the selected exercise and keeps other tabs upcoming", async ({
@@ -140,6 +177,185 @@ test("starts from the selected exercise and keeps other tabs upcoming", async ({
   await tabs.nth(2).getByRole("button").click();
   await expect(tabs.nth(2)).toHaveClass(/execution-upcoming/);
   await expect(tabs.nth(1)).toHaveClass(/execution-active/);
+});
+
+test("finishing exercise A does not activate exercise B", async ({ page }) => {
+  await prepareWorkout(page, "1");
+  await addExercise(page, "Exercice B", "1");
+  const tabs = page.getByRole("list", { name: "Exercices" }).locator("li");
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  const a = page.getByRole("region", { name: "Séries de Exercice A" });
+  await finishRest(page, a);
+  await expect(tabs.nth(0)).toHaveClass(/execution-completed/);
+  await expect(tabs.nth(1)).toHaveClass(/execution-upcoming/);
+});
+
+test("finishing exercise A explicitly does not activate exercise B", async ({
+  page,
+}) => {
+  await prepareWorkout(page, "1");
+  await addExercise(page, "Exercice B", "1");
+  const tabs = page.getByRole("list", { name: "Exercices" }).locator("li");
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  await page.getByRole("button", { name: "Terminer l’exercice" }).click();
+  await page
+    .getByRole("alertdialog", { name: "Mettre fin à cet exercice ?" })
+    .getByRole("button", { name: "Mettre fin" })
+    .click();
+  await expect(tabs.nth(0)).toHaveClass(/execution-completed/);
+  await expect(tabs.nth(1)).toHaveClass(/execution-upcoming/);
+});
+
+test("deletes an active non-performed set", async ({ page }) => {
+  await prepareWorkout(page, "2");
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  const region = page.getByRole("region", { name: "Séries de Exercice A" });
+  await region
+    .getByRole("listitem")
+    .first()
+    .getByRole("button", { name: "Supprimer" })
+    .click();
+  await expect(region.getByRole("listitem")).toHaveCount(1);
+  await expect(region.locator(".set-block").first()).toHaveClass(
+    /status-upcoming/,
+  );
+});
+
+test("removing an untouched four-set exercise removes its work from progress", async ({
+  page,
+}) => {
+  await prepareWorkout(page, "1");
+  await addExercise(page, "Exercice B", "4");
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  await page
+    .getByRole("list", { name: "Exercices" })
+    .getByRole("button")
+    .nth(1)
+    .click();
+  await page.getByRole("button", { name: /Gérer les exercices/i }).click();
+  await page
+    .getByRole("dialog", { name: /Actions de la séance/i })
+    .getByRole("button", { name: /Supprimer l’exercice/i })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Progression de la séance" }),
+  ).toContainText("0/1");
+});
+
+test("removing an exercise keeps performed sets in session progress", async ({
+  page,
+}) => {
+  await prepareWorkout(page, "4");
+  await addExercise(page, "Exercice B", "1");
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  const a = page.getByRole("region", { name: "Séries de Exercice A" });
+  await finishRest(page, a);
+  await finishRest(page, a);
+  await page.getByRole("button", { name: /Gérer les exercices/i }).click();
+  await page
+    .getByRole("dialog", { name: /Actions de la séance/i })
+    .getByRole("button", { name: /Supprimer l’exercice/i })
+    .click();
+  await page
+    .getByRole("alertdialog", { name: "Supprimer cet exercice ?" })
+    .getByRole("button", { name: "Supprimer" })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Progression de la séance" }),
+  ).toContainText("2/3");
+});
+
+test("adding work after all exercises are done hides the finish-session action", async ({
+  page,
+}) => {
+  await prepareWorkout(page, "1");
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  const a = page.getByRole("region", { name: "Séries de Exercice A" });
+  await a.getByRole("button", { name: "Lancer le repos" }).click();
+  await expect(
+    page.getByRole("button", { name: "Terminer la séance" }),
+  ).toBeVisible();
+  await addExercise(page, "Exercice B", "1");
+  await expect(
+    page.getByRole("button", { name: "Terminer la séance" }),
+  ).not.toBeVisible();
+  await page
+    .getByRole("list", { name: "Exercices" })
+    .getByRole("button")
+    .nth(1)
+    .click();
+  await page
+    .getByRole("region", { name: "Séries de Exercice B" })
+    .getByRole("button", { name: "Lancer le repos" })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Terminer la séance" }),
+  ).toBeVisible();
+});
+
+test("persists session kg and reps through exercise changes, reload, and a new session", async ({
+  page,
+}) => {
+  await prepareWorkout(page, "1");
+  await addExercise(page, "Exercice B", "1");
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  await chooseValue(page, "Charge (kg)", 80);
+  await chooseValue(page, "Répétitions", 8);
+  const tabs = page
+    .getByRole("list", { name: "Exercices" })
+    .getByRole("button");
+  await tabs.nth(1).click();
+  await tabs.nth(0).click();
+  await expect(page.getByLabel("Charge (kg)")).toHaveAttribute(
+    "data-value",
+    "80",
+  );
+  await expect(page.getByLabel("Répétitions")).toHaveAttribute(
+    "data-value",
+    "8",
+  );
+  await page.reload();
+  await page.locator(".workout-card").click();
+  await expect(page.getByLabel("Charge (kg)")).toHaveAttribute(
+    "data-value",
+    "80",
+  );
+  await expect(page.getByLabel("Répétitions")).toHaveAttribute(
+    "data-value",
+    "8",
+  );
+  const a = page.getByRole("region", { name: "Séries de Exercice A" });
+  await a.getByRole("button", { name: "Lancer le repos" }).click();
+  await a.getByRole("button", { name: "Mettre fin au repos" }).click();
+  await page
+    .getByRole("alertdialog", { name: "Mettre fin au repos ?" })
+    .getByRole("button", { name: "Mettre fin" })
+    .click();
+  await page
+    .getByRole("list", { name: "Exercices" })
+    .getByRole("button")
+    .nth(1)
+    .click();
+  await page
+    .getByRole("region", { name: "Séries de Exercice B" })
+    .getByRole("button", { name: "Lancer le repos" })
+    .click();
+  await page.getByRole("button", { name: "Terminer la séance" }).click();
+  await page
+    .getByRole("alertdialog", { name: "Terminer la séance ?" })
+    .getByRole("button", { name: "Terminer" })
+    .click();
+  await page.getByRole("button", { name: "Retour aux séances" }).click();
+  await page.locator(".workout-card").click();
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  await expect(page.getByLabel("Charge (kg)")).toHaveAttribute(
+    "data-value",
+    "",
+  );
+  await expect(page.getByLabel("Répétitions")).toHaveAttribute(
+    "data-value",
+    "",
+  );
 });
 
 test("reuses a template and persists independent session snapshots", async ({
@@ -183,6 +399,26 @@ test("reuses a template and persists independent session snapshots", async ({
     page.getByRole("button", { name: "Démarrer la séance" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Démarrer la séance" }).click();
+  await expect
+    .poll(async () =>
+      page.evaluate(async () => {
+        const db = await new Promise<IDBDatabase>((resolve, reject) => {
+          const request = indexedDB.open("sport-nutrition", 2);
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+        return await new Promise<number>((resolve, reject) => {
+          const request = db
+            .transaction("data")
+            .objectStore("data")
+            .get("sport-nutrition-workouts");
+          request.onsuccess = () =>
+            resolve((request.result?.sessions ?? []).length);
+          request.onerror = () => reject(request.error);
+        });
+      }),
+    )
+    .toBe(2);
   const stored = await page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
       const request = indexedDB.open("sport-nutrition", 2);

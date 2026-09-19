@@ -610,7 +610,7 @@ it("reveals a confirmed workout deletion action after a horizontal swipe", async
   expect(storedWorkouts().map((workout) => workout.name)).toEqual(["Pull"]);
 });
 
-it("adds an upcoming exercise during execution without losing the active series", async () => {
+it("adds an upcoming exercise during execution without losing the current series", async () => {
   await openEmptyWorkout();
   createExercise("Squat", 2, 30);
   fireEvent.click(screen.getByText("Démarrer la séance"));
@@ -640,7 +640,7 @@ it("adds an upcoming exercise during execution without losing the active series"
   ]);
 });
 
-it("only offers deletion for an upcoming series during execution", async () => {
+it("offers deletion for every non-performed series during execution", async () => {
   await openEmptyWorkout();
   createExercise("Squat", 3, 30);
   fireEvent.click(screen.getByText("Démarrer la séance"));
@@ -661,7 +661,7 @@ it("only offers deletion for an upcoming series during execution", async () => {
   );
 });
 
-it("never offers or performs deletion of the first series during execution", async () => {
+it("allows deleting the first non-performed series during execution", async () => {
   await openEmptyWorkout();
   createExercise("A", 2, 30);
   createExercise("B", 2, 30);
@@ -672,7 +672,7 @@ it("never offers or performs deletion of the first series during execution", asy
   expect(within(firstExercise).getAllByRole("listitem")[0]).toBeInTheDocument();
   expect(
     within(firstExercise).getAllByRole("listitem")[0].querySelector(".order"),
-  ).not.toBeInTheDocument();
+  ).toBeInTheDocument();
   expect(
     within(within(firstExercise).getAllByRole("listitem")[1]).getByText(
       "Supprimer",
@@ -681,9 +681,7 @@ it("never offers or performs deletion of the first series during execution", asy
 
   selectExercise("A");
   const activeBlocks = within(seriesRegion("A")).getAllByRole("listitem");
-  expect(
-    within(activeBlocks[0]).queryByText("Supprimer"),
-  ).not.toBeInTheDocument();
+  expect(within(activeBlocks[0]).getByText("Supprimer")).toBeInTheDocument();
   expect(within(activeBlocks[1]).getByText("Supprimer")).toBeInTheDocument();
   fireEvent.click(within(activeBlocks[0]).getByText("Lancer le repos"));
   fireEvent.click(within(activeBlocks[0]).getByText("Terminer le repos"));
@@ -696,9 +694,7 @@ it("never offers or performs deletion of the first series during execution", asy
   expect(
     within(activeBlocks[0]).queryByText("Supprimer"),
   ).not.toBeInTheDocument();
-  expect(
-    within(activeBlocks[1]).queryByText("Supprimer"),
-  ).not.toBeInTheDocument();
+  expect(within(activeBlocks[1]).getByText("Supprimer")).toBeInTheDocument();
 });
 
 it("keeps a completed workout final after returning home and reloading", async () => {

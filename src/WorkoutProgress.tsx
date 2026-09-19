@@ -43,7 +43,10 @@ export function WorkoutProgress({
   clock: number;
   selectedExerciseId: string;
 }) {
-  const sets = execution.exercises.flatMap((exercise) => exercise.sets);
+  const sets = [
+    ...execution.exercises,
+    ...(execution.archivedExercises ?? []),
+  ].flatMap((exercise) => exercise.sets);
   const settled = sets.filter(
     (set) => set.status === "performed" || set.status === "skipped",
   ).length;

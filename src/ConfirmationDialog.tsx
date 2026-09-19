@@ -1,5 +1,3 @@
-import { useEffect, useRef } from "react";
-
 export type ConfirmationRequest = {
   title: string;
   description: string;
@@ -15,8 +13,6 @@ export function ConfirmationDialog({
   request: ConfirmationRequest;
   onCancel: () => void;
 }) {
-  const cancelButton = useRef<HTMLButtonElement>(null);
-  useEffect(() => cancelButton.current?.focus(), []);
   return (
     <div
       className="modal confirmation-backdrop"
@@ -55,11 +51,7 @@ export function ConfirmationDialog({
         <h2 id="confirmation-title">{request.title}</h2>
         <p id="confirmation-description">{request.description}</p>
         <div className="confirmation-actions">
-          <button
-            ref={cancelButton}
-            className="confirmation-cancel"
-            onClick={onCancel}
-          >
+          <button autoFocus className="confirmation-cancel" onClick={onCancel}>
             {request.cancelLabel ?? "Annuler"}
           </button>
           <button className="confirmation-submit" onClick={request.onConfirm}>
