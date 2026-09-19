@@ -8,7 +8,6 @@ import {
   type ConfirmationRequest,
 } from "./ConfirmationDialog";
 import { SetValuePicker } from "./SetValuePicker";
-import { ActiveRestTimer } from "./ActiveRestTimer";
 import { BottomNavigation } from "./BottomNavigation";
 import { ExerciseNavigator } from "./ExerciseNavigator";
 import { pickerValues } from "./pickerValues";
@@ -60,6 +59,10 @@ export default function App() {
   const [confirmation, setConfirmation] = useState<ConfirmationRequest | null>(
     null,
   );
+  const [exerciseTransition, setExerciseTransition] = useState<
+    "none" | "next" | "previous"
+  >("none");
+  const exerciseTransitionTimeout = useRef<number | undefined>(undefined);
   useEffect(() => {
     void loadWorkoutStore().then((store: WorkoutStore) => {
       const active = store.sessions
@@ -122,14 +125,6 @@ export default function App() {
   const restingSet = restingExecutionExercise?.sets.find(
     (item) => item.status === "resting",
   );
-  const restingWorkoutExercise = workout?.exercises.find(
-    (item) => item.id === restingExecutionExercise?.exerciseId,
-  );
-  const restingSetNumber = restingExecutionExercise
-    ? restingExecutionExercise.sets.findIndex(
-        (item) => item.setId === restingSet?.setId,
-      ) + 1
-    : 0;
   const restRemaining = restingSet?.restEndsAt
     ? Math.max(0, Math.ceil((restingSet.restEndsAt - clock) / 1000))
     : 0;
@@ -537,6 +532,28 @@ export default function App() {
       ),
     );
   };
+  const selectExercise = (nextExerciseId: string) => {
+    const orderedExercises = sort(workout?.exercises ?? []);
+    const previousIndex = orderedExercises.findIndex(
+      (item) => item.id === exerciseId,
+    );
+    const nextIndex = orderedExercises.findIndex(
+      (item) => item.id === nextExerciseId,
+    );
+    if (previousIndex >= 0 && nextIndex >= 0 && previousIndex !== nextIndex) {
+      setExerciseTransition(nextIndex > previousIndex ? "next" : "previous");
+      window.clearTimeout(exerciseTransitionTimeout.current);
+      exerciseTransitionTimeout.current = window.setTimeout(
+        () => setExerciseTransition("none"),
+        240,
+      );
+    }
+    setExerciseId(nextExerciseId);
+  };
+  useEffect(
+    () => () => window.clearTimeout(exerciseTransitionTimeout.current),
+    [],
+  );
   const isWorkoutDetail = screen === "detail" && !!workout;
   const displayedSets = exercise ? sort(exercise.plannedSets) : [];
   const isFirstPendingSet = (setId: string) => {
@@ -651,13 +668,15 @@ export default function App() {
             </section>
           )}
           {exercise && (
-            <div className="workout-preparation">
+            <div
+              className={`workout-preparation transition-${exerciseTransition}`}
+            >
               <div className="workout-fixed-zones">
                 <ExerciseNavigator
                   exercises={sort(workout.exercises)}
                   selectedExerciseId={exerciseId}
                   statusFor={(id) => executionExercise(id)?.status}
-                  onSelect={setExerciseId}
+                  onSelect={selectExercise}
                 />
                 <section className="exercise-hero">
                   <div className="exercise-art" aria-hidden="true">
@@ -724,22 +743,12 @@ export default function App() {
                 ) : execution.status === "completed" ? (
                   <p className="execution-resume">Séance terminée</p>
                 ) : null}
-                {restingSet && restingWorkoutExercise && (
-                  <ActiveRestTimer
-                    remaining={restRemaining}
-                    total={
-                      restingSet.restDurationSeconds ?? restingSet.restSeconds
-                    }
-                    exerciseName={restingWorkoutExercise.name}
-                    setNumber={restingSetNumber}
-                    onFinish={finishCurrentRest}
-                  />
-                )}
                 {execution && (
                   <WorkoutProgress
                     execution={execution}
                     workout={workout}
                     clock={clock}
+                    onFinishRest={finishCurrentRest}
                     selectedExerciseId={exercise.id}
                   />
                 )}

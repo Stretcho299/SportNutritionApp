@@ -49,7 +49,7 @@ function createExercise(name: string, count = 1, rest = 90) {
   });
   fireEvent.click(screen.getByText("Enregistrer"));
 }
-function chooseValue(label: string, value: number, index = 0) {
+async function chooseValue(label: string, value: number, index = 0) {
   fireEvent.click(screen.getAllByLabelText(label)[index]);
   const dialog = screen.getByRole("dialog", { name: `Choisir ${label}` });
   if (label === "Repos (secondes)") {
@@ -75,10 +75,11 @@ function chooseValue(label: string, value: number, index = 0) {
     );
   }
   fireEvent.click(within(dialog).getByRole("button", { name: "Valider" }));
+  await new Promise((resolve) => window.setTimeout(resolve, 190));
 }
-function fillSet(weight: string, index = 0) {
-  chooseValue("Charge (kg)", Number(weight), index);
-  chooseValue("Répétitions", 8, index);
+async function fillSet(weight: string, index = 0) {
+  await chooseValue("Charge (kg)", Number(weight), index);
+  await chooseValue("Répétitions", 8, index);
 }
 function selectExercise(name: string) {
   fireEvent.click(
@@ -132,7 +133,7 @@ it("exposes exactly the requested actions in each header sheet", async () => {
 it("confirms selected exercise deletion from the add menu", async () => {
   await openEmptyWorkout();
   createExercise("Squat");
-  fillSet("50");
+  await fillSet("50");
   createExercise("Row");
   fireEvent.click(within(openAddMenu()).getByText("Supprimer l’exercice"));
   const confirmation = screen.getByRole("alertdialog", {
@@ -187,7 +188,7 @@ it("automatically selects the first exercise and displays its blank initial set"
   expect(
     screen.getByRole("button", { name: "Options avancées" }),
   ).toHaveTextContent(/^Options avancées$/);
-  fillSet("80");
+  await fillSet("80");
   const zone = within(seriesRegion("Squat"));
   expect(zone.getByRole("heading", { name: "SÉRIE 1" })).toBeInTheDocument();
   expect(zone.getByText("Squat")).toBeInTheDocument();
@@ -205,7 +206,7 @@ it("automatically selects the first exercise and displays its blank initial set"
 it("preserves selection when adding exercises and switches both exercise and set data", async () => {
   await openEmptyWorkout();
   createExercise("Squat");
-  fillSet("80");
+  await fillSet("80");
   createExercise("Row");
   expect(screen.getByRole("heading", { name: "Squat" })).toBeInTheDocument();
   expect(screen.getByLabelText("Charge (kg)")).toHaveAttribute(
@@ -220,7 +221,7 @@ it("preserves selection when adding exercises and switches both exercise and set
     "data-value",
     "",
   );
-  fillSet("40");
+  await fillSet("40");
   createExercise("Curl");
   expect(screen.getByRole("heading", { name: "Row" })).toBeInTheDocument();
   expect(screen.getByLabelText("Charge (kg)")).toHaveAttribute(
@@ -237,10 +238,10 @@ it("preserves selection when adding exercises and switches both exercise and set
 it("selects bounded picker values and persists repetitions, half-kilograms and split rest", async () => {
   const view = await openEmptyWorkout();
   createExercise("Squat");
-  fillSet("80");
-  chooseValue("Répétitions", 24);
-  chooseValue("Charge (kg)", 82.5);
-  chooseValue("Repos (secondes)", 419);
+  await fillSet("80");
+  await chooseValue("Répétitions", 24);
+  await chooseValue("Charge (kg)", 82.5);
+  await chooseValue("Repos (secondes)", 419);
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(screen.queryByText("6:59 · Repos prévu")).not.toBeInTheDocument();
   expect(storedWorkouts()[0].exercises[0].plannedSets[0]).toMatchObject({
@@ -333,12 +334,12 @@ it("reorders exercises in a dedicated sheet and retains selection and persisted 
 it("keeps sets in their natural order and renumbers them after deletion", async () => {
   await openEmptyWorkout();
   createExercise("Row");
-  fillSet("40");
+  await fillSet("40");
   createExercise("Squat");
   selectExercise("Squat");
-  fillSet("80");
+  await fillSet("80");
   fireEvent.click(screen.getByText("+ Ajouter une série"));
-  fillSet("90", 1);
+  await fillSet("90", 1);
   expect(screen.queryByLabelText(/Monter la série/)).not.toBeInTheDocument();
   expect(screen.queryByLabelText(/Descendre la série/)).not.toBeInTheDocument();
   expect(
@@ -447,7 +448,7 @@ it.each(["", "0", "-1", "1.5"])(
 it("appends a blank set immediately using the last set rest, including zero", async () => {
   await openEmptyWorkout();
   createExercise("Squat", 1, 120);
-  fillSet("80");
+  await fillSet("80");
   fireEvent.click(screen.getByText("+ Ajouter une série"));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(screen.getAllByLabelText("Charge (kg)")[1]).toHaveAttribute(
@@ -462,13 +463,13 @@ it("appends a blank set immediately using the last set rest, including zero", as
     "data-value",
     "120",
   );
-  chooseValue("Repos (secondes)", 0, 1);
+  await chooseValue("Repos (secondes)", 0, 1);
   fireEvent.click(screen.getByText("+ Ajouter une série"));
   expect(screen.getAllByLabelText("Repos (secondes)")[2]).toHaveAttribute(
     "data-value",
     "0",
   );
-  fillSet("42.5", 2);
+  await fillSet("42.5", 2);
   expect(storedWorkouts()[0].exercises[0].plannedSets[2]).toMatchObject({
     weightKg: 42.5,
     repetitions: 8,
@@ -479,9 +480,9 @@ it("appends a blank set immediately using the last set rest, including zero", as
 it("stores zero reps and zero kilograms as real selected values", async () => {
   await openEmptyWorkout();
   createExercise("Squat");
-  fillSet("0");
+  await fillSet("0");
   expect(storedWorkouts()[0].exercises[0].plannedSets[0].weightKg).toBe(0);
-  chooseValue("Répétitions", 0);
+  await chooseValue("Répétitions", 0);
   expect(storedWorkouts()[0].exercises[0].plannedSets[0]).toMatchObject({
     repetitions: 0,
     weightKg: 0,
@@ -538,8 +539,8 @@ it("shows an active series and advances it when its rest ends", async () => {
   ).toBeInTheDocument();
   expect(within(blocks[0]).getByLabelText("Répétitions")).toBeEnabled();
   expect(within(blocks[1]).getByLabelText("Répétitions")).toBeEnabled();
-  chooseValue("Répétitions", 10);
-  chooseValue("Charge (kg)", 80);
+  await chooseValue("Répétitions", 10);
+  await chooseValue("Charge (kg)", 80);
   fireEvent.click(within(blocks[0]).getByText("Lancer le repos"));
   expect(within(blocks[0]).getByText("Repos en cours")).toBeInTheDocument();
   expect(within(blocks[0]).getByLabelText("Répétitions")).toBeEnabled();

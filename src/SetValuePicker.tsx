@@ -115,11 +115,27 @@ export function SetValuePicker({
   onSave: (value: number) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [closing, setClosing] = useState(false);
   const [selection, setSelection] = useState<number[]>([]);
+  const closeTimeout = useRef<number | undefined>(undefined);
   const dialog = useRef<HTMLElement>(null);
 
+  const closePicker = () => {
+    if (closing) return;
+    setOpen(false);
+    setClosing(true);
+    closeTimeout.current = window.setTimeout(() => {
+      setMounted(false);
+      setClosing(false);
+    }, 180);
+  };
+
   const showPicker = () => {
+    window.clearTimeout(closeTimeout.current);
+    setClosing(false);
     setSelection(columns.map((column) => column.value));
+    setMounted(true);
     setOpen(true);
   };
 
@@ -127,8 +143,10 @@ export function SetValuePicker({
     const value =
       columns.length === 2 ? selection[0] * 60 + selection[1] : selection[0];
     onSave(value);
-    setOpen(false);
+    closePicker();
   };
+
+  useEffect(() => () => window.clearTimeout(closeTimeout.current), []);
 
   useEffect(() => {
     if (!open) return;
@@ -156,23 +174,24 @@ export function SetValuePicker({
           ⌃
         </span>
       </button>
-      {open && (
+      {mounted && (
         <div
-          className="modal picker-backdrop"
+          className={`modal picker-backdrop${closing ? " is-closing" : ""}`}
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setOpen(false);
+            if (event.target === event.currentTarget) closePicker();
           }}
         >
           <section
             ref={dialog}
             className="picker-dialog"
             role="dialog"
+            aria-hidden={closing}
             aria-modal="true"
             aria-label={`Choisir ${label}`}
             onKeyDown={(event) => {
               if (event.key === "Escape") {
                 event.preventDefault();
-                setOpen(false);
+                closePicker();
               }
               if (event.key === "Tab") {
                 const focusable = Array.from(
@@ -197,11 +216,7 @@ export function SetValuePicker({
                 <span>PARAMÈTRE DE SÉRIE</span>
                 <h2>{label}</h2>
               </div>
-              <button
-                type="button"
-                aria-label="Fermer"
-                onClick={() => setOpen(false)}
-              >
+              <button type="button" aria-label="Fermer" onClick={closePicker}>
                 ×
               </button>
             </header>
@@ -229,7 +244,7 @@ export function SetValuePicker({
               <button
                 type="button"
                 className="picker-cancel"
-                onClick={() => setOpen(false)}
+                onClick={closePicker}
               >
                 Annuler
               </button>

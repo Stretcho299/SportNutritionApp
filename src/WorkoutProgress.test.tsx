@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
-import { RestCountdown, WorkoutProgress } from "./WorkoutProgress";
+import { WorkoutProgress } from "./WorkoutProgress";
 import { ActiveRestTimer } from "./ActiveRestTimer";
 import {
   addExercise,
@@ -26,21 +26,13 @@ it("counts only treated sets and keeps the real rest visible when another exerci
   };
   const before = structuredClone(execution);
   render(
-    <>
-      <WorkoutProgress
-        workout={workout}
-        execution={execution}
-        clock={31000}
-        selectedExerciseId={workout.exercises[1].id}
-      />
-      <ActiveRestTimer
-        remaining={60}
-        total={90}
-        exerciseName="Squat"
-        setNumber={3}
-        onFinish={() => undefined}
-      />
-    </>,
+    <WorkoutProgress
+      workout={workout}
+      execution={execution}
+      clock={31000}
+      onFinishRest={() => undefined}
+      selectedExerciseId={workout.exercises[1].id}
+    />,
   );
   expect(screen.getByRole("progressbar")).toHaveAttribute("value", "2");
   expect(screen.getByRole("progressbar")).toHaveAttribute("max", "5");
@@ -51,8 +43,8 @@ it("counts only treated sets and keeps the real rest visible when another exerci
     "90",
   );
   expect(
-    screen.getByRole("timer").querySelector(".mini-timer-track > span"),
-  ).toHaveStyle({ width: `${(1 - 60 / 90) * 100}%` });
+    screen.getByRole("timer").querySelector(".countdown-value"),
+  ).toHaveAttribute("stroke-dashoffset", String(100 * (1 - 60 / 90)));
   expect(execution).toEqual(before);
 });
 
@@ -71,7 +63,9 @@ it("keeps the active series identifiable outside the scrolling cards", () => {
 });
 
 it("renders a finite empty ring for a zero-second rest", () => {
-  const { container } = render(<RestCountdown remaining={0} total={0} />);
+  const { container } = render(
+    <ActiveRestTimer remaining={0} total={0} onFinish={() => undefined} />,
+  );
   expect(screen.getByRole("timer")).toHaveTextContent("0:00");
   expect(container.querySelector(".countdown-value")).toHaveAttribute(
     "stroke-dashoffset",

@@ -574,8 +574,9 @@ test("syncs planned rest without changing an active chrono", async ({
   const timer = page.getByRole("timer");
   await expect(timer).toHaveAttribute("data-reference-seconds", "30");
   const beforeProgress = await timer
-    .locator(".mini-timer-track > span")
-    .evaluate((element) => Number.parseFloat(element.style.width));
+    .locator(".countdown-value")
+    .getAttribute("stroke-dashoffset")
+    .then(Number);
   await chooseValue(page, "Repos (secondes)", 60);
   await expect
     .poll(async () => {
@@ -591,8 +592,9 @@ test("syncs planned rest without changing an active chrono", async ({
   await expect(timer).toBeVisible();
   await expect(timer).toHaveAttribute("data-reference-seconds", "30");
   const afterProgress = await timer
-    .locator(".mini-timer-track > span")
-    .evaluate((element) => Number.parseFloat(element.style.width));
+    .locator(".countdown-value")
+    .getAttribute("stroke-dashoffset")
+    .then(Number);
   expect(afterProgress).toBeGreaterThanOrEqual(beforeProgress);
   expect(afterProgress).toBeLessThan(50);
   await page.reload();

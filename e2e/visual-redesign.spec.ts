@@ -145,7 +145,6 @@ for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
     await page.goto("/");
     await page.evaluate(() => document.fonts.ready);
-    await screenshot(page, info, "empty");
     await page.getByRole("button", { name: "Créer une séance" }).click();
     await page
       .getByRole("textbox", { name: "Nom" })
@@ -176,7 +175,6 @@ for (const width of [390, 320]) {
     await weightPicker.getByRole("button", { name: "Annuler" }).click();
     await choosePickerValue(page, "Charge (kg)", 62.5);
     await page.getByRole("button", { name: "Répétitions" }).first().click();
-    await screenshot(page, info, "picker-repetitions");
     await page
       .getByRole("dialog", { name: "Choisir Répétitions" })
       .getByRole("button", { name: "Fermer" })
@@ -186,7 +184,6 @@ for (const width of [390, 320]) {
       .getByRole("button", { name: "Repos (secondes)" })
       .first()
       .click();
-    await screenshot(page, info, "picker-rest");
     await page
       .getByRole("dialog", { name: "Choisir Repos (secondes)" })
       .getByRole("button", { name: "Fermer" })
@@ -204,7 +201,6 @@ for (const width of [390, 320]) {
     ).toBeVisible();
     expect(await rail.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
     await noOverflow(page);
-    await screenshot(page, info, "long-name");
     await rail.getByRole("button").first().click();
     const fixedBefore = await page
       .locator(".workout-fixed-zones")
@@ -225,10 +221,8 @@ for (const width of [390, 320]) {
       .boundingBox();
     const navBounds = await page.getByRole("navigation").boundingBox();
     expect(addBounds!.y + addBounds!.height).toBeLessThanOrEqual(navBounds!.y);
-    await screenshot(page, info, "scrolled");
     await page.getByRole("button", { name: "Démarrer la séance" }).click();
     await first.scrollIntoViewIfNeeded();
-    await screenshot(page, info, "started");
     await expect(first.locator(".order")).toHaveCount(1);
     await expect(
       page.locator(".set-block").nth(1).locator(".order"),
@@ -236,40 +230,17 @@ for (const width of [390, 320]) {
     await first.getByRole("button", { name: "Lancer le repos" }).click();
     const timer = page.getByRole("timer");
     await expect(timer).toBeVisible();
-    const miniProgress = timer.locator(".mini-timer-track > span");
-    const initialProgress = await miniProgress.evaluate((element) =>
-      Number.parseFloat(element.style.width),
+    const ringProgress = timer.locator(".countdown-value");
+    const initialOffset = Number(
+      await ringProgress.getAttribute("stroke-dashoffset"),
     );
     await expect
-      .poll(() =>
-        miniProgress.evaluate((element) =>
-          Number.parseFloat(element.style.width),
-        ),
-      )
-      .toBeGreaterThan(initialProgress);
+      .poll(() => ringProgress.getAttribute("stroke-dashoffset").then(Number))
+      .toBeGreaterThan(initialOffset);
     await expect(timer).toHaveAttribute("data-reference-seconds", "90");
-    await timer
-      .getByRole("button", { name: "Ouvrir le chrono de repos" })
-      .click();
-    const restOverlay = page.getByRole("dialog", {
-      name: "Détail du repos",
-    });
-    await expect(restOverlay).toBeVisible();
-    await expect(restOverlay).toContainText("/ 1:30");
-    await expect(page.locator(".rest-overlay-backdrop")).toHaveCSS(
-      "opacity",
-      "1",
-    );
-    await screenshot(page, info, "rest-overlay");
-    const overlayClose = restOverlay.getByRole("button", {
-      name: "Fermer le chrono",
-    });
-    const overlayCloseBox = await overlayClose.boundingBox();
-    expect(overlayCloseBox?.width).toBeGreaterThanOrEqual(44);
-    expect(overlayCloseBox?.height).toBeGreaterThanOrEqual(44);
-    await overlayClose.click();
-    await expect(restOverlay).toBeHidden();
-    await expect(timer).toBeVisible();
+    await expect(
+      page.getByRole("dialog", { name: "Détail du repos" }),
+    ).toHaveCount(0);
     await expect(first.getByLabel("Charge (kg)")).toBeEnabled();
     await rail.getByRole("button").nth(1).click();
     await expect(rail.locator("li").nth(1)).toHaveClass(/execution-upcoming/);
@@ -287,6 +258,7 @@ for (const width of [390, 320]) {
     await expect(timer).toBeInViewport();
     // Reload restores the deadline and numeric execution data from IndexedDB.
     await page.reload();
+    await expect(page.locator(".workout-card")).toBeVisible();
     await page.locator(".workout-card").click();
     await expect(timer).toBeVisible();
     await expect(first.getByLabel("Charge (kg)")).toHaveAttribute(
@@ -338,7 +310,6 @@ for (const width of [390, 320]) {
       page.getByRole("button", { name: "Annuler", exact: true }),
     ).toBeInViewport();
     await noOverflow(page);
-    await screenshot(page, info, "short-screen-sheet");
     await page.getByRole("button", { name: "Enregistrer" }).click();
     await page.getByRole("button", { name: "+ Ajouter une série" }).click();
     await noOverflow(page);
@@ -390,4 +361,44 @@ test("finishing the rest marks the set performed and advances progress", async (
   await expect(firstSet).toHaveClass(/status-resting/);
   await expect(firstSet).toHaveClass(/status-performed/, { timeout: 5_000 });
   await expect(page.getByRole("progressbar")).toHaveAttribute("value", "1");
+});
+
+test("exercise navigation animates according to workout order without changing execution state", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Créer une séance" }).click();
+  await page.getByRole("textbox", { name: "Nom" }).fill("Direction");
+  await page.getByRole("button", { name: "Enregistrer" }).click();
+  await page.locator(".workout-card").click();
+  await addExercise(page, "Premier", "1");
+  await addExercise(page, "Deuxième", "1");
+  await addExercise(page, "Troisième", "1");
+
+  const rail = page.getByRole("list", { name: "Exercices" });
+  const preparation = page.locator(".workout-preparation");
+  const statusesBefore = await rail
+    .locator("li")
+    .evaluateAll((items) => items.map((item) => item.className));
+
+  await rail.getByRole("button").nth(1).click();
+  await expect(preparation).toHaveClass(/transition-next/);
+  await expect(page.getByRole("heading", { name: "Deuxième" })).toBeVisible();
+
+  await rail.getByRole("button").nth(2).click();
+  await expect(preparation).toHaveClass(/transition-next/);
+  await expect(page.getByRole("heading", { name: "Troisième" })).toBeVisible();
+
+  await rail.getByRole("button").nth(1).click();
+  await expect(preparation).toHaveClass(/transition-previous/);
+  await expect(page.getByRole("heading", { name: "Deuxième" })).toBeVisible();
+  expect(
+    await rail
+      .locator("li")
+      .evaluateAll((items) =>
+        items.map((item) => item.className.replace("selected ", "")),
+      ),
+  ).toEqual(statusesBefore.map((status) => status.replace("selected ", "")));
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 });
