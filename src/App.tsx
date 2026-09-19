@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
+import "./redesign-v2.css";
 import { Icon } from "./Icon";
 import { WorkoutProgress } from "./WorkoutProgress";
 import {
@@ -7,6 +8,9 @@ import {
   type ConfirmationRequest,
 } from "./ConfirmationDialog";
 import { SetValuePicker } from "./SetValuePicker";
+import { ActiveRestTimer } from "./ActiveRestTimer";
+import { BottomNavigation } from "./BottomNavigation";
+import { ExerciseNavigator } from "./ExerciseNavigator";
 import { pickerValues } from "./pickerValues";
 import {
   activateExecutedExercise,
@@ -52,7 +56,7 @@ export default function App() {
   const [name, setName] = useState("");
   const [initialSetCount, setInitialSetCount] = useState("1");
   const [rest, setRest] = useState(String(defaultRestSeconds));
-  const [clock, setClock] = useState(0);
+  const [clock, setClock] = useState(Date.now);
   const [confirmation, setConfirmation] = useState<ConfirmationRequest | null>(
     null,
   );
@@ -112,9 +116,23 @@ export default function App() {
     executionExercise(exercise?.id ?? "")?.sets.find(
       (item) => item.setId === id,
     );
-  const restingSet = execution?.exercises
-    .flatMap((item) => item.sets)
-    .find((item) => item.status === "resting");
+  const restingExecutionExercise = execution?.exercises.find((item) =>
+    item.sets.some((set) => set.status === "resting"),
+  );
+  const restingSet = restingExecutionExercise?.sets.find(
+    (item) => item.status === "resting",
+  );
+  const restingWorkoutExercise = workout?.exercises.find(
+    (item) => item.id === restingExecutionExercise?.exerciseId,
+  );
+  const restingSetNumber = restingExecutionExercise
+    ? restingExecutionExercise.sets.findIndex(
+        (item) => item.setId === restingSet?.setId,
+      ) + 1
+    : 0;
+  const restRemaining = restingSet?.restEndsAt
+    ? Math.max(0, Math.ceil((restingSet.restEndsAt - clock) / 1000))
+    : 0;
   const updateExecution = useCallback(
     (next: WorkoutExecution) =>
       update(
@@ -217,6 +235,16 @@ export default function App() {
         request.onConfirm();
       },
     });
+  const finishCurrentRest = () => {
+    if (!execution || !restingSet) return;
+    const remaining = restRemaining;
+    requestConfirmation({
+      title: "Mettre fin au repos ?",
+      description: `Il reste ${remaining} ${remaining === 1 ? "seconde" : "secondes"}. La série sera considérée comme terminée et vous passerez à la suivante.`,
+      confirmLabel: "Mettre fin",
+      onConfirm: () => updateExecution(finishExecutedRest(execution)),
+    });
+  };
   const close = () => {
     setDialog(null);
     setName("");
@@ -530,43 +558,64 @@ export default function App() {
       <header
         className={`workout-control${screen === "list" ? " home-header" : ""}`}
       >
-        <p>Sport Nutrition</p>
-        <h1>{screen === "list" ? "Séances" : workout?.name}</h1>
-        {screen !== "list" && (
-          <button
-            aria-label="Retour aux séances"
-            className="link"
-            onClick={() => setScreen("list")}
-          >
-            <>
-              <Icon name="arrow-left" size={17} /> Retour
-            </>
-          </button>
-        )}
-        {isWorkoutDetail && (
-          <div className="control-actions">
-            <button
-              aria-label="Gérer les exercices"
-              onClick={() => setDialog("addMenu")}
-            >
-              <Icon name="plus" />
-            </button>
-            <button
-              aria-label="Réorganiser les exercices"
-              onClick={() => setDialog("organizeMenu")}
-            >
-              <Icon name="reorder" />
-            </button>
+        {screen === "list" ? (
+          <div className="brand-lockup">
+            <img src="/icons/app-logo.svg" alt="" width="42" height="42" />
+            <div>
+              <p>Sport Nutrition</p>
+              <h1>Mes séances</h1>
+            </div>
           </div>
+        ) : (
+          <>
+            <button
+              aria-label="Retour aux séances"
+              className="link"
+              onClick={() => setScreen("list")}
+            >
+              <Icon name="arrow-left" size={19} />
+              <span className="sr-only">Retour</span>
+            </button>
+            <h1>{workout?.name}</h1>
+            {isWorkoutDetail && (
+              <div className="control-actions">
+                <button
+                  aria-label="Gérer les exercices"
+                  onClick={() => setDialog("addMenu")}
+                >
+                  <Icon name="plus" />
+                </button>
+                <button
+                  aria-label="Réorganiser les exercices"
+                  onClick={() => setDialog("organizeMenu")}
+                >
+                  <Icon name="more" />
+                </button>
+              </div>
+            )}
+          </>
         )}
       </header>
       {screen === "list" && (
-        <>
-          <button className="primary" onClick={() => setDialog("workout")}>
-            Créer une séance
+        <section className="workout-library" aria-label="Mes séances">
+          <div className="library-heading">
+            <span>
+              {workouts.length} séance{workouts.length > 1 ? "s" : ""} préparée
+              {workouts.length > 1 ? "s" : ""}
+            </span>
+          </div>
+          <button
+            className="primary create-workout"
+            aria-label="Créer une séance"
+            onClick={() => setDialog("workout")}
+          >
+            <Icon name="plus" size={18} /> Nouvelle séance
           </button>
           {workouts.length === 0 ? (
             <section className="empty">
+              <span className="empty-icon" aria-hidden="true">
+                <Icon name="dumbbell" size={28} />
+              </span>
               <h2>Aucune séance</h2>
               <span>Créez votre première séance.</span>
             </section>
@@ -586,7 +635,7 @@ export default function App() {
               ))}
             </ul>
           )}
-        </>
+        </section>
       )}
       {screen === "detail" && workout && (
         <>
@@ -604,58 +653,22 @@ export default function App() {
           {exercise && (
             <div className="workout-preparation">
               <div className="workout-fixed-zones">
-                <ul className="exercise-tabs" aria-label="Exercices">
-                  {sort(workout.exercises).map((x, i) => (
-                    <li
-                      className={
-                        (x.id === exerciseId ? "selected " : "") +
-                        "execution-" +
-                        (executionExercise(x.id)?.status ?? "upcoming")
-                      }
-                      key={x.id}
-                    >
-                      <button
-                        className="exercise-tab"
-                        aria-pressed={x.id === exerciseId}
-                        onClick={() => setExerciseId(x.id)}
-                      >
-                        <span
-                          className="exercise-tab-circle"
-                          aria-hidden="true"
-                        >
-                          {execution ? (
-                            executionExercise(x.id)?.status === "completed" ? (
-                              <Icon name="check" size={17} />
-                            ) : executionExercise(x.id)?.status === "active" ? (
-                              <Icon name="circle" size={17} strokeWidth={2.4} />
-                            ) : (
-                              <Icon name="circle" size={17} />
-                            )
-                          ) : (
-                            <Icon name="dumbbell" size={17} />
-                          )}
-                        </span>
-                        <span className="exercise-tab-index" aria-hidden="true">
-                          {i + 1}
-                        </span>
-                        <span className="sr-only">{x.name}</span>
-                        <span className="sr-only">
-                          {" "}
-                          ·{" "}
-                          {executionExercise(x.id)?.status === "completed"
-                            ? "Terminé"
-                            : executionExercise(x.id)?.status === "active"
-                              ? "En cours"
-                              : "À venir"}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                <ExerciseNavigator
+                  exercises={sort(workout.exercises)}
+                  selectedExerciseId={exerciseId}
+                  statusFor={(id) => executionExercise(id)?.status}
+                  onSelect={setExerciseId}
+                />
                 <section className="exercise-hero">
+                  <div className="exercise-art" aria-hidden="true">
+                    <Icon name="dumbbell" size={28} />
+                  </div>
                   <div className="exercise-heading">
-                    <p>EXERCICE SÉLECTIONNÉ</p>
-                    <h2>{exercise?.name}</h2>
+                    <h2>{exercise.name}</h2>
+                    <p>
+                      {exercise.plannedSets.length} série
+                      {exercise.plannedSets.length > 1 ? "s" : ""}
+                    </p>
                   </div>
                   <div className="exercise-menu">
                     <button
@@ -695,14 +708,10 @@ export default function App() {
                 <button
                   className="advanced"
                   type="button"
-                  onClick={() =>
-                    alert(
-                      "Les supersets, trisets et circuits arriveront bientôt.",
-                    )
-                  }
+                  aria-expanded="false"
                 >
-                  <Icon name="settings" size={15} />
                   <span>Options avancées</span>
+                  <Icon name="chevron-down" size={15} />
                 </button>
                 {!execution ? (
                   <button className="primary" onClick={startExecution}>
@@ -714,10 +723,17 @@ export default function App() {
                   </button>
                 ) : execution.status === "completed" ? (
                   <p className="execution-resume">Séance terminée</p>
-                ) : (
-                  <p className="execution-resume">
-                    Séance en cours · Reprenez là où vous vous êtes arrêté.
-                  </p>
+                ) : null}
+                {restingSet && restingWorkoutExercise && (
+                  <ActiveRestTimer
+                    remaining={restRemaining}
+                    total={
+                      restingSet.restDurationSeconds ?? restingSet.restSeconds
+                    }
+                    exerciseName={restingWorkoutExercise.name}
+                    setNumber={restingSetNumber}
+                    onFinish={finishCurrentRest}
+                  />
                 )}
                 {execution && (
                   <WorkoutProgress
@@ -760,7 +776,9 @@ export default function App() {
                                   : "À venir"}
                         </p>
                       )}
-                      <h3>SÉRIE {i + 1}</h3>
+                      <h3 aria-label={`SÉRIE ${i + 1}`}>
+                        {String(i + 1).padStart(2, "0")}
+                      </h3>
                       {!execution && <p className="set-status">À venir</p>}
                       <div className="set-metrics">
                         <SetValuePicker
@@ -851,21 +869,6 @@ export default function App() {
                           }
                         />
                       </div>
-                      {executionSet(s.id)?.status === "resting" && (
-                        <p className="rest-timer">
-                          {formatRest(
-                            Math.max(
-                              0,
-                              Math.ceil(
-                                ((executionSet(s.id)?.restEndsAt ?? clock) -
-                                  clock) /
-                                  1000,
-                              ),
-                            ),
-                          )}{" "}
-                          · Repos en cours
-                        </p>
-                      )}
                       {(executionSet(s.id)?.status === "active" ||
                         (executionSet(s.id)?.status === "upcoming" &&
                           isFirstPendingSet(s.id))) && (
@@ -881,34 +884,17 @@ export default function App() {
                           onClick={() => startRest(exercise.id, s.id)}
                         >
                           <Icon name="play" size={16} />
-                          <span className="sr-only">Lancer le repos</span>
+                          <span>Lancer le repos</span>
                         </button>
                       )}
                       {executionSet(s.id)?.status === "resting" && (
                         <button
                           className="rest-icon-button rest-stop-button"
                           aria-label="Mettre fin au repos"
-                          onClick={() => {
-                            const activeSet = executionSet(s.id);
-                            const remaining = Math.max(
-                              0,
-                              Math.ceil(
-                                ((activeSet?.restEndsAt ?? clock) -
-                                  Date.now()) /
-                                  1000,
-                              ),
-                            );
-                            requestConfirmation({
-                              title: "Mettre fin au repos ?",
-                              description: `Il reste ${remaining} ${remaining === 1 ? "seconde" : "secondes"}. La série sera considérée comme terminée et vous passerez à la suivante.`,
-                              confirmLabel: "Mettre fin",
-                              onConfirm: () =>
-                                updateExecution(finishExecutedRest(execution!)),
-                            });
-                          }}
+                          onClick={finishCurrentRest}
                         >
                           <Icon name="stop" size={15} />
-                          <span className="sr-only">Terminer le repos</span>
+                          <span>Terminer le repos</span>
                         </button>
                       )}
                       {(!execution ||
@@ -1086,14 +1072,7 @@ export default function App() {
           </form>
         </Sheet>
       )}
-      <nav aria-label="Navigation principale">
-        <button className="active">
-          <Icon name="home" size={18} /> <span>Séances</span>
-        </button>
-        <button onClick={() => setScreen("list")}>
-          <Icon name="nutrition" size={18} /> <span>Nutrition</span>
-        </button>
-      </nav>
+      <BottomNavigation onWorkouts={() => setScreen("list")} />
     </main>
   );
 }
@@ -1117,6 +1096,16 @@ function WorkoutRow({
     if (distance < -36) setOpen(true);
     if (distance > 36) setOpen(false);
   };
+  const executionSets = workout.execution?.exercises.flatMap(
+    (exercise) => exercise.sets,
+  );
+  const settledSets =
+    executionSets?.filter(
+      (set) => set.status === "performed" || set.status === "skipped",
+    ).length ?? 0;
+  const isActive =
+    workout.execution?.status === "inProgress" ||
+    workout.execution?.status === "readyToFinish";
   return (
     <li
       className={"workout-swipe" + (open ? " open" : "")}
@@ -1145,7 +1134,7 @@ function WorkoutRow({
         <span>Supprimer</span>
       </button>
       <button
-        className="row workout-card"
+        className={`row workout-card${isActive ? " workout-card-active" : ""}`}
         onClick={() => {
           if (moved.current) {
             moved.current = false;
@@ -1158,28 +1147,33 @@ function WorkoutRow({
           onOpen();
         }}
       >
-        <small
-          className={`workout-badge ${workout.execution?.status ?? "planned"}`}
-        >
-          {workout.execution?.status === "completed" ? (
-            <>
-              <Icon name="check" size={13} /> Terminée
-            </>
-          ) : workout.execution ? (
-            <>
-              <Icon name="circle" size={13} strokeWidth={2.4} /> En cours
-            </>
-          ) : (
-            "Préparation"
+        <span className="workout-card-art" aria-hidden="true">
+          <Icon name="dumbbell" size={24} />
+        </span>
+        <span className="workout-card-content">
+          <small
+            className={`workout-badge ${workout.execution?.status ?? "planned"}`}
+          >
+            {isActive ? "Séance en cours" : "Séance préparée"}
+          </small>
+          <strong>{workout.name}</strong>
+          <small>
+            {workout.exercises.length} exercice
+            {workout.exercises.length > 1 ? "s" : ""}
+          </small>
+          {isActive && executionSets && (
+            <span className="workout-card-progress">
+              <span
+                style={{
+                  width: `${executionSets.length ? (settledSets / executionSets.length) * 100 : 0}%`,
+                }}
+              />
+            </span>
           )}
-        </small>
-        <strong>{workout.name}</strong>
-        <small>
-          {workout.exercises.length} exercice
-          {workout.exercises.length > 1 ? "s" : ""}
-        </small>
-        <span className="row-arrow">
-          <Icon name="chevron-down" size={16} />
+        </span>
+        <span className="workout-card-cta">
+          {isActive ? "Reprendre" : "Démarrer"}{" "}
+          <span aria-hidden="true">→</span>
         </span>
       </button>
     </li>

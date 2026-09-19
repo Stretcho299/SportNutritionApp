@@ -1,6 +1,6 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 
-async function addExercise(page: Page, name: string, count = "2") {
+async function addExercise(page: Page, name: string, count = "2", rest = "90") {
   await page.getByRole("button", { name: "Gérer les exercices" }).click();
   await page
     .getByRole("dialog", { name: "Actions de la séance" })
@@ -8,7 +8,7 @@ async function addExercise(page: Page, name: string, count = "2") {
     .click();
   await page.getByRole("textbox", { name: "Nom" }).fill(name);
   await page.getByLabel("Nombre de séries initiales").fill(count);
-  await page.getByLabel("Repos par défaut (secondes)").fill("90");
+  await page.getByLabel("Repos par défaut (secondes)").fill(rest);
   await page.getByRole("button", { name: "Enregistrer" }).click();
 }
 
@@ -26,6 +26,13 @@ async function choosePickerValue(page: Page, label: string, value: number) {
       selected: true,
     }),
   ).toBeVisible();
+  const close = picker.getByRole("button", { name: "Fermer" });
+  const closeBox = await close.boundingBox();
+  expect(closeBox?.width).toBeGreaterThanOrEqual(42);
+  expect(closeBox?.height).toBeGreaterThanOrEqual(42);
+  expect(
+    Math.abs((closeBox?.width ?? 0) - (closeBox?.height ?? 0)),
+  ).toBeLessThan(2);
   if (label === "Repos (secondes)") {
     await picker
       .getByRole("listbox", { name: "Minutes" })
@@ -161,13 +168,29 @@ for (const width of [390, 320]) {
     const weightPicker = page.getByRole("dialog", {
       name: "Choisir Charge (kg)",
     });
+    await screenshot(page, info, "picker-weight");
     await flickWheel(
       page,
       weightPicker.getByRole("listbox", { name: "Kilogrammes" }),
     );
     await weightPicker.getByRole("button", { name: "Annuler" }).click();
     await choosePickerValue(page, "Charge (kg)", 62.5);
+    await page.getByRole("button", { name: "Répétitions" }).first().click();
+    await screenshot(page, info, "picker-repetitions");
+    await page
+      .getByRole("dialog", { name: "Choisir Répétitions" })
+      .getByRole("button", { name: "Fermer" })
+      .click();
     await choosePickerValue(page, "Répétitions", 10);
+    await page
+      .getByRole("button", { name: "Repos (secondes)" })
+      .first()
+      .click();
+    await screenshot(page, info, "picker-rest");
+    await page
+      .getByRole("dialog", { name: "Choisir Repos (secondes)" })
+      .getByRole("button", { name: "Fermer" })
+      .click();
     await choosePickerValue(page, "Repos (secondes)", 90);
     await noOverflow(page);
     await screenshot(page, info, "preparation");
@@ -204,6 +227,8 @@ for (const width of [390, 320]) {
     expect(addBounds!.y + addBounds!.height).toBeLessThanOrEqual(navBounds!.y);
     await screenshot(page, info, "scrolled");
     await page.getByRole("button", { name: "Démarrer la séance" }).click();
+    await first.scrollIntoViewIfNeeded();
+    await screenshot(page, info, "started");
     await expect(first.locator(".order")).toHaveCount(1);
     await expect(
       page.locator(".set-block").nth(1).locator(".order"),
@@ -211,18 +236,40 @@ for (const width of [390, 320]) {
     await first.getByRole("button", { name: "Lancer le repos" }).click();
     const timer = page.getByRole("timer");
     await expect(timer).toBeVisible();
-    const initialOffset = Number(
-      await timer.locator(".countdown-value").getAttribute("stroke-dashoffset"),
+    const miniProgress = timer.locator(".mini-timer-track > span");
+    const initialProgress = await miniProgress.evaluate((element) =>
+      Number.parseFloat(element.style.width),
     );
     await expect
-      .poll(async () =>
-        Number(
-          await timer
-            .locator(".countdown-value")
-            .getAttribute("stroke-dashoffset"),
+      .poll(() =>
+        miniProgress.evaluate((element) =>
+          Number.parseFloat(element.style.width),
         ),
       )
-      .toBeGreaterThan(initialOffset);
+      .toBeGreaterThan(initialProgress);
+    await expect(timer).toHaveAttribute("data-reference-seconds", "90");
+    await timer
+      .getByRole("button", { name: "Ouvrir le chrono de repos" })
+      .click();
+    const restOverlay = page.getByRole("dialog", {
+      name: "Détail du repos",
+    });
+    await expect(restOverlay).toBeVisible();
+    await expect(restOverlay).toContainText("/ 1:30");
+    await expect(page.locator(".rest-overlay-backdrop")).toHaveCSS(
+      "opacity",
+      "1",
+    );
+    await screenshot(page, info, "rest-overlay");
+    const overlayClose = restOverlay.getByRole("button", {
+      name: "Fermer le chrono",
+    });
+    const overlayCloseBox = await overlayClose.boundingBox();
+    expect(overlayCloseBox?.width).toBeGreaterThanOrEqual(44);
+    expect(overlayCloseBox?.height).toBeGreaterThanOrEqual(44);
+    await overlayClose.click();
+    await expect(restOverlay).toBeHidden();
+    await expect(timer).toBeVisible();
     await expect(first.getByLabel("Charge (kg)")).toBeEnabled();
     await rail.getByRole("button").nth(1).click();
     await expect(rail.locator("li").nth(1)).toHaveClass(/execution-upcoming/);
@@ -322,3 +369,25 @@ for (const width of [390, 320]) {
     ).toBeVisible();
   });
 }
+
+test("finishing the rest marks the set performed and advances progress", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Créer une séance" }).click();
+  await page.getByRole("textbox", { name: "Nom" }).fill("Tempo");
+  await page.getByRole("button", { name: "Enregistrer" }).click();
+  await page.locator(".workout-card").click();
+  await addExercise(page, "Squat", "2", "1");
+  await page.getByRole("button", { name: "Démarrer la séance" }).click();
+  const firstSet = page
+    .getByRole("region", { name: "Séries de Squat" })
+    .getByRole("listitem")
+    .first();
+  await firstSet.getByRole("button", { name: "Lancer le repos" }).click();
+  await expect(page.getByRole("timer")).toBeVisible();
+  await expect(firstSet).toHaveClass(/status-resting/);
+  await expect(firstSet).toHaveClass(/status-performed/, { timeout: 5_000 });
+  await expect(page.getByRole("progressbar")).toHaveAttribute("value", "1");
+});

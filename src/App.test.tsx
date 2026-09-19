@@ -22,7 +22,7 @@ const storedWorkouts = (): Workout[] => {
 async function openEmptyWorkout() {
   const view = render(<App />);
   await screen.findByText("Aucune séance");
-  fireEvent.click(screen.getByText("Créer une séance"));
+  fireEvent.click(screen.getByRole("button", { name: "Créer une séance" }));
   fireEvent.change(screen.getByLabelText("Nom"), { target: { value: "Push" } });
   fireEvent.click(screen.getByText("Enregistrer"));
   expect(storedWorkouts()[0].name).toBe("Push");
@@ -572,7 +572,7 @@ it("reveals a confirmed workout deletion action after a horizontal swipe", async
   render(<App />);
   await screen.findByText("Aucune séance");
   const create = (name: string) => {
-    fireEvent.click(screen.getByText("Créer une séance"));
+    fireEvent.click(screen.getByRole("button", { name: "Créer une séance" }));
     fireEvent.change(screen.getByLabelText("Nom"), { target: { value: name } });
     fireEvent.click(screen.getByText("Enregistrer"));
   };
@@ -588,7 +588,9 @@ it("reveals a confirmed workout deletion action after a horizontal swipe", async
   fireEvent.pointerUp(cardButton, { clientX: 80 });
   fireEvent.click(cardButton);
   expect(card).not.toHaveClass("open");
-  expect(screen.getByRole("heading", { name: "Séances" })).toBeInTheDocument();
+  expect(
+    screen.getByRole("heading", { name: "Mes séances" }),
+  ).toBeInTheDocument();
   fireEvent.pointerDown(card, { clientX: 160 });
   fireEvent.pointerMove(card, { clientX: 80 });
   fireEvent.pointerUp(card, { clientX: 80 });
