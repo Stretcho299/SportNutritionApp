@@ -218,13 +218,72 @@ export async function loadWorkouts(): Promise<Workout[]> {
   });
 }
 
+const mergeSessionSnapshot = (
+  previous: WorkoutTemplate,
+  current: Workout,
+): WorkoutTemplate => ({
+  ...previous,
+  exercises: current.exercises.map((exercise) => {
+    const previousExercise = previous.exercises.find(
+      (item) => item.id === exercise.id,
+    );
+    if (!previousExercise) return clone(exercise);
+    return {
+      ...exercise,
+      plannedSets: exercise.plannedSets.map((set) => {
+        const previousSet = previousExercise.plannedSets.find(
+          (item) => item.id === set.id,
+        );
+        return previousSet
+          ? {
+              ...set,
+              weightKg: previousSet.weightKg,
+              repetitions: previousSet.repetitions,
+              restSeconds: previousSet.restSeconds,
+            }
+          : set;
+      }),
+    };
+  }),
+});
+
+const syncTemplateWorkValues = (
+  previous: WorkoutTemplate,
+  execution: WorkoutExecution,
+): WorkoutTemplate => ({
+  ...previous,
+  exercises: previous.exercises.map((exercise) => {
+    const executedExercise = execution.exercises.find(
+      (item) => item.exerciseId === exercise.id,
+    );
+    if (!executedExercise) return exercise;
+    return {
+      ...exercise,
+      plannedSets: exercise.plannedSets.map((set) => {
+        const executedSet = executedExercise.sets.find(
+          (item) => item.setId === set.id,
+        );
+        return executedSet
+          ? {
+              ...set,
+              weightKg: executedSet.weightKg,
+              repetitions: executedSet.repetitions,
+            }
+          : set;
+      }),
+    };
+  }),
+});
+
 async function persistWorkouts(workouts: Workout[]) {
   const existing = globalThis.indexedDB
     ? await loadWorkoutStore()
     : migrateStore(JSON.parse(localStorage.getItem(key) ?? "[]"));
   const templates = workouts.map(({ execution, ...template }) => {
     const previous = existing.templates.find((item) => item.id === template.id);
-    return execution && previous ? previous : template;
+    return execution
+      ? syncTemplateWorkValues(previous ?? template, execution)
+      : template;
   });
   const sessions = [...existing.sessions];
   for (const workout of workouts) {
@@ -240,11 +299,14 @@ async function persistWorkouts(workouts: Workout[]) {
       startedAt: workout.execution.startedAt,
       completedAt: workout.execution.completedAt ?? null,
       status: workout.execution.status,
-      snapshot: clone({
-        id: workout.id,
-        name: workout.name,
-        exercises: workout.exercises,
-      }),
+      snapshot:
+        index >= 0
+          ? mergeSessionSnapshot(sessions[index].snapshot, workout)
+          : clone({
+              id: workout.id,
+              name: workout.name,
+              exercises: workout.exercises,
+            }),
       execution: { ...normalizeExecution(workout.execution), sessionId },
     };
     if (index >= 0) sessions[index] = session;
@@ -452,7 +514,7 @@ export const updateExecutedSet = (
   field: "repetitions" | "weightKg" | "restSeconds",
   value: number | null,
 ): WorkoutExecution => {
-  if (execution.status !== "inProgress") return execution;
+  if (execution.status === "completed") return execution;
   return {
     ...execution,
     exercises: execution.exercises.map((exercise) =>
@@ -461,7 +523,8 @@ export const updateExecutedSet = (
         : {
             ...exercise,
             sets: exercise.sets.map((set) =>
-              set.setId !== setId || set.status !== "active"
+              set.setId !== setId ||
+              (field === "restSeconds" && set.status !== "active")
                 ? set
                 : { ...set, [field]: value },
             ),

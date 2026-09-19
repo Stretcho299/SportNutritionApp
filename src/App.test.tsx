@@ -537,12 +537,12 @@ it("shows an active series and advances it when its rest ends", async () => {
     within(blocks[1]).getByText("À venir", { selector: ".set-status" }),
   ).toBeInTheDocument();
   expect(within(blocks[0]).getByLabelText("Répétitions")).toBeEnabled();
-  expect(within(blocks[1]).getByLabelText("Répétitions")).toBeDisabled();
+  expect(within(blocks[1]).getByLabelText("Répétitions")).toBeEnabled();
   chooseValue("Répétitions", 10);
   chooseValue("Charge (kg)", 80);
   fireEvent.click(within(blocks[0]).getByText("Lancer le repos"));
   expect(within(blocks[0]).getByText("Repos en cours")).toBeInTheDocument();
-  expect(within(blocks[0]).getByLabelText("Répétitions")).toBeDisabled();
+  expect(within(blocks[0]).getByLabelText("Répétitions")).toBeEnabled();
   fireEvent.click(within(blocks[0]).getByText("Terminer le repos"));
   expect(
     screen.getByRole("alertdialog", { name: "Mettre fin au repos ?" }),

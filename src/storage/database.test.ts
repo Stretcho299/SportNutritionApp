@@ -4,6 +4,7 @@ import {
   addExercise,
   addExerciseToExecution,
   addSet,
+  addSetToExecution,
   completeWorkoutExecution,
   createWorkout,
   createWorkoutSession,
@@ -339,7 +340,7 @@ it("reopens a ready session when a new exercise is added", () => {
   expect(reopened.exercises[1].status).toBe("upcoming");
 });
 
-it("persists session values without changing the template", async () => {
+it("synchronizes session work values to the template", async () => {
   const template = addExercise(createWorkout("Push"), "Bench", 1, 30);
   const set = template.exercises[0].plannedSets[0];
   const sessionExecution = updateExecutedSet(
@@ -359,19 +360,100 @@ it("persists session values without changing the template", async () => {
   await saveWorkouts([{ ...template, execution: withReps }]);
   const store = await loadWorkoutStore();
   expect(store.templates[0].exercises[0].plannedSets[0]).toMatchObject({
-    weightKg: null,
-    repetitions: null,
+    weightKg: 80,
+    repetitions: 8,
   });
   expect(store.sessions[0].execution.exercises[0].sets[0]).toMatchObject({
     weightKg: 80,
     repetitions: 8,
   });
   expect(
-    createWorkoutSession(template, 2000).execution.exercises[0].sets[0],
+    createWorkoutSession(store.templates[0], 2000).execution.exercises[0]
+      .sets[0],
   ).toMatchObject({
-    weightKg: null,
-    repetitions: null,
+    weightKg: 80,
+    repetitions: 8,
   });
+});
+
+it("edits upcoming and performed values without changing execution state", () => {
+  let workout = addExercise(createWorkout("Push"), "Bench", 1, 30);
+  workout = addExercise(workout, "Row", 1, 30);
+  const bench = workout.exercises[0];
+  const row = workout.exercises[1];
+  let execution = startWorkoutExecution(workout, 1000);
+  execution = updateExecutedSet(
+    execution,
+    row.id,
+    row.plannedSets[0].id,
+    "weightKg",
+    70,
+  );
+  execution = updateExecutedSet(
+    execution,
+    row.id,
+    row.plannedSets[0].id,
+    "repetitions",
+    12,
+  );
+  execution = startExecutedSetRest(
+    execution,
+    bench.id,
+    bench.plannedSets[0].id,
+    1000,
+  );
+  execution = finishExecutedRest(execution);
+  expect(execution.exercises.map((exercise) => exercise.status)).toEqual([
+    "completed",
+    "upcoming",
+  ]);
+  execution = updateExecutedSet(
+    execution,
+    row.id,
+    row.plannedSets[0].id,
+    "weightKg",
+    72.5,
+  );
+  execution = updateExecutedSet(
+    execution,
+    bench.id,
+    bench.plannedSets[0].id,
+    "weightKg",
+    82.5,
+  );
+  execution = updateExecutedSet(
+    execution,
+    bench.id,
+    bench.plannedSets[0].id,
+    "repetitions",
+    8,
+  );
+  expect(execution.exercises[0].sets[0]).toMatchObject({
+    status: "performed",
+    weightKg: 82.5,
+    repetitions: 8,
+  });
+  expect(execution.exercises[1].sets[0]).toMatchObject({
+    status: "upcoming",
+    weightKg: 72.5,
+    repetitions: 12,
+  });
+});
+
+it("does not create template structure for session-only changes", async () => {
+  const template = addExercise(createWorkout("Push"), "Bench", 1, 30);
+  const addedExercise = addExercise(createWorkout("Push"), "Row", 1, 30)
+    .exercises[0];
+  let execution = startWorkoutExecution(template, 1000);
+  execution = addExerciseToExecution(execution, addedExercise);
+  const extraSet = addSet(template.exercises[0]).plannedSets[1];
+  execution = addSetToExecution(execution, template.exercises[0].id, extraSet);
+  await saveWorkouts([{ ...template, execution }]);
+  const store = await loadWorkoutStore();
+  expect(store.templates[0].exercises).toHaveLength(1);
+  expect(store.templates[0].exercises[0].plannedSets).toHaveLength(1);
+  expect(store.sessions[0].execution.exercises).toHaveLength(2);
+  expect(store.sessions[0].execution.exercises[0].sets).toHaveLength(2);
 });
 
 it("keeps completed execution final and omits the final rest", async () => {

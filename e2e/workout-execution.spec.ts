@@ -348,14 +348,116 @@ test("persists session kg and reps through exercise changes, reload, and a new s
   await page.getByRole("button", { name: "Retour aux séances" }).click();
   await page.locator(".workout-card").click();
   await page.getByRole("button", { name: /Démarrer la séance/i }).click();
-  await expect(page.getByLabel("Charge (kg)")).toHaveAttribute(
+  const newSessionA = page.getByRole("region", {
+    name: "Séries de Exercice A",
+  });
+  await expect(newSessionA.getByLabel("Charge (kg)")).toHaveAttribute(
     "data-value",
-    "",
+    "80",
   );
-  await expect(page.getByLabel("Répétitions")).toHaveAttribute(
+  await expect(newSessionA.getByLabel("Répétitions")).toHaveAttribute(
     "data-value",
-    "",
+    "8",
   );
+});
+
+test("edits upcoming and performed sets and carries values into the next session", async ({
+  page,
+}) => {
+  await prepareWorkout(page, "1");
+  await addExercise(page, "Exercice B", "1");
+  await chooseValue(page, "Charge (kg)", 80);
+  await chooseValue(page, "Répétitions", 10);
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  await chooseValue(page, "Charge (kg)", 80);
+  await chooseValue(page, "Répétitions", 10);
+  await page
+    .getByRole("list", { name: "Exercices" })
+    .getByRole("button")
+    .nth(1)
+    .click();
+  await chooseValue(page, "Charge (kg)", 70);
+  await chooseValue(page, "Répétitions", 12);
+  const a = page.getByRole("region", { name: "Séries de Exercice A" });
+  await page
+    .getByRole("list", { name: "Exercices" })
+    .getByRole("button")
+    .first()
+    .click();
+  await a.getByRole("button", { name: "Lancer le repos" }).click();
+  await a.getByRole("button", { name: "Mettre fin au repos" }).click();
+  await page
+    .getByRole("alertdialog", { name: "Mettre fin au repos ?" })
+    .getByRole("button", { name: "Mettre fin" })
+    .click();
+  await expect(a.locator(".set-block").first()).toHaveClass(/status-performed/);
+  await page
+    .getByRole("list", { name: "Exercices" })
+    .getByRole("button")
+    .nth(1)
+    .click();
+  await expect(
+    page.getByRole("list", { name: "Exercices" }).locator("li").nth(1),
+  ).toHaveClass(/execution-upcoming/);
+  await chooseValue(page, "Charge (kg)", 72.5);
+  await chooseValue(page, "Répétitions", 8);
+  await page
+    .getByRole("list", { name: "Exercices" })
+    .getByRole("button")
+    .first()
+    .click();
+  await chooseValue(page, "Charge (kg)", 82.5);
+  await chooseValue(page, "Répétitions", 8);
+  await expect(a.locator(".set-block").first()).toHaveClass(/status-performed/);
+  await expect(a.getByRole("button", { name: "Supprimer" })).toHaveCount(0);
+  await expect(page.getByRole("progressbar")).toHaveAttribute("value", "1");
+  await page.reload();
+  await page.locator(".workout-card").click();
+  await expect(
+    page
+      .getByRole("region", { name: "Séries de Exercice A" })
+      .getByLabel("Charge (kg)"),
+  ).toHaveAttribute("data-value", "82.5");
+  await page
+    .getByRole("list", { name: "Exercices" })
+    .getByRole("button")
+    .nth(1)
+    .click();
+  await expect(
+    page
+      .getByRole("region", { name: "Séries de Exercice B" })
+      .getByLabel("Charge (kg)"),
+  ).toHaveAttribute("data-value", "72.5");
+  const reloadedB = page.getByRole("region", {
+    name: "Séries de Exercice B",
+  });
+  await reloadedB.getByRole("button", { name: "Lancer le repos" }).click();
+  await expect(
+    page.getByRole("button", { name: "Terminer la séance" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Terminer la séance" }).click();
+  await page
+    .getByRole("alertdialog", { name: "Terminer la séance ?" })
+    .getByRole("button", { name: "Terminer" })
+    .click();
+  await page.getByRole("button", { name: "Retour aux séances" }).click();
+  await page.locator(".workout-card").click();
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  await expect(
+    page
+      .getByRole("region", { name: "Séries de Exercice A" })
+      .getByLabel("Charge (kg)"),
+  ).toHaveAttribute("data-value", "82.5");
+  await page
+    .getByRole("list", { name: "Exercices" })
+    .getByRole("button")
+    .nth(1)
+    .click();
+  await expect(
+    page
+      .getByRole("region", { name: "Séries de Exercice B" })
+      .getByLabel("Charge (kg)"),
+  ).toHaveAttribute("data-value", "72.5");
 });
 
 test("reuses a template and persists independent session snapshots", async ({
@@ -448,7 +550,7 @@ test("reuses a template and persists independent session snapshots", async ({
   expect(sessionA!.templateId).toBe(sessionB!.templateId);
   expect(stored.templates[0].execution).toBeUndefined();
   expect(stored.templates[0].exercises[0].plannedSets[0]).toMatchObject({
-    repetitions: null,
+    repetitions: 8,
     weightKg: null,
     restSeconds: 90,
   });
@@ -456,12 +558,12 @@ test("reuses a template and persists independent session snapshots", async ({
     repetitions: 8,
   });
   expect(sessionB!.snapshot.exercises[0].plannedSets[0]).toMatchObject({
-    repetitions: null,
+    repetitions: 8,
     weightKg: null,
     restSeconds: 90,
   });
   expect(sessionB!.execution.exercises[0].sets[0]).toMatchObject({
-    repetitions: null,
+    repetitions: 8,
     weightKg: null,
     restSeconds: 90,
   });

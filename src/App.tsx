@@ -67,7 +67,32 @@ export default function App() {
             (item) => item.templateId === template.id,
           );
           return session
-            ? { ...session.snapshot, execution: session.execution }
+            ? {
+                ...session.snapshot,
+                exercises: session.snapshot.exercises.map((exercise) => {
+                  const templateExercise = template.exercises.find(
+                    (item) => item.id === exercise.id,
+                  );
+                  return templateExercise
+                    ? {
+                        ...exercise,
+                        plannedSets: exercise.plannedSets.map((set) => {
+                          const templateSet = templateExercise.plannedSets.find(
+                            (item) => item.id === set.id,
+                          );
+                          return templateSet
+                            ? {
+                                ...set,
+                                weightKg: templateSet.weightKg,
+                                repetitions: templateSet.repetitions,
+                              }
+                            : set;
+                        }),
+                      }
+                    : exercise;
+                }),
+                execution: session.execution,
+              }
             : template;
         }),
       );
@@ -341,13 +366,40 @@ export default function App() {
     value: number,
   ) => {
     if (!workout || !exercise) return;
-    if (execution) {
-      updateExecution(
-        updateExecutedSet(execution, exercise.id, id, field, value),
-      );
-    } else {
+    if (!execution) {
       editSet(id, field, value);
+      return;
     }
+    const nextExecution = updateExecutedSet(
+      execution,
+      exercise.id,
+      id,
+      field,
+      value,
+    );
+    update(
+      workouts.map((w) =>
+        w.id !== workout.id
+          ? w
+          : {
+              ...w,
+              exercises:
+                field === "weightKg" || field === "repetitions"
+                  ? w.exercises.map((item) =>
+                      item.id !== exercise.id
+                        ? item
+                        : {
+                            ...item,
+                            plannedSets: item.plannedSets.map((set) =>
+                              set.id === id ? { ...set, [field]: value } : set,
+                            ),
+                          },
+                    )
+                  : w.exercises,
+              execution: nextExecution,
+            },
+      ),
+    );
   };
   const appendSet = () => {
     if (!workout || !exercise) return;
@@ -731,10 +783,7 @@ export default function App() {
                           formatValue={(value) =>
                             value === null ? "—" : `${value} reps`
                           }
-                          disabled={
-                            !!execution &&
-                            executionSet(s.id)?.status !== "active"
-                          }
+                          disabled={execution?.status === "completed"}
                           onSave={(value) =>
                             saveSetValue(s.id, "repetitions", value)
                           }
@@ -760,10 +809,7 @@ export default function App() {
                           formatValue={(value) =>
                             value === null ? "—" : `${value} kg`
                           }
-                          disabled={
-                            !!execution &&
-                            executionSet(s.id)?.status !== "active"
-                          }
+                          disabled={execution?.status === "completed"}
                           onSave={(value) =>
                             saveSetValue(s.id, "weightKg", value)
                           }

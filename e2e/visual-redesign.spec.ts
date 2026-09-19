@@ -223,7 +223,7 @@ for (const width of [390, 320]) {
         ),
       )
       .toBeGreaterThan(initialOffset);
-    await expect(first.getByLabel("Charge (kg)")).toBeDisabled();
+    await expect(first.getByLabel("Charge (kg)")).toBeEnabled();
     await rail.getByRole("button").nth(1).click();
     await expect(rail.locator("li").nth(1)).toHaveClass(/execution-upcoming/);
     await expect(
