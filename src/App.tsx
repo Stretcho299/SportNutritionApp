@@ -9,6 +9,7 @@ import {
 } from "./ConfirmationDialog";
 import { SetValuePicker } from "./SetValuePicker";
 import { BottomNavigation } from "./BottomNavigation";
+import { BottomSheet, bottomSheetCloseDuration } from "./BottomSheet";
 import { ExerciseNavigator } from "./ExerciseNavigator";
 import { pickerValues } from "./pickerValues";
 import {
@@ -36,7 +37,7 @@ import {
   type WorkoutExecution,
   type Workout,
 } from "./storage/database";
-type Screen = "list" | "detail";
+type Screen = "list" | "preview" | "detail";
 type Dialog =
   | null
   | "workout"
@@ -52,6 +53,7 @@ export default function App() {
   const [workoutId, setWorkoutId] = useState("");
   const [exerciseId, setExerciseId] = useState("");
   const [dialog, setDialog] = useState<Dialog>(null);
+  const [dialogClosing, setDialogClosing] = useState(false);
   const [name, setName] = useState("");
   const [initialSetCount, setInitialSetCount] = useState("1");
   const [rest, setRest] = useState(String(defaultRestSeconds));
@@ -63,6 +65,7 @@ export default function App() {
     "none" | "next" | "previous"
   >("none");
   const exerciseTransitionTimeout = useRef<number | undefined>(undefined);
+  const dialogCloseTimeout = useRef<number | undefined>(undefined);
   useEffect(() => {
     void loadWorkoutStore().then((store: WorkoutStore) => {
       const active = store.sessions
@@ -137,7 +140,7 @@ export default function App() {
       ),
     [update, workoutId, workouts],
   );
-  const startExecution = () => {
+  const startExecution = (initialExerciseId = exerciseId) => {
     if (!workout || workout.execution) return;
     if (
       workouts.some(
@@ -149,7 +152,7 @@ export default function App() {
     )
       return;
     updateExecution(
-      createWorkoutSession(workout, undefined, exerciseId).execution,
+      createWorkoutSession(workout, undefined, initialExerciseId).execution,
     );
   };
   const startRest = (targetExerciseId: string, targetSetId: string) => {
@@ -241,10 +244,16 @@ export default function App() {
     });
   };
   const close = () => {
-    setDialog(null);
-    setName("");
-    setInitialSetCount("1");
-    setRest(String(defaultRestSeconds));
+    if (!dialog || dialogClosing) return;
+    setDialogClosing(true);
+    window.clearTimeout(dialogCloseTimeout.current);
+    dialogCloseTimeout.current = window.setTimeout(() => {
+      setDialog(null);
+      setDialogClosing(false);
+      setName("");
+      setInitialSetCount("1");
+      setRest(String(defaultRestSeconds));
+    }, bottomSheetCloseDuration);
   };
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -551,10 +560,26 @@ export default function App() {
     setExerciseId(nextExerciseId);
   };
   useEffect(
-    () => () => window.clearTimeout(exerciseTransitionTimeout.current),
+    () => () => {
+      window.clearTimeout(exerciseTransitionTimeout.current);
+      window.clearTimeout(dialogCloseTimeout.current);
+    },
     [],
   );
   const isWorkoutDetail = screen === "detail" && !!workout;
+  const activeWorkout = workouts.find(
+    (item) =>
+      item.execution?.status === "inProgress" ||
+      item.execution?.status === "readyToFinish",
+  );
+  const preparedWorkouts = workouts.filter(
+    (item) => item.id !== activeWorkout?.id,
+  );
+  const totalPlannedSets =
+    workout?.exercises.reduce(
+      (total, item) => total + item.plannedSets.length,
+      0,
+    ) ?? 0;
   const displayedSets = exercise ? sort(exercise.plannedSets) : [];
   const isFirstPendingSet = (setId: string) => {
     const index = displayedSets.findIndex((set) => set.id === setId);
@@ -570,7 +595,7 @@ export default function App() {
     dialog === "addMenu" || dialog === "organizeMenu" || dialog === "reorder";
   return (
     <main
-      className={`app-shell${screen === "detail" && exercise ? " workout-detail" : ""}`}
+      className={`app-shell screen-${screen}${screen === "detail" && exercise ? " workout-detail" : ""}`}
     >
       <header
         className={`workout-control${screen === "list" ? " home-header" : ""}`}
@@ -580,7 +605,7 @@ export default function App() {
             <img src="/icons/app-logo.svg" alt="" width="42" height="42" />
             <div>
               <p>Sport Nutrition</p>
-              <h1>Mes séances</h1>
+              <h1>Entraînement</h1>
             </div>
           </div>
         ) : (
@@ -588,7 +613,13 @@ export default function App() {
             <button
               aria-label="Retour aux séances"
               className="link"
-              onClick={() => setScreen("list")}
+              onClick={() =>
+                setScreen(
+                  screen === "detail" && workout && !workout.execution
+                    ? "preview"
+                    : "list",
+                )
+              }
             >
               <Icon name="arrow-left" size={19} />
               <span className="sr-only">Retour</span>
@@ -614,7 +645,10 @@ export default function App() {
         )}
       </header>
       {screen === "list" && (
-        <section className="workout-library" aria-label="Mes séances">
+        <section
+          className="workout-library dashboard"
+          aria-label="Entraînement"
+        >
           <div className="library-heading">
             <span>
               {workouts.length} séance{workouts.length > 1 ? "s" : ""} préparée
@@ -637,21 +671,131 @@ export default function App() {
               <span>Créez votre première séance.</span>
             </section>
           ) : (
-            <ul className="workout-list">
-              {workouts.map((item) => (
-                <WorkoutRow
-                  key={item.id}
-                  workout={item}
-                  onDelete={() => removeWorkout(item.id)}
-                  onOpen={() => {
-                    setWorkoutId(item.id);
-                    setExerciseId(sort(item.exercises)[0]?.id ?? "");
-                    setScreen("detail");
-                  }}
-                />
-              ))}
-            </ul>
+            <div className="dashboard-grid">
+              {activeWorkout && (
+                <section
+                  className="active-session-module"
+                  aria-label="Séance en cours"
+                >
+                  <header>
+                    <span className="active-session-dot" aria-hidden="true" />
+                    <span>Séance en cours</span>
+                  </header>
+                  <ul className="workout-list active-workout-list">
+                    <WorkoutRow
+                      workout={activeWorkout}
+                      variant="active"
+                      onDelete={() => removeWorkout(activeWorkout.id)}
+                      onOpen={() => {
+                        setWorkoutId(activeWorkout.id);
+                        setExerciseId(
+                          sort(activeWorkout.exercises)[0]?.id ?? "",
+                        );
+                        setScreen("detail");
+                      }}
+                    />
+                  </ul>
+                </section>
+              )}
+              {preparedWorkouts.length > 0 && (
+                <section className="sessions-module" aria-label="Mes séances">
+                  <header className="module-heading">
+                    <div>
+                      <span>Programme</span>
+                      <h2>Mes séances</h2>
+                    </div>
+                    <strong>{preparedWorkouts.length}</strong>
+                  </header>
+                  <ul className="workout-list compact-workout-grid">
+                    {preparedWorkouts.map((item) => (
+                      <WorkoutRow
+                        key={item.id}
+                        workout={item}
+                        variant="compact"
+                        onDelete={() => removeWorkout(item.id)}
+                        onOpen={() => {
+                          setWorkoutId(item.id);
+                          setExerciseId(sort(item.exercises)[0]?.id ?? "");
+                          setScreen("preview");
+                        }}
+                      />
+                    ))}
+                  </ul>
+                </section>
+              )}
+            </div>
           )}
+        </section>
+      )}
+      {screen === "preview" && workout && (
+        <section
+          className="workout-preview"
+          aria-label={`Aperçu de ${workout.name}`}
+        >
+          <div className="preview-hero">
+            <span className="preview-art" aria-hidden="true">
+              <Icon name="dumbbell" size={34} strokeWidth={1.7} />
+            </span>
+            <div>
+              <span>Prêt pour votre séance ?</span>
+              <h2>{workout.name}</h2>
+            </div>
+          </div>
+          <div className="preview-metrics">
+            <div>
+              <strong>{workout.exercises.length}</strong>
+              <span>Exercices</span>
+            </div>
+            <div>
+              <strong>{totalPlannedSets}</strong>
+              <span>Séries prévues</span>
+            </div>
+          </div>
+          <section
+            className="preview-exercises"
+            aria-label="Programme de la séance"
+          >
+            <header>
+              <span>Programme</span>
+              <strong>{workout.exercises.length}</strong>
+            </header>
+            {workout.exercises.length ? (
+              <ol>
+                {sort(workout.exercises).map((item, index) => (
+                  <li key={item.id}>
+                    <span>{String(index + 1).padStart(2, "0")}</span>
+                    <strong>{item.name}</strong>
+                    <small>
+                      {item.plannedSets.length} série
+                      {item.plannedSets.length > 1 ? "s" : ""}
+                    </small>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p>Ajoutez des exercices avant de démarrer.</p>
+            )}
+          </section>
+          <div className="preview-actions">
+            <button
+              className="primary"
+              disabled={workout.exercises.length === 0}
+              onClick={() => {
+                const firstExerciseId = sort(workout.exercises)[0]?.id ?? "";
+                setExerciseId(firstExerciseId);
+                startExecution(firstExerciseId);
+                setScreen("detail");
+              }}
+            >
+              <Icon name="play" size={16} /> Démarrer la séance
+            </button>
+            <button
+              className="preview-edit"
+              onClick={() => setScreen("detail")}
+            >
+              Modifier la séance
+            </button>
+          </div>
         </section>
       )}
       {screen === "detail" && workout && (
@@ -733,7 +877,7 @@ export default function App() {
                   <Icon name="chevron-down" size={15} />
                 </button>
                 {!execution ? (
-                  <button className="primary" onClick={startExecution}>
+                  <button className="primary" onClick={() => startExecution()}>
                     Démarrer la séance
                   </button>
                 ) : execution.status === "readyToFinish" ? (
@@ -940,7 +1084,7 @@ export default function App() {
         />
       )}
       {dialog && isMenu && workout && (
-        <Sheet
+        <BottomSheet
           title={
             dialog === "addMenu"
               ? "Actions de la séance"
@@ -948,6 +1092,7 @@ export default function App() {
                 ? "Organisation de la séance"
                 : "Réordonner les exercices"
           }
+          closing={dialogClosing}
           onClose={close}
         >
           {dialog === "addMenu" ? (
@@ -1019,18 +1164,19 @@ export default function App() {
               <button onClick={close}>Terminer</button>
             </>
           )}
-        </Sheet>
+        </BottomSheet>
       )}
       {dialog && !isMenu && (
-        <Sheet
+        <BottomSheet
           title={
             dialog === "exercise" || dialog === "renameExercise"
               ? "Exercice"
               : "Séance"
           }
+          closing={dialogClosing}
           onClose={close}
         >
-          <form onSubmit={submit}>
+          <form className="sheet-form" onSubmit={submit}>
             <h2>
               {dialog === "exercise" || dialog === "renameExercise"
                 ? "Exercice"
@@ -1039,7 +1185,6 @@ export default function App() {
             <label>
               Nom
               <input
-                autoFocus
                 aria-label="Nom"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -1047,10 +1192,11 @@ export default function App() {
               />
             </label>
             {dialog === "exercise" && (
-              <>
-                <label>
-                  Nombre de séries initiales
+              <div className="compact-form-fields">
+                <label className="compact-field">
+                  <span>Séries</span>
                   <input
+                    aria-label="Nombre de séries initiales"
                     type="number"
                     min="1"
                     step="1"
@@ -1060,9 +1206,10 @@ export default function App() {
                     required
                   />
                 </label>
-                <label>
-                  Repos par défaut (secondes)
+                <label className="compact-field">
+                  <span>Repos (s)</span>
                   <input
+                    aria-label="Repos par défaut (secondes)"
                     type="number"
                     min="0"
                     step="1"
@@ -1072,14 +1219,14 @@ export default function App() {
                     required
                   />
                 </label>
-              </>
+              </div>
             )}
             <button className="primary">Enregistrer</button>
             <button type="button" onClick={close}>
               Annuler
             </button>
           </form>
-        </Sheet>
+        </BottomSheet>
       )}
       <BottomNavigation onWorkouts={() => setScreen("list")} />
     </main>
@@ -1088,10 +1235,12 @@ export default function App() {
 
 function WorkoutRow({
   workout,
+  variant = "compact",
   onOpen,
   onDelete,
 }: {
   workout: Workout;
+  variant?: "active" | "compact";
   onOpen: () => void;
   onDelete: () => void;
 }) {
@@ -1143,7 +1292,7 @@ function WorkoutRow({
         <span>Supprimer</span>
       </button>
       <button
-        className={`row workout-card${isActive ? " workout-card-active" : ""}`}
+        className={`row workout-card workout-card-${variant}${isActive ? " workout-card-active" : ""}`}
         onClick={() => {
           if (moved.current) {
             moved.current = false;
@@ -1163,7 +1312,7 @@ function WorkoutRow({
           <small
             className={`workout-badge ${workout.execution?.status ?? "planned"}`}
           >
-            {isActive ? "Séance en cours" : "Séance préparée"}
+            {isActive ? "En cours" : "Préparée"}
           </small>
           <strong>{workout.name}</strong>
           <small>
@@ -1181,8 +1330,7 @@ function WorkoutRow({
           )}
         </span>
         <span className="workout-card-cta">
-          {isActive ? "Reprendre" : "Démarrer"}{" "}
-          <span aria-hidden="true">→</span>
+          {isActive ? "Reprendre" : "Aperçu"} <span aria-hidden="true">→</span>
         </span>
       </button>
     </li>
@@ -1191,64 +1339,4 @@ function WorkoutRow({
 
 function formatRest(seconds: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-}
-
-function Sheet({
-  title,
-  onClose,
-  children,
-}: {
-  title: string;
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    ref.current
-      ?.querySelector<HTMLElement>(
-        "input:not(:disabled), button:not(:disabled)",
-      )
-      ?.focus();
-    return () => previous?.focus();
-  }, [title]);
-  return (
-    <div
-      className="modal"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <div
-        ref={ref}
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            event.preventDefault();
-            onClose();
-          }
-          if (event.key === "Tab") {
-            const fields = ref.current?.querySelectorAll<HTMLElement>(
-              "button:not(:disabled), input:not(:disabled)",
-            );
-            if (!fields?.length) return;
-            const first = fields[0],
-              last = fields[fields.length - 1];
-            if (event.shiftKey && document.activeElement === first) {
-              event.preventDefault();
-              last.focus();
-            }
-            if (!event.shiftKey && document.activeElement === last) {
-              event.preventDefault();
-              first.focus();
-            }
-          }
-        }}
-      >
-        {children}
-      </div>
-    </div>
-  );
 }

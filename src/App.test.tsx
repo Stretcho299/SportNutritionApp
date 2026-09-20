@@ -1,10 +1,19 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import App from "./App";
 import { __storageKey, type Workout } from "./storage/database";
 
 beforeEach(() => localStorage.clear());
 afterEach(() => vi.restoreAllMocks());
+
+async function waitForMotion() {
+  await act(() => new Promise((resolve) => window.setTimeout(resolve, 190)));
+}
+
+async function clickAndWaitForMotion(element: HTMLElement) {
+  fireEvent.click(element);
+  await waitForMotion();
+}
 
 const storedWorkouts = (): Workout[] => {
   const raw = JSON.parse(localStorage.getItem(__storageKey) ?? "[]");
@@ -26,7 +35,9 @@ async function openEmptyWorkout() {
   fireEvent.change(screen.getByLabelText("Nom"), { target: { value: "Push" } });
   fireEvent.click(screen.getByText("Enregistrer"));
   expect(storedWorkouts()[0].name).toBe("Push");
-  fireEvent.click(screen.getByText("Push"));
+  await waitForMotion();
+  fireEvent.click(screen.getByText("Push").closest("button")!);
+  fireEvent.click(screen.getByRole("button", { name: "Modifier la séance" }));
   return view;
 }
 function openAddMenu() {
@@ -38,7 +49,7 @@ function openOrganizeMenu() {
   fireEvent.click(screen.getByLabelText("Réorganiser les exercices"));
   return screen.getByRole("dialog", { name: "Organisation de la séance" });
 }
-function createExercise(name: string, count = 1, rest = 90) {
+async function createExercise(name: string, count = 1, rest = 90) {
   fireEvent.click(within(openAddMenu()).getByText("Ajouter un exercice"));
   fireEvent.change(screen.getByLabelText("Nom"), { target: { value: name } });
   fireEvent.change(screen.getByLabelText("Nombre de séries initiales"), {
@@ -48,6 +59,7 @@ function createExercise(name: string, count = 1, rest = 90) {
     target: { value: String(rest) },
   });
   fireEvent.click(screen.getByText("Enregistrer"));
+  await waitForMotion();
 }
 async function chooseValue(label: string, value: number, index = 0) {
   fireEvent.click(screen.getAllByLabelText(label)[index]);
@@ -75,7 +87,7 @@ async function chooseValue(label: string, value: number, index = 0) {
     );
   }
   fireEvent.click(within(dialog).getByRole("button", { name: "Valider" }));
-  await new Promise((resolve) => window.setTimeout(resolve, 190));
+  await waitForMotion();
 }
 async function fillSet(weight: string, index = 0) {
   await chooseValue("Charge (kg)", Number(weight), index);
@@ -107,6 +119,56 @@ it("shows a new workout without zones 1, 2 and 3", async () => {
   expect(screen.getByLabelText("Nom")).toBeInTheDocument();
 });
 
+it("opens forms without input autofocus and locks the background", async () => {
+  render(<App />);
+  await screen.findByText("Aucune séance");
+  expect(screen.getByRole("button", { name: "Musculation" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  expect(screen.getByRole("button", { name: "Nutrition" })).toHaveAttribute(
+    "aria-disabled",
+    "true",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Créer une séance" }));
+  const dialog = screen.getByRole("dialog", { name: "Séance" });
+  expect(screen.getByLabelText("Nom")).not.toHaveFocus();
+  expect(document.body).toHaveStyle({ position: "fixed", overflow: "hidden" });
+  await act(() => new Promise((resolve) => window.setTimeout(resolve, 20)));
+  expect(dialog).toHaveFocus();
+  await clickAndWaitForMotion(
+    within(dialog).getByRole("button", { name: "Annuler" }),
+  );
+  expect(
+    screen.queryByRole("dialog", { name: "Séance" }),
+  ).not.toBeInTheDocument();
+  expect(document.body.style.position).toBe("");
+  expect(document.body.style.overflow).toBe("");
+});
+
+it("opens a prepared workout preview with only persisted program data", async () => {
+  const view = await openEmptyWorkout();
+  await createExercise("Squat", 3, 90);
+  await createExercise("Row", 2, 60);
+  fireEvent.click(screen.getByLabelText("Retour aux séances"));
+  fireEvent.click(screen.getByLabelText("Retour aux séances"));
+  fireEvent.click(screen.getByText("Push").closest("button")!);
+  const preview = screen.getByRole("region", { name: "Aperçu de Push" });
+  expect(
+    Array.from(preview.querySelectorAll(".preview-metrics strong")).map(
+      (metric) => metric.textContent,
+    ),
+  ).toEqual(["2", "5"]);
+  expect(within(preview).getByText("Squat")).toBeInTheDocument();
+  expect(within(preview).getByText("3 séries")).toBeInTheDocument();
+  expect(within(preview).getByText("Row")).toBeInTheDocument();
+  expect(within(preview).getByText("2 séries")).toBeInTheDocument();
+  expect(
+    within(preview).getByRole("button", { name: "Démarrer la séance" }),
+  ).toBeEnabled();
+  view.unmount();
+});
+
 it("exposes exactly the requested actions in each header sheet", async () => {
   await openEmptyWorkout();
   expect(screen.queryByText("Renommer la séance")).not.toBeInTheDocument();
@@ -115,26 +177,30 @@ it("exposes exactly the requested actions in each header sheet", async () => {
   expect(
     within(menu)
       .getAllByRole("button")
-      .map((b) => b.textContent),
+      .map((b) => b.textContent?.trim())
+      .filter(Boolean),
   ).toEqual(["Ajouter un exercice", "Supprimer l’exercice", "Annuler"]);
-  expect(within(menu).getByText("Ajouter un exercice")).toHaveFocus();
-  fireEvent.click(within(menu).getByText("Annuler"));
+  await act(() => new Promise((resolve) => window.setTimeout(resolve, 20)));
+  expect(menu).toHaveFocus();
+  await clickAndWaitForMotion(within(menu).getByText("Annuler"));
   expect(screen.getByLabelText("Gérer les exercices")).toHaveFocus();
   menu = openOrganizeMenu();
   expect(
     within(menu)
       .getAllByRole("button")
-      .map((b) => b.textContent),
+      .map((b) => b.textContent?.trim())
+      .filter(Boolean),
   ).toEqual(["Réordonner les exercices", "Renommer la séance", "Annuler"]);
   fireEvent.keyDown(menu, { key: "Escape" });
+  await waitForMotion();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
 
 it("confirms selected exercise deletion from the add menu", async () => {
   await openEmptyWorkout();
-  createExercise("Squat");
+  await createExercise("Squat");
   await fillSet("50");
-  createExercise("Row");
+  await createExercise("Row");
   fireEvent.click(within(openAddMenu()).getByText("Supprimer l’exercice"));
   const confirmation = screen.getByRole("alertdialog", {
     name: "Supprimer cet exercice ?",
@@ -145,7 +211,7 @@ it("confirms selected exercise deletion from the add menu", async () => {
   expect(
     storedWorkouts()[0].exercises.map((exercise) => exercise.name),
   ).toEqual(["Squat", "Row"]);
-  fireEvent.click(
+  await clickAndWaitForMotion(
     within(confirmation).getByRole("button", { name: "Supprimer" }),
   );
   expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
@@ -172,7 +238,7 @@ it("renames the workout from the organization sheet", async () => {
 
 it("automatically selects the first exercise and displays its blank initial set", async () => {
   await openEmptyWorkout();
-  createExercise("Squat");
+  await createExercise("Squat");
   expect(screen.getByRole("heading", { name: "Squat" })).toBeInTheDocument();
   expect(screen.getByRole("button", { pressed: true })).toHaveTextContent(
     "Squat",
@@ -205,9 +271,9 @@ it("automatically selects the first exercise and displays its blank initial set"
 
 it("preserves selection when adding exercises and switches both exercise and set data", async () => {
   await openEmptyWorkout();
-  createExercise("Squat");
+  await createExercise("Squat");
   await fillSet("80");
-  createExercise("Row");
+  await createExercise("Row");
   expect(screen.getByRole("heading", { name: "Squat" })).toBeInTheDocument();
   expect(screen.getByLabelText("Charge (kg)")).toHaveAttribute(
     "data-value",
@@ -222,7 +288,7 @@ it("preserves selection when adding exercises and switches both exercise and set
     "",
   );
   await fillSet("40");
-  createExercise("Curl");
+  await createExercise("Curl");
   expect(screen.getByRole("heading", { name: "Row" })).toBeInTheDocument();
   expect(screen.getByLabelText("Charge (kg)")).toHaveAttribute(
     "data-value",
@@ -237,7 +303,7 @@ it("preserves selection when adding exercises and switches both exercise and set
 
 it("selects bounded picker values and persists repetitions, half-kilograms and split rest", async () => {
   const view = await openEmptyWorkout();
-  createExercise("Squat");
+  await createExercise("Squat");
   await fillSet("80");
   await chooseValue("Répétitions", 24);
   await chooseValue("Charge (kg)", 82.5);
@@ -255,7 +321,7 @@ it("selects bounded picker values and persists repetitions, half-kilograms and s
   expect(
     within(repDialog).getByRole("option", { name: /^24$/ }),
   ).toHaveAttribute("aria-selected", "true");
-  fireEvent.click(screen.getByRole("button", { name: "Annuler" }));
+  await clickAndWaitForMotion(screen.getByRole("button", { name: "Annuler" }));
   fireEvent.click(screen.getByLabelText("Charge (kg)"));
   const weightDialog = screen.getByRole("dialog", {
     name: "Choisir Charge (kg)",
@@ -264,7 +330,7 @@ it("selects bounded picker values and persists repetitions, half-kilograms and s
   expect(
     within(weightDialog).getByRole("option", { name: /^82\.5$/ }),
   ).toHaveAttribute("aria-selected", "true");
-  fireEvent.click(screen.getByRole("button", { name: "Annuler" }));
+  await clickAndWaitForMotion(screen.getByRole("button", { name: "Annuler" }));
   fireEvent.click(screen.getByLabelText("Repos (secondes)"));
   const restDialog = screen.getByRole("dialog", {
     name: "Choisir Repos (secondes)",
@@ -280,10 +346,11 @@ it("selects bounded picker values and persists repetitions, half-kilograms and s
       within(restDialog).getByRole("listbox", { name: "Secondes" }),
     ).getAllByRole("option"),
   ).toHaveLength(60);
-  fireEvent.click(screen.getByRole("button", { name: "Annuler" }));
+  await clickAndWaitForMotion(screen.getByRole("button", { name: "Annuler" }));
   view.unmount();
   render(<App />);
   fireEvent.click(await screen.findByText("Push"));
+  fireEvent.click(screen.getByRole("button", { name: "Modifier la séance" }));
   expect(screen.getByLabelText("Répétitions")).toHaveAttribute(
     "data-value",
     "24",
@@ -300,9 +367,9 @@ it("selects bounded picker values and persists repetitions, half-kilograms and s
 
 it("reorders exercises in a dedicated sheet and retains selection and persisted order", async () => {
   const view = await openEmptyWorkout();
-  createExercise("Squat");
-  createExercise("Row");
-  createExercise("Curl");
+  await createExercise("Squat");
+  await createExercise("Row");
+  await createExercise("Curl");
   fireEvent.click(
     within(openOrganizeMenu()).getByText("Réordonner les exercices"),
   );
@@ -324,6 +391,7 @@ it("reorders exercises in a dedicated sheet and retains selection and persisted 
   view.unmount();
   render(<App />);
   fireEvent.click(await screen.findByText("Push"));
+  fireEvent.click(screen.getByRole("button", { name: "Modifier la séance" }));
   expect(
     within(screen.getByRole("list", { name: "Exercices" })).getAllByRole(
       "button",
@@ -333,9 +401,9 @@ it("reorders exercises in a dedicated sheet and retains selection and persisted 
 
 it("keeps sets in their natural order and renumbers them after deletion", async () => {
   await openEmptyWorkout();
-  createExercise("Row");
+  await createExercise("Row");
   await fillSet("40");
-  createExercise("Squat");
+  await createExercise("Squat");
   selectExercise("Squat");
   await fillSet("80");
   fireEvent.click(screen.getByText("+ Ajouter une série"));
@@ -349,7 +417,7 @@ it("keeps sets in their natural order and renumbers them after deletion", async 
   ).toEqual(["80", "90"]);
   let blocks = within(seriesRegion("Squat")).getAllByRole("listitem");
   fireEvent.click(within(blocks[0]).getByText("Supprimer"));
-  fireEvent.click(
+  await clickAndWaitForMotion(
     within(screen.getByRole("alertdialog")).getByRole("button", {
       name: "Supprimer",
     }),
@@ -359,7 +427,7 @@ it("keeps sets in their natural order and renumbers them after deletion", async 
   ).toHaveAttribute("data-value", "90");
   blocks = within(seriesRegion("Squat")).getAllByRole("listitem");
   fireEvent.click(within(blocks[0]).getByText("Supprimer"));
-  fireEvent.click(
+  await clickAndWaitForMotion(
     within(screen.getByRole("alertdialog")).getByRole("button", {
       name: "Supprimer",
     }),
@@ -376,8 +444,8 @@ it("keeps sets in their natural order and renumbers them after deletion", async 
 
 it("selects a remaining exercise after deletion and restores the empty state after the last", async () => {
   await openEmptyWorkout();
-  createExercise("Squat");
-  createExercise("Row");
+  await createExercise("Squat");
+  await createExercise("Row");
   const removeSelected = () => {
     const actions = screen.getByLabelText(
       "Actions de l’exercice",
@@ -395,7 +463,7 @@ it("selects a remaining exercise after deletion and restores the empty state aft
 
 it("creates N blank sets with the requested rest and preserves blanks after reload", async () => {
   const view = await openEmptyWorkout();
-  createExercise("Développé couché", 4, 120);
+  await createExercise("Développé couché", 4, 120);
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(
     within(seriesRegion("Développé couché")).getAllByRole("listitem"),
@@ -419,6 +487,7 @@ it("creates N blank sets with the requested rest and preserves blanks after relo
   view.unmount();
   render(<App />);
   fireEvent.click(await screen.findByText("Push"));
+  fireEvent.click(screen.getByRole("button", { name: "Modifier la séance" }));
   expect(screen.getAllByLabelText("Charge (kg)")).toHaveLength(4);
   for (const field of screen.getAllByLabelText("Charge (kg)"))
     expect(field).toHaveAttribute("data-value", "");
@@ -447,7 +516,7 @@ it.each(["", "0", "-1", "1.5"])(
 
 it("appends a blank set immediately using the last set rest, including zero", async () => {
   await openEmptyWorkout();
-  createExercise("Squat", 1, 120);
+  await createExercise("Squat", 1, 120);
   await fillSet("80");
   fireEvent.click(screen.getByText("+ Ajouter une série"));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -479,7 +548,7 @@ it("appends a blank set immediately using the last set rest, including zero", as
 
 it("stores zero reps and zero kilograms as real selected values", async () => {
   await openEmptyWorkout();
-  createExercise("Squat");
+  await createExercise("Squat");
   await fillSet("0");
   expect(storedWorkouts()[0].exercises[0].plannedSets[0].weightKg).toBe(0);
   await chooseValue("Répétitions", 0);
@@ -499,15 +568,15 @@ it("stores zero reps and zero kilograms as real selected values", async () => {
 
 it("keeps fixed exercise zones outside a long series list", async () => {
   const view = await openEmptyWorkout();
-  createExercise("Squat", 12);
+  await createExercise("Squat", 12);
   const preparation = view.container.querySelector<HTMLDivElement>(
     ".workout-preparation",
   );
-  createExercise("Row");
-  createExercise("Curl");
-  createExercise("Press");
-  createExercise("Lunge");
-  createExercise("Plank");
+  await createExercise("Row");
+  await createExercise("Curl");
+  await createExercise("Press");
+  await createExercise("Lunge");
+  await createExercise("Plank");
   const fixedZones = view.container.querySelector<HTMLDivElement>(
     ".workout-fixed-zones",
   );
@@ -530,7 +599,7 @@ it("keeps fixed exercise zones outside a long series list", async () => {
 
 it("shows an active series and advances it when its rest ends", async () => {
   await openEmptyWorkout();
-  createExercise("Squat", 2, 30);
+  await createExercise("Squat", 2, 30);
   fireEvent.click(screen.getByText("Démarrer la séance"));
   const blocks = within(seriesRegion("Squat")).getAllByRole("listitem");
   expect(within(blocks[0]).getByText("Série active")).toBeInTheDocument();
@@ -548,14 +617,14 @@ it("shows an active series and advances it when its rest ends", async () => {
   expect(
     screen.getByRole("alertdialog", { name: "Mettre fin au repos ?" }),
   ).toHaveTextContent(/Il reste \d+ secondes?/);
-  fireEvent.click(
+  await clickAndWaitForMotion(
     within(screen.getByRole("alertdialog")).getByRole("button", {
       name: "Annuler",
     }),
   );
   expect(within(blocks[0]).getByText("Repos en cours")).toBeInTheDocument();
   fireEvent.click(within(blocks[0]).getByText("Terminer le repos"));
-  fireEvent.click(
+  await clickAndWaitForMotion(
     within(
       screen.getByRole("alertdialog", { name: "Mettre fin au repos ?" }),
     ).getByRole("button", { name: "Mettre fin" }),
@@ -572,13 +641,14 @@ it("shows an active series and advances it when its rest ends", async () => {
 it("reveals a confirmed workout deletion action after a horizontal swipe", async () => {
   render(<App />);
   await screen.findByText("Aucune séance");
-  const create = (name: string) => {
+  const create = async (name: string) => {
     fireEvent.click(screen.getByRole("button", { name: "Créer une séance" }));
     fireEvent.change(screen.getByLabelText("Nom"), { target: { value: name } });
     fireEvent.click(screen.getByText("Enregistrer"));
+    await waitForMotion();
   };
-  create("Push");
-  create("Pull");
+  await create("Push");
+  await create("Pull");
   const card = screen.getByText("Push").closest("li")!;
   fireEvent.pointerDown(card, { clientX: 160 });
   fireEvent.pointerMove(card, { clientX: 80 });
@@ -599,12 +669,12 @@ it("reveals a confirmed workout deletion action after a horizontal swipe", async
   const deleteDialog = screen.getByRole("alertdialog", {
     name: "Supprimer cette séance ?",
   });
-  fireEvent.click(
+  await clickAndWaitForMotion(
     within(deleteDialog).getByRole("button", { name: "Annuler" }),
   );
   expect(screen.getByText("Push")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Supprimer Push" }));
-  fireEvent.click(
+  await clickAndWaitForMotion(
     within(
       screen.getByRole("alertdialog", { name: "Supprimer cette séance ?" }),
     ).getByRole("button", { name: "Supprimer" }),
@@ -615,18 +685,18 @@ it("reveals a confirmed workout deletion action after a horizontal swipe", async
 
 it("adds an upcoming exercise during execution without losing the current series", async () => {
   await openEmptyWorkout();
-  createExercise("Squat", 2, 30);
+  await createExercise("Squat", 2, 30);
   fireEvent.click(screen.getByText("Démarrer la séance"));
   expect(screen.getByLabelText("Gérer les exercices")).toBeInTheDocument();
   fireEvent.click(within(seriesRegion("Squat")).getByText("Lancer le repos"));
   fireEvent.click(within(seriesRegion("Squat")).getByText("Terminer le repos"));
-  fireEvent.click(
+  await clickAndWaitForMotion(
     within(screen.getByRole("alertdialog")).getByRole("button", {
       name: "Mettre fin",
     }),
   );
   expect(screen.getByLabelText("Gérer les exercices")).toBeInTheDocument();
-  createExercise("Row", 2, 30);
+  await createExercise("Row", 2, 30);
   expect(
     within(seriesRegion("Squat")).getByText("Série active"),
   ).toBeInTheDocument();
@@ -645,12 +715,12 @@ it("adds an upcoming exercise during execution without losing the current series
 
 it("offers deletion for every non-performed series during execution", async () => {
   await openEmptyWorkout();
-  createExercise("Squat", 3, 30);
+  await createExercise("Squat", 3, 30);
   fireEvent.click(screen.getByText("Démarrer la séance"));
   let blocks = within(seriesRegion("Squat")).getAllByRole("listitem");
   fireEvent.click(within(blocks[0]).getByText("Lancer le repos"));
   fireEvent.click(within(blocks[0]).getByText("Terminer le repos"));
-  fireEvent.click(
+  await clickAndWaitForMotion(
     within(screen.getByRole("alertdialog")).getByRole("button", {
       name: "Mettre fin",
     }),
@@ -666,8 +736,8 @@ it("offers deletion for every non-performed series during execution", async () =
 
 it("allows deleting the first non-performed series during execution", async () => {
   await openEmptyWorkout();
-  createExercise("A", 2, 30);
-  createExercise("B", 2, 30);
+  await createExercise("A", 2, 30);
+  await createExercise("B", 2, 30);
   fireEvent.click(screen.getByText("Démarrer la séance"));
 
   selectExercise("B");
@@ -688,7 +758,7 @@ it("allows deleting the first non-performed series during execution", async () =
   expect(within(activeBlocks[1]).getByText("Supprimer")).toBeInTheDocument();
   fireEvent.click(within(activeBlocks[0]).getByText("Lancer le repos"));
   fireEvent.click(within(activeBlocks[0]).getByText("Terminer le repos"));
-  fireEvent.click(
+  await clickAndWaitForMotion(
     within(screen.getByRole("alertdialog")).getByRole("button", {
       name: "Mettre fin",
     }),
@@ -702,18 +772,22 @@ it("allows deleting the first non-performed series during execution", async () =
 
 it("keeps a completed workout final after returning home and reloading", async () => {
   const view = await openEmptyWorkout();
-  createExercise("Squat", 1, 30);
+  await createExercise("Squat", 1, 30);
   fireEvent.click(screen.getByText("Démarrer la séance"));
   fireEvent.click(screen.getByText("Lancer le repos"));
   expect(screen.getByText("Terminer la séance")).toBeInTheDocument();
   fireEvent.click(screen.getByText("Terminer la séance"));
   expect(storedWorkouts()[0].execution?.status).toBe("readyToFinish");
-  fireEvent.click(
+  await clickAndWaitForMotion(
     within(
       screen.getByRole("alertdialog", { name: "Terminer la séance ?" }),
     ).getByRole("button", { name: "Terminer" }),
   );
   expect(screen.getByText("Démarrer la séance")).toBeInTheDocument();
+  fireEvent.click(screen.getByLabelText("Retour aux séances"));
+  expect(
+    screen.getByRole("region", { name: "Aperçu de Push" }),
+  ).toBeInTheDocument();
   fireEvent.click(screen.getByLabelText("Retour aux séances"));
   fireEvent.click(screen.getByText("Push"));
   expect(screen.getByText("Démarrer la séance")).toBeInTheDocument();
@@ -726,9 +800,9 @@ it("keeps a completed workout final after returning home and reloading", async (
 
 it("keeps future exercise states unchanged while browsing and starts them explicitly", async () => {
   await openEmptyWorkout();
-  createExercise("A", 1, 30);
-  createExercise("B", 1, 30);
-  createExercise("C", 1, 30);
+  await createExercise("A", 1, 30);
+  await createExercise("B", 1, 30);
+  await createExercise("C", 1, 30);
   fireEvent.click(screen.getByText("Démarrer la séance"));
   const addButton = screen.getByLabelText("Gérer les exercices");
   expect(addButton).toBeVisible();
@@ -755,8 +829,8 @@ it("keeps future exercise states unchanged while browsing and starts them explic
 
 it("locks every other rest button while a chrono runs across exercises", async () => {
   await openEmptyWorkout();
-  createExercise("A", 2, 30);
-  createExercise("B", 2, 30);
+  await createExercise("A", 2, 30);
+  await createExercise("B", 2, 30);
   fireEvent.click(screen.getByText("Démarrer la séance"));
   selectExercise("A");
   const a = seriesRegion("A");
@@ -771,7 +845,7 @@ it("locks every other rest button while a chrono runs across exercises", async (
   selectExercise("A");
   expect(within(a).getByText("Repos en cours")).toBeInTheDocument();
   fireEvent.click(within(a).getByText("Terminer le repos"));
-  fireEvent.click(
+  await clickAndWaitForMotion(
     within(screen.getByRole("alertdialog")).getByRole("button", {
       name: "Mettre fin",
     }),
@@ -784,7 +858,7 @@ it("locks every other rest button while a chrono runs across exercises", async (
 
 it("keeps add set available after starting and appends a blank execution set", async () => {
   await openEmptyWorkout();
-  createExercise("Squat", 2, 30);
+  await createExercise("Squat", 2, 30);
   fireEvent.click(screen.getByText("Démarrer la séance"));
   const region = seriesRegion("Squat");
   expect(screen.getByText("+ Ajouter une série")).toBeVisible();
@@ -798,7 +872,7 @@ it("keeps add set available after starting and appends a blank execution set", a
 
 it("keeps add set available after the first series has started", async () => {
   await openEmptyWorkout();
-  createExercise("Squat", 2, 30);
+  await createExercise("Squat", 2, 30);
   fireEvent.click(screen.getByText("Démarrer la séance"));
   const region = seriesRegion("Squat");
   const blocks = within(region).getAllByRole("listitem");
@@ -813,8 +887,8 @@ it("keeps add set available after the first series has started", async () => {
 
 it("does not activate the next exercise when deleting an upcoming set", async () => {
   await openEmptyWorkout();
-  createExercise("A", 2, 30);
-  createExercise("B", 1, 30);
+  await createExercise("A", 2, 30);
+  await createExercise("B", 1, 30);
   fireEvent.click(screen.getByText("Démarrer la séance"));
   const region = seriesRegion("A");
   const blocks = within(region).getAllByRole("listitem");

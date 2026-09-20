@@ -970,6 +970,7 @@ nav button.active {
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
   scroll-snap-type: y mandatory;
+  scroll-padding-block: 88px;
   scrollbar-width: none;
   touch-action: pan-y;
 }
@@ -995,7 +996,6 @@ nav button.active {
   font-size: 24px;
   font-variant-numeric: tabular-nums;
   scroll-snap-align: center;
-  scroll-snap-stop: always;
 }
 .picker-wheel .picker-wheel-option[aria-selected="true"] {
   color: var(--accent-soft);
@@ -1417,6 +1417,9 @@ nav button svg {
   }
   .picker-wheel-frame {
     height: 176px;
+  }
+  .picker-wheel {
+    scroll-padding-block: 66px;
   }
   .picker-wheel-spacer {
     height: 66px;

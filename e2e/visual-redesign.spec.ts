@@ -9,7 +9,9 @@ async function addExercise(page: Page, name: string, count = "2", rest = "90") {
   await page.getByRole("textbox", { name: "Nom" }).fill(name);
   await page.getByLabel("Nombre de séries initiales").fill(count);
   await page.getByLabel("Repos par défaut (secondes)").fill(rest);
-  await page.getByRole("button", { name: "Enregistrer" }).click();
+  const form = page.getByRole("dialog", { name: "Exercice" });
+  await form.getByRole("button", { name: "Enregistrer" }).click();
+  await expect(form).toHaveCount(0);
 }
 
 async function choosePickerValue(page: Page, label: string, value: number) {
@@ -109,6 +111,7 @@ async function flickWheel(
 async function screenshot(page: Page, info: TestInfo, name: string) {
   await page.screenshot({
     path: info.outputPath(`${name}.png`),
+    animations: "disabled",
     fullPage: false,
     scale: "css",
   });
@@ -145,13 +148,32 @@ for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
     await page.goto("/");
     await page.evaluate(() => document.fonts.ready);
+    const muscleNavigation = page.getByRole("button", {
+      name: "Musculation",
+    });
+    await expect(muscleNavigation).toHaveAttribute("aria-current", "page");
+    expect((await muscleNavigation.textContent())?.trim()).toBe("");
+    await expect(
+      page.getByRole("button", { name: "Nutrition" }),
+    ).toHaveAttribute("aria-disabled", "true");
     await page.getByRole("button", { name: "Créer une séance" }).click();
-    await page
-      .getByRole("textbox", { name: "Nom" })
-      .fill("Force · Haut du corps");
-    await page.getByRole("button", { name: "Enregistrer" }).click();
+    const workoutForm = page.getByRole("dialog", { name: "Séance" });
+    const workoutName = workoutForm.getByRole("textbox", { name: "Nom" });
+    await expect(workoutName).not.toBeFocused();
+    expect(await page.evaluate(() => document.body.style.position)).toBe(
+      "fixed",
+    );
+    await screenshot(page, info, "workout-sheet");
+    await workoutName.fill("Force · Haut du corps");
+    await workoutForm.getByRole("button", { name: "Enregistrer" }).click();
+    await expect(workoutForm).toHaveCount(0);
+    expect(await page.evaluate(() => document.body.style.position)).toBe("");
     await screenshot(page, info, "library");
     await page.locator(".workout-card").click();
+    await expect(
+      page.getByRole("region", { name: "Aperçu de Force · Haut du corps" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Modifier la séance" }).click();
     await addExercise(page, "Développé couché", "12");
     for (const name of [
       "Rowing",
@@ -162,16 +184,36 @@ for (const width of [390, 320]) {
     ]) {
       await addExercise(page, name);
     }
+    await page.getByRole("button", { name: "Retour aux séances" }).click();
+    const populatedPreview = page.getByRole("region", {
+      name: "Aperçu de Force · Haut du corps",
+    });
+    await expect(populatedPreview.getByText("12 séries")).toBeVisible();
+    await screenshot(page, info, "preview-populated");
+    await page.getByRole("button", { name: "Modifier la séance" }).click();
     const first = page.locator(".set-block").first();
     await page.getByRole("button", { name: "Charge (kg)" }).first().click();
     const weightPicker = page.getByRole("dialog", {
       name: "Choisir Charge (kg)",
     });
+    const weightWheel = weightPicker.getByRole("listbox", {
+      name: "Kilogrammes",
+    });
+    const wheelStyles = await weightWheel.evaluate((element) => {
+      const styles = getComputedStyle(element);
+      return {
+        overflowY: styles.overflowY,
+        overscrollBehaviorY: styles.overscrollBehaviorY,
+        scrollSnapType: styles.scrollSnapType,
+        touchAction: styles.touchAction,
+      };
+    });
+    expect(wheelStyles.overflowY).toBe("auto");
+    expect(wheelStyles.overscrollBehaviorY).toBe("contain");
+    expect(wheelStyles.scrollSnapType).toContain("y");
+    expect(wheelStyles.touchAction).toBe("pan-y");
     await screenshot(page, info, "picker-weight");
-    await flickWheel(
-      page,
-      weightPicker.getByRole("listbox", { name: "Kilogrammes" }),
-    );
+    await flickWheel(page, weightWheel);
     await weightPicker.getByRole("button", { name: "Annuler" }).click();
     await choosePickerValue(page, "Charge (kg)", 62.5);
     await page.getByRole("button", { name: "Répétitions" }).first().click();
@@ -222,6 +264,12 @@ for (const width of [390, 320]) {
     const navBounds = await page.getByRole("navigation").boundingBox();
     expect(addBounds!.y + addBounds!.height).toBeLessThanOrEqual(navBounds!.y);
     await page.getByRole("button", { name: "Démarrer la séance" }).click();
+    await page.getByRole("button", { name: "Retour aux séances" }).click();
+    const activeModule = page.getByRole("region", { name: "Séance en cours" });
+    await expect(activeModule.locator(".active-session-dot")).toBeVisible();
+    await expect(activeModule).toContainText("Force · Haut du corps");
+    await screenshot(page, info, "dashboard-active");
+    await activeModule.locator(".workout-card").click();
     await first.scrollIntoViewIfNeeded();
     await expect(first.locator(".order")).toHaveCount(1);
     await expect(
@@ -309,12 +357,11 @@ for (const width of [390, 320]) {
     await expect(
       page.getByRole("button", { name: "Annuler", exact: true }),
     ).toBeInViewport();
+    await screenshot(page, info, "exercise-sheet-short-viewport");
     await noOverflow(page);
-    await page.getByRole("button", { name: "Enregistrer" }).click();
-    await page.getByRole("button", { name: "+ Ajouter une série" }).click();
-    await noOverflow(page);
+    await page.getByRole("button", { name: "Annuler", exact: true }).click();
     await page.setViewportSize({ width, height: 844 });
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 6; i++) {
       await rail.getByRole("button").nth(i).click();
       await page.getByRole("button", { name: "Terminer l’exercice" }).click();
       await page
@@ -341,6 +388,52 @@ for (const width of [390, 320]) {
   });
 }
 
+test("bottom sheet follows the drag handle and restores the locked page", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Créer une séance" }).click();
+  const sheet = page.getByRole("dialog", { name: "Séance" });
+  const name = sheet.getByRole("textbox", { name: "Nom" });
+  await expect(name).not.toBeFocused();
+  expect(await page.evaluate(() => document.body.style.position)).toBe("fixed");
+
+  const handle = sheet.getByRole("button", { name: "Fermer le panneau" });
+  const box = await handle.boundingBox();
+  expect(box).not.toBeNull();
+  const x = box!.x + box!.width / 2;
+  const y = box!.y + box!.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x, y + 120, { steps: 6 });
+  await expect(sheet).toHaveCSS("transform", /matrix\(1, 0, 0, 1, 0, 120\)/);
+  await page.mouse.up();
+  await expect(sheet).toHaveCount(0);
+  expect(await page.evaluate(() => document.body.style.position)).toBe("");
+});
+
+test("exposes the iPhone standalone PWA metadata", async ({ page }) => {
+  await page.goto("/");
+  await expect(
+    page.locator('meta[name="apple-mobile-web-app-capable"]'),
+  ).toHaveAttribute("content", "yes");
+  await expect(page.locator('meta[name="viewport"]')).toHaveAttribute(
+    "content",
+    /viewport-fit=cover/,
+  );
+  const manifest = await page.evaluate(async () =>
+    fetch("/manifest.webmanifest").then((response) => response.json()),
+  );
+  expect(manifest).toMatchObject({
+    display: "standalone",
+    start_url: "/",
+    scope: "/",
+    background_color: "#060608",
+    theme_color: "#0F0F14",
+  });
+});
+
 test("finishing the rest marks the set performed and advances progress", async ({
   page,
 }) => {
@@ -350,6 +443,7 @@ test("finishing the rest marks the set performed and advances progress", async (
   await page.getByRole("textbox", { name: "Nom" }).fill("Tempo");
   await page.getByRole("button", { name: "Enregistrer" }).click();
   await page.locator(".workout-card").click();
+  await page.getByRole("button", { name: "Modifier la séance" }).click();
   await addExercise(page, "Squat", "2", "1");
   await page.getByRole("button", { name: "Démarrer la séance" }).click();
   const firstSet = page
@@ -372,6 +466,7 @@ test("exercise navigation animates according to workout order without changing e
   await page.getByRole("textbox", { name: "Nom" }).fill("Direction");
   await page.getByRole("button", { name: "Enregistrer" }).click();
   await page.locator(".workout-card").click();
+  await page.getByRole("button", { name: "Modifier la séance" }).click();
   await addExercise(page, "Premier", "1");
   await addExercise(page, "Deuxième", "1");
   await addExercise(page, "Troisième", "1");

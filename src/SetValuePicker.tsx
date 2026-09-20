@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useBodyScrollLock } from "./useBodyScrollLock";
 
 const ROW_HEIGHT = 44;
 
@@ -120,6 +121,8 @@ export function SetValuePicker({
   const [selection, setSelection] = useState<number[]>([]);
   const closeTimeout = useRef<number | undefined>(undefined);
   const dialog = useRef<HTMLElement>(null);
+
+  useBodyScrollLock(mounted);
 
   const closePicker = () => {
     if (closing) return;
