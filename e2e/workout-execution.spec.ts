@@ -579,7 +579,7 @@ test("syncs planned rest without changing an active chrono", async ({
 }) => {
   await prepareWorkout(page, "1");
   await addExercise(page, "Exercice B", "1");
-  await chooseValue(page, "Repos (secondes)", 30);
+  await chooseValue(page, "Repos", 30);
   await page.getByRole("button", { name: /Démarrer la séance/i }).click();
   const a = page.getByRole("region", { name: "Séries de Exercice A" });
   await a.getByRole("button", { name: "Lancer le repos" }).click();
@@ -598,7 +598,7 @@ test("syncs planned rest without changing an active chrono", async ({
     .locator(".countdown-value")
     .getAttribute("stroke-dashoffset")
     .then(Number);
-  await chooseValue(page, "Repos (secondes)", 60);
+  await chooseValue(page, "Repos", 60);
   await expect
     .poll(async () => {
       const store = await readPersistedStore(page);
@@ -637,7 +637,7 @@ test("syncs planned rest without changing an active chrono", async ({
     .getByRole("alertdialog", { name: "Mettre fin au repos ?" })
     .getByRole("button", { name: "Mettre fin" })
     .click();
-  await chooseValue(page, "Repos (secondes)", 180);
+  await chooseValue(page, "Repos", 180);
   await expect(a.locator(".set-block").first()).toHaveClass(/status-performed/);
   await expect(page.getByRole("progressbar")).toHaveAttribute("value", "1");
   await page
@@ -645,7 +645,7 @@ test("syncs planned rest without changing an active chrono", async ({
     .getByRole("button")
     .nth(1)
     .click();
-  await chooseValue(page, "Repos (secondes)", 90);
+  await chooseValue(page, "Repos", 90);
   await expect
     .poll(async () => {
       const store = await readPersistedStore(page);

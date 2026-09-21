@@ -12,6 +12,10 @@
   --success: #55e68b;
   --success-soft: #9af3b9;
   --danger: #ff7068;
+  --bottom-navigation-safe-space: max(
+    8px,
+    calc(env(safe-area-inset-bottom) - 10px)
+  );
 }
 
 body {
@@ -25,6 +29,10 @@ body {
   max-width: 680px;
   background:
     linear-gradient(180deg, #ffffff03, transparent 22rem), var(--background);
+}
+
+.app-shell:not(.workout-detail) {
+  padding-bottom: calc(44px + var(--bottom-navigation-safe-space));
 }
 
 .home-header {
@@ -771,7 +779,6 @@ body {
   order: 2;
 }
 
-.active-session-module,
 .sessions-module {
   min-width: 0;
   border: 1px solid #2d2d34;
@@ -780,22 +787,21 @@ body {
   box-shadow: 0 14px 36px #0004;
 }
 
-.active-session-module {
+.active-workout-list {
   grid-column: 1 / -1;
-  padding: 11px;
-  border-color: #ff633866;
-  background:
-    radial-gradient(circle at 92% 10%, #ff5a1f1f, transparent 45%),
-    linear-gradient(145deg, #211916, #111114 70%);
 }
 
-.active-session-module > header {
+.active-workout-list > .workout-list {
+  margin: 0;
+}
+
+.active-session-heading {
   display: flex;
+  grid-column: 1 / -1;
   align-items: center;
   gap: 8px;
-  padding: 0 4px 8px;
   color: #ff9a72;
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.15em;
   text-transform: uppercase;
@@ -999,6 +1005,9 @@ body {
 }
 
 .sessions-empty {
+  display: grid;
+  place-content: center;
+  min-height: 230px;
   margin-top: 0;
 }
 
@@ -1012,15 +1021,15 @@ body {
 
 @keyframes page-forward-in {
   from {
-    opacity: 0;
-    transform: translateX(16px);
+    opacity: 0.12;
+    transform: translateX(26px);
   }
 }
 
 @keyframes page-back-in {
   from {
-    opacity: 0;
-    transform: translateX(-16px);
+    opacity: 0.12;
+    transform: translateX(-26px);
   }
 }
 
@@ -1400,7 +1409,7 @@ body {
   padding: 8px 11px;
   border-color: #45454d;
   font-family: inherit;
-  font-size: 16px;
+  font-size: 22px;
   text-align: left;
 }
 
@@ -1502,6 +1511,7 @@ button,
 .workout-card {
   -webkit-tap-highlight-color: transparent;
   transition:
+    transform 110ms ease-out,
     filter 150ms ease,
     border-color 180ms ease,
     background-color 180ms ease,
@@ -1511,6 +1521,7 @@ button,
 button:active,
 .workout-card:active {
   filter: brightness(1.16);
+  transform: scale(0.98);
 }
 
 .dashboard-tile:active,
@@ -1523,7 +1534,7 @@ button:active,
 .link:active {
   color: #fff;
   background: #242429;
-  transform: scale(0.92);
+  transform: scale(0.97);
 }
 
 .link:focus:not(:focus-visible) {
@@ -1533,15 +1544,18 @@ button:active,
 }
 
 .bottom-navigation {
+  top: 100dvh;
+  bottom: auto;
   grid-template-columns: 1fr 1fr;
-  min-height: 54px;
-  padding: 4px 14px calc(2px + env(safe-area-inset-bottom));
+  min-height: 0;
+  padding: 2px 12px var(--bottom-navigation-safe-space);
+  transform: translate(-50%, -100%);
 }
 
 .bottom-navigation button {
   display: grid;
   place-items: center;
-  min-height: 46px;
+  min-height: 42px;
   padding: 0;
 }
 
@@ -1556,6 +1570,38 @@ button:active,
 
 .picker-dialog {
   background: linear-gradient(165deg, #1c1c21, #0f0f11 42%);
+}
+
+.modal > .bottom-sheet.picker-dialog {
+  max-width: 540px;
+}
+
+.picker-content {
+  min-width: 0;
+}
+
+.picker-trigger-value {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: center;
+  gap: 3px;
+}
+
+.picker-trigger-value strong {
+  font: inherit;
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.picker-trigger-value small {
+  color: #888891;
+  font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .picker-header > button {
@@ -1599,20 +1645,6 @@ button:active,
   }
 }
 
-@keyframes sheet-slide-up {
-  from {
-    opacity: 0;
-    transform: translateY(18px);
-  }
-}
-
-@keyframes sheet-slide-down {
-  to {
-    opacity: 0;
-    transform: translateY(18px);
-  }
-}
-
 .modal {
   animation: modal-fade-in 180ms ease-out both;
 }
@@ -1621,22 +1653,18 @@ button:active,
   animation: modal-fade-in 180ms ease-out both;
 }
 
-.picker-dialog {
-  animation: sheet-slide-up 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
-
 .picker-backdrop.is-closing {
-  animation: sheet-slide-down 180ms ease-in both;
+  animation: modal-fade-out 180ms ease-in both;
 }
 
 .picker-backdrop.is-closing .picker-dialog {
-  animation: sheet-slide-down 180ms ease-in both;
+  animation: bottom-sheet-conceal 180ms ease-in both;
 }
 
 @keyframes exercise-next-in {
   from {
-    opacity: 0;
-    transform: translateX(9px);
+    opacity: 0.16;
+    transform: translateX(24px);
   }
   to {
     opacity: 1;
@@ -1646,8 +1674,8 @@ button:active,
 
 @keyframes exercise-previous-in {
   from {
-    opacity: 0;
-    transform: translateX(-9px);
+    opacity: 0.16;
+    transform: translateX(-24px);
   }
   to {
     opacity: 1;
@@ -1660,7 +1688,7 @@ button:active,
 .workout-preparation.transition-next .advanced,
 .workout-preparation.transition-next .workout-progress,
 .workout-preparation.transition-next .execution-resume {
-  animation: exercise-next-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: exercise-next-in 210ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 .workout-preparation.transition-previous .exercise-art,
@@ -1668,7 +1696,7 @@ button:active,
 .workout-preparation.transition-previous .advanced,
 .workout-preparation.transition-previous .workout-progress,
 .workout-preparation.transition-previous .execution-resume {
-  animation: exercise-previous-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: exercise-previous-in 210ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 @media (max-width: 350px) {
@@ -1784,7 +1812,11 @@ button:active,
   }
 
   .set-picker-trigger {
-    font-size: 17px;
+    font-size: 20px;
+  }
+
+  .picker-trigger-value strong {
+    font-size: 22px;
   }
 
   .mini-timer-finish {

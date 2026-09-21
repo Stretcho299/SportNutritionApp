@@ -667,14 +667,10 @@ export default function App() {
           <div className="dashboard-grid">
             {activeWorkout && (
               <section
-                className="active-session-module"
+                className="active-workout-list"
                 aria-label="Séance en cours"
               >
-                <header>
-                  <span className="active-session-dot" aria-hidden="true" />
-                  <span>Séance en cours</span>
-                </header>
-                <ul className="workout-list active-workout-list">
+                <ul className="workout-list">
                   <WorkoutRow
                     workout={activeWorkout}
                     variant="active"
@@ -785,13 +781,6 @@ export default function App() {
               </span>
               <h2>Aucune séance prête</h2>
               <span>Créez votre première séance.</span>
-              <button
-                className="primary"
-                aria-label="Créer votre première séance"
-                onClick={() => setDialog("workout")}
-              >
-                Créer une séance
-              </button>
             </section>
           )}
         </section>
@@ -1007,6 +996,7 @@ export default function App() {
                       <div className="set-metrics">
                         <SetValuePicker
                           label="Répétitions"
+                          displayLabel="Répétitions"
                           value={
                             executionSet(s.id)?.repetitions ?? s.repetitions
                           }
@@ -1026,8 +1016,9 @@ export default function App() {
                             },
                           ]}
                           formatValue={(value) =>
-                            value === null ? "—" : `${value} reps`
+                            value === null ? "—" : String(value)
                           }
+                          valueSuffix="reps"
                           disabled={execution?.status === "completed"}
                           onSave={(value) =>
                             saveSetValue(s.id, "repetitions", value)
@@ -1035,6 +1026,7 @@ export default function App() {
                         />
                         <SetValuePicker
                           label="Charge (kg)"
+                          displayLabel="Charge"
                           value={executionSet(s.id)?.weightKg ?? s.weightKg}
                           columns={[
                             {
@@ -1052,15 +1044,16 @@ export default function App() {
                             },
                           ]}
                           formatValue={(value) =>
-                            value === null ? "—" : `${value} kg`
+                            value === null ? "—" : String(value)
                           }
+                          valueSuffix="kg"
                           disabled={execution?.status === "completed"}
                           onSave={(value) =>
                             saveSetValue(s.id, "weightKg", value)
                           }
                         />
                         <SetValuePicker
-                          label="Repos (secondes)"
+                          label="Repos"
                           value={
                             executionSet(s.id)?.restSeconds ?? s.restSeconds
                           }
@@ -1409,19 +1402,28 @@ function WorkoutRow({
           onOpen();
         }}
       >
+        {isActive && variant === "active" && (
+          <span className="active-session-heading">
+            <span className="active-session-dot" aria-hidden="true" />
+            <span>Séance en cours</span>
+          </span>
+        )}
         <span className="workout-card-art" aria-hidden="true">
           <Icon name="dumbbell" size={24} />
         </span>
         <span className="workout-card-content">
-          <small
-            className={`workout-badge ${workout.execution?.status ?? "planned"}`}
-          >
-            {isActive ? "En cours" : "Préparée"}
-          </small>
+          {variant !== "active" && (
+            <small
+              className={`workout-badge ${workout.execution?.status ?? "planned"}`}
+            >
+              Préparée
+            </small>
+          )}
           <strong>{workout.name}</strong>
           <small>
-            {workout.exercises.length} exercice
-            {workout.exercises.length > 1 ? "s" : ""}
+            {isActive && executionSets
+              ? `${settledSets} / ${executionSets.length} séries`
+              : `${workout.exercises.length} exercice${workout.exercises.length > 1 ? "s" : ""}`}
           </small>
           {isActive && executionSets && (
             <span className="workout-card-progress">

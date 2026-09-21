@@ -32,7 +32,7 @@ async function choosePickerValue(page: Page, label: string, value: number) {
       selected: true,
     }),
   ).toBeVisible();
-  const close = picker.getByRole("button", { name: "Fermer" });
+  const close = picker.getByRole("button", { name: "Fermer", exact: true });
   const closeBox = await close.boundingBox();
   expect(closeBox?.width).toBeGreaterThanOrEqual(42);
   expect(closeBox?.height).toBeGreaterThanOrEqual(42);
@@ -150,6 +150,22 @@ async function noOverflow(page: Page) {
   }
 }
 
+async function dragHandle(
+  page: Page,
+  sheet: import("@playwright/test").Locator,
+  distance: number,
+) {
+  const handle = sheet.getByRole("button", { name: "Fermer le panneau" });
+  const box = await handle.boundingBox();
+  expect(box).not.toBeNull();
+  const x = box!.x + box!.width / 2;
+  const y = box!.y + box!.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x, y + distance, { steps: 6 });
+  await page.mouse.up();
+}
+
 async function createWorkoutAndOpenPreparation(page: Page, name: string) {
   await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
   await page.getByRole("button", { name: "Créer une séance" }).click();
@@ -176,6 +192,32 @@ for (const width of [390, 320]) {
     await expect(
       page.getByRole("button", { name: "Nutrition" }),
     ).toHaveAttribute("aria-disabled", "true");
+    const navigationGeometry = await page
+      .getByRole("navigation")
+      .evaluate((navigation) => {
+        const bounds = navigation.getBoundingClientRect();
+        const buttonBounds = navigation
+          .querySelector("button")!
+          .getBoundingClientRect();
+        return {
+          bottom: bounds.bottom,
+          height: bounds.height,
+          buttonHeight: buttonBounds.height,
+          viewportBottom:
+            (window.visualViewport?.offsetTop ?? 0) +
+            (window.visualViewport?.height ?? window.innerHeight),
+        };
+      });
+    expect(navigationGeometry.bottom).toBeCloseTo(
+      navigationGeometry.viewportBottom,
+      0,
+    );
+    expect(navigationGeometry.height).toBeLessThan(
+      navigationGeometry.viewportBottom * 0.09,
+    );
+    expect(
+      navigationGeometry.height - navigationGeometry.buttonHeight,
+    ).toBeLessThan(44);
     const sessionsTile = page.getByRole("button", {
       name: "Ouvrir Mes séances",
     });
@@ -191,7 +233,45 @@ for (const width of [390, 320]) {
       Math.abs(sessionsBounds!.width - calendarBounds!.width),
     ).toBeLessThan(2);
     await screenshot(page, info, "dashboard");
+    const tileBox = await sessionsTile.boundingBox();
+    await page.mouse.move(
+      tileBox!.x + tileBox!.width / 2,
+      tileBox!.y + tileBox!.height / 2,
+    );
+    await page.mouse.down();
+    await expect
+      .poll(() =>
+        sessionsTile.evaluate(
+          (element) => new DOMMatrix(getComputedStyle(element).transform).a,
+        ),
+      )
+      .toBeLessThan(0.99);
+    await page.mouse.move(0, 0);
+    await page.mouse.up();
+    await expect
+      .poll(() =>
+        sessionsTile.evaluate(
+          (element) => new DOMMatrix(getComputedStyle(element).transform).a,
+        ),
+      )
+      .toBe(1);
     await sessionsTile.click();
+    const sessionsLibrary = page.getByRole("region", { name: "Mes séances" });
+    await expect(sessionsLibrary).toHaveCSS(
+      "animation-name",
+      "page-forward-in",
+    );
+    await expect(sessionsLibrary).toHaveCSS("animation-duration", "0.22s");
+    await expect(
+      sessionsLibrary.getByText("Aucune séance prête"),
+    ).toBeVisible();
+    await expect(
+      sessionsLibrary.getByText("Créez votre première séance."),
+    ).toBeVisible();
+    await expect(sessionsLibrary.locator(".sessions-empty button")).toHaveCount(
+      0,
+    );
+    await screenshot(page, info, "library-empty");
     await page.getByRole("button", { name: "Créer une séance" }).click();
     const workoutForm = page.getByRole("dialog", { name: "Séance" });
     const workoutName = workoutForm.getByRole("textbox", { name: "Nom" });
@@ -206,6 +286,10 @@ for (const width of [390, 320]) {
     expect(await page.evaluate(() => document.body.style.position)).toBe("");
     await screenshot(page, info, "library");
     await page.getByRole("button", { name: "Retour aux séances" }).click();
+    await expect(page.getByRole("region", { name: "Entraînement" })).toHaveCSS(
+      "animation-name",
+      "page-back-in",
+    );
     const populatedSessionsTile = page.getByRole("button", {
       name: "Ouvrir Mes séances",
     });
@@ -248,6 +332,9 @@ for (const width of [390, 320]) {
     const weightWheel = weightPicker.getByRole("listbox", {
       name: "Kilogrammes",
     });
+    expect(await page.evaluate(() => document.body.style.position)).toBe(
+      "fixed",
+    );
     const wheelStyles = await weightWheel.evaluate((element) => {
       const styles = getComputedStyle(element);
       return {
@@ -261,6 +348,12 @@ for (const width of [390, 320]) {
     expect(wheelStyles.overscrollBehaviorY).toBe("contain");
     expect(wheelStyles.scrollSnapType).toContain("y");
     expect(wheelStyles.touchAction).toBe("pan-y");
+    await dragHandle(page, weightPicker, 28);
+    await expect(weightPicker).toBeVisible();
+    await expect(weightPicker).toHaveCSS(
+      "transform",
+      /matrix\(1, 0, 0, 1, 0, 0\)/,
+    );
     await screenshot(page, info, "picker-weight");
     await flickWheel(page, weightWheel);
     await weightPicker.getByRole("button", { name: "Annuler" }).click();
@@ -269,19 +362,38 @@ for (const width of [390, 320]) {
     const repetitionsPicker = page.getByRole("dialog", {
       name: "Choisir Répétitions",
     });
-    await repetitionsPicker.getByRole("button", { name: "Fermer" }).click();
+    await repetitionsPicker
+      .getByRole("button", { name: "Fermer", exact: true })
+      .click();
     await expect(repetitionsPicker).toHaveCount(0);
     await choosePickerValue(page, "Répétitions", 10);
-    await page
-      .getByRole("button", { name: "Repos (secondes)" })
-      .first()
-      .click();
+    await page.getByRole("button", { name: "Repos" }).first().click();
     const restPicker = page.getByRole("dialog", {
-      name: "Choisir Repos (secondes)",
+      name: "Choisir Repos",
     });
-    await restPicker.getByRole("button", { name: "Fermer" }).click();
+    await dragHandle(page, restPicker, 120);
     await expect(restPicker).toHaveCount(0);
-    await choosePickerValue(page, "Repos (secondes)", 90);
+    expect(await page.evaluate(() => document.body.style.position)).toBe("");
+    await choosePickerValue(page, "Repos", 90);
+    const firstSet = page.locator(".set-block").first();
+    const values = firstSet.locator(".picker-trigger-value strong");
+    await expect(values).toHaveCount(3);
+    for (const value of await values.all()) {
+      expect(
+        await value.evaluate((element) =>
+          Number.parseFloat(getComputedStyle(element).fontSize),
+        ),
+      ).toBeGreaterThanOrEqual(22);
+    }
+    const units = firstSet.locator(".picker-trigger-value small");
+    await expect(units).toHaveCount(2);
+    for (const unit of await units.all()) {
+      expect(
+        await unit.evaluate((element) =>
+          Number.parseFloat(getComputedStyle(element).fontSize),
+        ),
+      ).toBeLessThan(12);
+    }
     await noOverflow(page);
     await screenshot(page, info, "preparation");
   });
@@ -371,6 +483,10 @@ for (const width of [390, 320]) {
     const activeModule = page.getByRole("region", { name: "Séance en cours" });
     await expect(activeModule.locator(".active-session-dot")).toBeVisible();
     await expect(activeModule).toContainText("Force · Haut du corps");
+    await expect(activeModule).toContainText("0 / 4 séries");
+    await expect(activeModule).toContainText("Reprendre");
+    await expect(activeModule.locator(".workout-card")).toHaveCount(1);
+    await expect(activeModule.locator(".active-session-module")).toHaveCount(0);
     await screenshot(page, info, "dashboard-active");
     await activeModule.locator(".workout-card").click();
     const first = page.locator(".set-block").first();
@@ -586,6 +702,14 @@ test("exercise navigation animates according to workout order without changing e
 
   await rail.getByRole("button").nth(1).click();
   await expect(preparation).toHaveClass(/transition-next/);
+  await expect(page.locator(".exercise-heading")).toHaveCSS(
+    "animation-name",
+    "exercise-next-in",
+  );
+  await expect(page.locator(".exercise-heading")).toHaveCSS(
+    "animation-duration",
+    "0.21s",
+  );
   await expect(page.getByRole("heading", { name: "Deuxième" })).toBeVisible();
 
   await rail.getByRole("button").nth(2).click();
@@ -594,6 +718,10 @@ test("exercise navigation animates according to workout order without changing e
 
   await rail.getByRole("button").nth(1).click();
   await expect(preparation).toHaveClass(/transition-previous/);
+  await expect(page.locator(".exercise-heading")).toHaveCSS(
+    "animation-name",
+    "exercise-previous-in",
+  );
   await expect(page.getByRole("heading", { name: "Deuxième" })).toBeVisible();
   expect(
     await rail

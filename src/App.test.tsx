@@ -145,6 +145,12 @@ it("opens forms without input autofocus and locks the background", async () => {
     "aria-disabled",
     "true",
   );
+  const sessions = screen.getByRole("region", { name: "Mes séances" });
+  expect(within(sessions).getByText("Aucune séance prête")).toBeInTheDocument();
+  expect(
+    within(sessions).getByText("Créez votre première séance."),
+  ).toBeInTheDocument();
+  expect(sessions.querySelector(".sessions-empty button")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Créer une séance" }));
   const dialog = screen.getByRole("dialog", { name: "Séance" });
   expect(screen.getByLabelText("Nom")).not.toHaveFocus();
@@ -373,7 +379,7 @@ it("selects bounded picker values and persists repetitions, half-kilograms and s
   await fillSet("80");
   await chooseValue("Répétitions", 24);
   await chooseValue("Charge (kg)", 82.5);
-  await chooseValue("Repos (secondes)", 419);
+  await chooseValue("Repos", 419);
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(screen.queryByText("6:59 · Repos prévu")).not.toBeInTheDocument();
   expect(storedWorkouts()[0].exercises[0].plannedSets[0]).toMatchObject({
@@ -397,9 +403,9 @@ it("selects bounded picker values and persists repetitions, half-kilograms and s
     within(weightDialog).getByRole("option", { name: /^82\.5$/ }),
   ).toHaveAttribute("aria-selected", "true");
   await clickAndWaitForMotion(screen.getByRole("button", { name: "Annuler" }));
-  fireEvent.click(screen.getByLabelText("Repos (secondes)"));
+  fireEvent.click(screen.getByLabelText("Repos"));
   const restDialog = screen.getByRole("dialog", {
-    name: "Choisir Repos (secondes)",
+    name: "Choisir Repos",
   });
   expect(within(restDialog).getAllByRole("listbox")).toHaveLength(2);
   expect(
@@ -425,10 +431,7 @@ it("selects bounded picker values and persists repetitions, half-kilograms and s
     "data-value",
     "82.5",
   );
-  expect(screen.getByLabelText("Repos (secondes)")).toHaveAttribute(
-    "data-value",
-    "419",
-  );
+  expect(screen.getByLabelText("Repos")).toHaveAttribute("data-value", "419");
 });
 
 it("reorders exercises in a dedicated sheet and retains selection and persisted order", async () => {
@@ -538,7 +541,7 @@ it("creates N blank sets with the requested rest and preserves blanks after relo
     expect(field).toHaveAttribute("data-value", "");
   for (const field of screen.getAllByLabelText("Répétitions"))
     expect(field).toHaveAttribute("data-value", "");
-  for (const field of screen.getAllByLabelText("Repos (secondes)"))
+  for (const field of screen.getAllByLabelText("Repos"))
     expect(field).toHaveAttribute("data-value", "120");
   const sets = storedWorkouts()[0].exercises[0].plannedSets;
   expect(
@@ -559,7 +562,7 @@ it("creates N blank sets with the requested rest and preserves blanks after relo
     expect(field).toHaveAttribute("data-value", "");
   for (const field of screen.getAllByLabelText("Répétitions"))
     expect(field).toHaveAttribute("data-value", "");
-  for (const field of screen.getAllByLabelText("Repos (secondes)"))
+  for (const field of screen.getAllByLabelText("Repos"))
     expect(field).toHaveAttribute("data-value", "120");
 });
 
@@ -603,13 +606,13 @@ it("appends a blank set immediately using the last set rest, including zero", as
     "data-value",
     "",
   );
-  expect(screen.getAllByLabelText("Repos (secondes)")[1]).toHaveAttribute(
+  expect(screen.getAllByLabelText("Repos")[1]).toHaveAttribute(
     "data-value",
     "120",
   );
-  await chooseValue("Repos (secondes)", 0, 1);
+  await chooseValue("Repos", 0, 1);
   fireEvent.click(screen.getByText("+ Ajouter une série"));
-  expect(screen.getAllByLabelText("Repos (secondes)")[2]).toHaveAttribute(
+  expect(screen.getAllByLabelText("Repos")[2]).toHaveAttribute(
     "data-value",
     "0",
   );

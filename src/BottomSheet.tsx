@@ -25,11 +25,15 @@ function currentViewport() {
 export function BottomSheet({
   title,
   closing,
+  className,
+  backdropClassName,
   onClose,
   children,
 }: {
   title: string;
   closing?: boolean;
+  className?: string;
+  backdropClassName?: string;
   onClose: () => void;
   children: ReactNode;
 }) {
@@ -46,11 +50,8 @@ export function BottomSheet({
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
-    const frame = window.requestAnimationFrame(() =>
-      dialog.current?.focus({ preventScroll: true }),
-    );
+    dialog.current?.focus({ preventScroll: true });
     return () => {
-      window.cancelAnimationFrame(frame);
       previous?.focus({ preventScroll: true });
     };
   }, [title]);
@@ -112,7 +113,7 @@ export function BottomSheet({
   return (
     <div
       ref={backdrop}
-      className={`modal sheet-backdrop${closing ? " is-closing" : ""}`}
+      className={`modal sheet-backdrop${backdropClassName ? ` ${backdropClassName}` : ""}${closing ? " is-closing" : ""}`}
       style={style}
       onPointerDown={(event) => {
         if (event.target === event.currentTarget) onClose();
@@ -123,7 +124,7 @@ export function BottomSheet({
     >
       <div
         ref={dialog}
-        className={`bottom-sheet${dragging ? " is-dragging" : ""}`}
+        className={`bottom-sheet${className ? ` ${className}` : ""}${dragging ? " is-dragging" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
