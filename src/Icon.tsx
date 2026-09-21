@@ -15,7 +15,13 @@ type IconName =
   | "home"
   | "nutrition"
   | "check"
-  | "circle";
+  | "circle"
+  | "list"
+  | "calendar"
+  | "performance"
+  | "trophy"
+  | "edit"
+  | "chevron-right";
 
 const paths: Record<IconName, ReactElement> = {
   "arrow-left": <path d="m15 18-6-6 6-6" />,
@@ -81,6 +87,39 @@ const paths: Record<IconName, ReactElement> = {
   ),
   check: <path d="m5 12 4 4L19 6" />,
   circle: <circle cx="12" cy="12" r="8" />,
+  list: (
+    <>
+      <path d="M9 6h11M9 12h11M9 18h11" />
+      <circle cx="4" cy="6" r="1" fill="currentColor" stroke="none" />
+      <circle cx="4" cy="12" r="1" fill="currentColor" stroke="none" />
+      <circle cx="4" cy="18" r="1" fill="currentColor" stroke="none" />
+    </>
+  ),
+  calendar: (
+    <>
+      <rect x="4" y="5" width="16" height="15" rx="2" />
+      <path d="M8 3v4M16 3v4M4 10h16" />
+    </>
+  ),
+  performance: (
+    <>
+      <path d="M4 19V9M10 19V5M16 19v-7M22 19V3" />
+      <path d="m3 14 7-6 6 2 6-6" />
+    </>
+  ),
+  trophy: (
+    <>
+      <path d="M8 4h8v4c0 4-1.8 6-4 6s-4-2-4-6V4Z" />
+      <path d="M8 6H4v2c0 2.2 1.6 4 4 4M16 6h4v2c0 2.2-1.6 4-4 4M12 14v4M8 21h8M9 18h6" />
+    </>
+  ),
+  edit: (
+    <>
+      <path d="m4 20 4.5-1 10-10-3.5-3.5-10 10L4 20Z" />
+      <path d="m13.5 7 3.5 3.5" />
+    </>
+  ),
+  "chevron-right": <path d="m9 6 6 6-6 6" />,
 };
 
 export function Icon({

@@ -7,8 +7,10 @@ async function addExercise(page: Page, name: string, count = "2", rest = "90") {
     .getByRole("button", { name: "Ajouter un exercice", exact: true })
     .click();
   await page.getByRole("textbox", { name: "Nom" }).fill(name);
-  await page.getByLabel("Nombre de séries initiales").fill(count);
-  await page.getByLabel("Repos par défaut (secondes)").fill(rest);
+  if (count !== "1")
+    await choosePickerValue(page, "Nombre de séries initiales", Number(count));
+  if (rest !== "90")
+    await choosePickerValue(page, "Repos par défaut", Number(rest));
   const form = page.getByRole("dialog", { name: "Exercice" });
   await form.getByRole("button", { name: "Enregistrer" }).click();
   await expect(form).toHaveCount(0);
@@ -22,7 +24,9 @@ async function choosePickerValue(page: Page, label: string, value: number) {
       ? "Kilogrammes"
       : label === "Répétitions"
         ? "Répétitions"
-        : "Minutes";
+        : label === "Nombre de séries initiales"
+          ? "Séries"
+          : "Minutes";
   await expect(
     picker.getByRole("listbox", { name: wheelName }).getByRole("option", {
       selected: true,
@@ -35,7 +39,7 @@ async function choosePickerValue(page: Page, label: string, value: number) {
   expect(
     Math.abs((closeBox?.width ?? 0) - (closeBox?.height ?? 0)),
   ).toBeLessThan(2);
-  if (label === "Repos (secondes)") {
+  if (label.startsWith("Repos")) {
     await picker
       .getByRole("listbox", { name: "Minutes" })
       .getByRole("option", {
@@ -50,7 +54,12 @@ async function choosePickerValue(page: Page, label: string, value: number) {
   } else {
     await picker
       .getByRole("listbox", {
-        name: label === "Charge (kg)" ? "Kilogrammes" : "Répétitions",
+        name:
+          label === "Charge (kg)"
+            ? "Kilogrammes"
+            : label === "Nombre de séries initiales"
+              ? "Séries"
+              : "Répétitions",
       })
       .getByRole("option", { name: String(value), exact: true })
       .click();
@@ -141,8 +150,19 @@ async function noOverflow(page: Page) {
   }
 }
 
+async function createWorkoutAndOpenPreparation(page: Page, name: string) {
+  await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
+  await page.getByRole("button", { name: "Créer une séance" }).click();
+  const workoutForm = page.getByRole("dialog", { name: "Séance" });
+  await workoutForm.getByRole("textbox", { name: "Nom" }).fill(name);
+  await workoutForm.getByRole("button", { name: "Enregistrer" }).click();
+  await expect(workoutForm).toHaveCount(0);
+  await page.locator(".workout-card").click();
+  await page.getByRole("button", { name: "Refaire la séance" }).click();
+}
+
 for (const width of [390, 320]) {
-  test(`mobile layout and persistent execution at ${width}px`, async ({
+  test(`mobile dashboard and workout navigation at ${width}px`, async ({
     page,
   }, info) => {
     await page.setViewportSize({ width, height: 844 });
@@ -156,6 +176,22 @@ for (const width of [390, 320]) {
     await expect(
       page.getByRole("button", { name: "Nutrition" }),
     ).toHaveAttribute("aria-disabled", "true");
+    const sessionsTile = page.getByRole("button", {
+      name: "Ouvrir Mes séances",
+    });
+    const calendarTile = page.getByRole("region", {
+      name: "Calendrier bientôt disponible",
+    });
+    const sessionsBounds = await sessionsTile.boundingBox();
+    const calendarBounds = await calendarTile.boundingBox();
+    expect(
+      Math.abs(sessionsBounds!.width - sessionsBounds!.height),
+    ).toBeLessThan(2);
+    expect(
+      Math.abs(sessionsBounds!.width - calendarBounds!.width),
+    ).toBeLessThan(2);
+    await screenshot(page, info, "dashboard");
+    await sessionsTile.click();
     await page.getByRole("button", { name: "Créer une séance" }).click();
     const workoutForm = page.getByRole("dialog", { name: "Séance" });
     const workoutName = workoutForm.getByRole("textbox", { name: "Nom" });
@@ -169,29 +205,42 @@ for (const width of [390, 320]) {
     await expect(workoutForm).toHaveCount(0);
     expect(await page.evaluate(() => document.body.style.position)).toBe("");
     await screenshot(page, info, "library");
+    await page.getByRole("button", { name: "Retour aux séances" }).click();
+    const populatedSessionsTile = page.getByRole("button", {
+      name: "Ouvrir Mes séances",
+    });
+    await expect(populatedSessionsTile).toContainText("1 prête");
+    const populatedTileBounds = await populatedSessionsTile.boundingBox();
+    expect(populatedTileBounds!.width).toBeCloseTo(sessionsBounds!.width, 0);
+    expect(populatedTileBounds!.height).toBeCloseTo(sessionsBounds!.height, 0);
+    expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe(
+      "BUTTON",
+    );
+    await populatedSessionsTile.click();
     await page.locator(".workout-card").click();
     await expect(
       page.getByRole("region", { name: "Aperçu de Force · Haut du corps" }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Modifier la séance" }).click();
+    await expect(
+      page.getByRole("button", { name: "Démarrer la séance" }),
+    ).toHaveCount(0);
+    await expect(page.getByText("Pas encore de données")).toHaveCount(2);
+    await page.getByRole("button", { name: "Refaire la séance" }).click();
     await addExercise(page, "Développé couché", "12");
-    for (const name of [
-      "Rowing",
-      "Tractions",
-      "Élévations latérales",
-      "Curl incliné",
-      "Extension triceps à la poulie haute",
-    ]) {
-      await addExercise(page, name);
-    }
     await page.getByRole("button", { name: "Retour aux séances" }).click();
     const populatedPreview = page.getByRole("region", {
       name: "Aperçu de Force · Haut du corps",
     });
     await expect(populatedPreview.getByText("12 séries")).toBeVisible();
     await screenshot(page, info, "preview-populated");
-    await page.getByRole("button", { name: "Modifier la séance" }).click();
-    const first = page.locator(".set-block").first();
+    await noOverflow(page);
+  });
+
+  test(`mobile picker controls at ${width}px`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("/");
+    await createWorkoutAndOpenPreparation(page, "Force · Haut du corps");
+    await addExercise(page, "Développé couché", "12");
     await page.getByRole("button", { name: "Charge (kg)" }).first().click();
     const weightPicker = page.getByRole("dialog", {
       name: "Choisir Charge (kg)",
@@ -217,22 +266,40 @@ for (const width of [390, 320]) {
     await weightPicker.getByRole("button", { name: "Annuler" }).click();
     await choosePickerValue(page, "Charge (kg)", 62.5);
     await page.getByRole("button", { name: "Répétitions" }).first().click();
-    await page
-      .getByRole("dialog", { name: "Choisir Répétitions" })
-      .getByRole("button", { name: "Fermer" })
-      .click();
+    const repetitionsPicker = page.getByRole("dialog", {
+      name: "Choisir Répétitions",
+    });
+    await repetitionsPicker.getByRole("button", { name: "Fermer" }).click();
+    await expect(repetitionsPicker).toHaveCount(0);
     await choosePickerValue(page, "Répétitions", 10);
     await page
       .getByRole("button", { name: "Repos (secondes)" })
       .first()
       .click();
-    await page
-      .getByRole("dialog", { name: "Choisir Repos (secondes)" })
-      .getByRole("button", { name: "Fermer" })
-      .click();
+    const restPicker = page.getByRole("dialog", {
+      name: "Choisir Repos (secondes)",
+    });
+    await restPicker.getByRole("button", { name: "Fermer" }).click();
+    await expect(restPicker).toHaveCount(0);
     await choosePickerValue(page, "Repos (secondes)", 90);
     await noOverflow(page);
     await screenshot(page, info, "preparation");
+  });
+
+  test(`mobile dense preparation layout at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("/");
+    await createWorkoutAndOpenPreparation(page, "Force · Haut du corps");
+    await addExercise(page, "Développé couché", "12");
+    for (const name of [
+      "Rowing",
+      "Tractions",
+      "Élévations latérales",
+      "Curl incliné",
+      "Extension triceps à la poulie haute",
+    ]) {
+      await addExercise(page, name, "1");
+    }
     const rail = page.getByRole("list", { name: "Exercices" });
     const lastTab = rail.getByRole("button").last();
     await lastTab.click();
@@ -263,6 +330,42 @@ for (const width of [390, 320]) {
       .boundingBox();
     const navBounds = await page.getByRole("navigation").boundingBox();
     expect(addBounds!.y + addBounds!.height).toBeLessThanOrEqual(navBounds!.y);
+    expect(navBounds!.y + navBounds!.height).toBeCloseTo(844, 0);
+  });
+
+  test(`mobile short viewport bottom sheet at ${width}px`, async ({
+    page,
+  }, info) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("/");
+    await createWorkoutAndOpenPreparation(page, "Force · Haut du corps");
+    // A short screen (e.g. keyboard) must allow page scrolling to all controls.
+    await page.setViewportSize({ width, height: 480 });
+    await page.getByRole("button", { name: "Gérer les exercices" }).click();
+    await page
+      .getByRole("dialog", { name: "Actions de la séance" })
+      .getByRole("button", { name: "Ajouter un exercice", exact: true })
+      .click();
+    await page.getByRole("textbox", { name: "Nom" }).fill("Mobilité");
+    await page
+      .getByRole("button", { name: "Annuler", exact: true })
+      .scrollIntoViewIfNeeded();
+    await expect(
+      page.getByRole("button", { name: "Annuler", exact: true }),
+    ).toBeInViewport();
+    await screenshot(page, info, "exercise-sheet-short-viewport");
+    await noOverflow(page);
+    await page.getByRole("button", { name: "Annuler", exact: true }).click();
+  });
+
+  test(`mobile persistent execution at ${width}px`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("/");
+    await createWorkoutAndOpenPreparation(page, "Force · Haut du corps");
+    await addExercise(page, "Développé couché", "2", "90");
+    await addExercise(page, "Rowing", "2", "90");
+    await choosePickerValue(page, "Charge (kg)", 62.5);
+    await choosePickerValue(page, "Répétitions", 10);
     await page.getByRole("button", { name: "Démarrer la séance" }).click();
     await page.getByRole("button", { name: "Retour aux séances" }).click();
     const activeModule = page.getByRole("region", { name: "Séance en cours" });
@@ -270,6 +373,8 @@ for (const width of [390, 320]) {
     await expect(activeModule).toContainText("Force · Haut du corps");
     await screenshot(page, info, "dashboard-active");
     await activeModule.locator(".workout-card").click();
+    const first = page.locator(".set-block").first();
+    const rail = page.getByRole("list", { name: "Exercices" });
     await first.scrollIntoViewIfNeeded();
     await expect(first.locator(".order")).toHaveCount(1);
     await expect(
@@ -344,24 +449,7 @@ for (const width of [390, 320]) {
     await expect(page.getByRole("progressbar")).toHaveAttribute("value", "1");
     await screenshot(page, info, "states");
     await noOverflow(page);
-    // A short screen (e.g. keyboard) must allow page scrolling to all controls.
-    await page.setViewportSize({ width, height: 480 });
-    await page.getByRole("button", { name: "Gérer les exercices" }).click();
-    await page
-      .getByRole("button", { name: "Ajouter un exercice", exact: true })
-      .click();
-    await page.getByRole("textbox", { name: "Nom" }).fill("Mobilité");
-    await page
-      .getByRole("button", { name: "Annuler", exact: true })
-      .scrollIntoViewIfNeeded();
-    await expect(
-      page.getByRole("button", { name: "Annuler", exact: true }),
-    ).toBeInViewport();
-    await screenshot(page, info, "exercise-sheet-short-viewport");
-    await noOverflow(page);
-    await page.getByRole("button", { name: "Annuler", exact: true }).click();
-    await page.setViewportSize({ width, height: 844 });
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 2; i++) {
       await rail.getByRole("button").nth(i).click();
       await page.getByRole("button", { name: "Terminer l’exercice" }).click();
       await page
@@ -381,7 +469,9 @@ for (const width of [390, 320]) {
     ).toBeVisible();
     await screenshot(page, info, "completed");
     await page.reload();
+    await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
     await page.locator(".workout-card").click();
+    await page.getByRole("button", { name: "Refaire la séance" }).click();
     await expect(
       page.getByRole("button", { name: "Démarrer la séance" }),
     ).toBeVisible();
@@ -393,6 +483,7 @@ test("bottom sheet follows the drag handle and restores the locked page", async 
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
+  await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
   await page.getByRole("button", { name: "Créer une séance" }).click();
   const sheet = page.getByRole("dialog", { name: "Séance" });
   const name = sheet.getByRole("textbox", { name: "Nom" });
@@ -434,16 +525,31 @@ test("exposes the iPhone standalone PWA metadata", async ({ page }) => {
   });
 });
 
+test("honors reduced motion for dashboard and page navigation", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  const tile = page.getByRole("button", { name: "Ouvrir Mes séances" });
+  await expect(tile).toHaveCSS("animation-name", "none");
+  await tile.click();
+  await expect(page.locator(".sessions-library")).toHaveCSS(
+    "animation-name",
+    "none",
+  );
+});
+
 test("finishing the rest marks the set performed and advances progress", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
+  await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
   await page.getByRole("button", { name: "Créer une séance" }).click();
   await page.getByRole("textbox", { name: "Nom" }).fill("Tempo");
   await page.getByRole("button", { name: "Enregistrer" }).click();
   await page.locator(".workout-card").click();
-  await page.getByRole("button", { name: "Modifier la séance" }).click();
+  await page.getByRole("button", { name: "Refaire la séance" }).click();
   await addExercise(page, "Squat", "2", "1");
   await page.getByRole("button", { name: "Démarrer la séance" }).click();
   const firstSet = page
@@ -462,11 +568,12 @@ test("exercise navigation animates according to workout order without changing e
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
+  await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
   await page.getByRole("button", { name: "Créer une séance" }).click();
   await page.getByRole("textbox", { name: "Nom" }).fill("Direction");
   await page.getByRole("button", { name: "Enregistrer" }).click();
   await page.locator(".workout-card").click();
-  await page.getByRole("button", { name: "Modifier la séance" }).click();
+  await page.getByRole("button", { name: "Refaire la séance" }).click();
   await addExercise(page, "Premier", "1");
   await addExercise(page, "Deuxième", "1");
   await addExercise(page, "Troisième", "1");

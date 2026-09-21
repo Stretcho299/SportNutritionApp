@@ -3,7 +3,7 @@
   min-height: 100dvh;
   margin: auto;
   padding: calc(12px + env(safe-area-inset-top)) 16px
-    calc(88px + env(safe-area-inset-bottom));
+    calc(64px + env(safe-area-inset-bottom));
   background: radial-gradient(ellipse at 100% 0, #ff57080d, transparent 340px);
 }
 .workout-control {
@@ -1277,9 +1277,14 @@ nav button svg {
     color 160ms ease,
     transform 140ms ease;
 }
-.link:hover,
 .link:focus-visible {
   color: var(--accent-soft);
+}
+
+@media (hover: hover) {
+  .link:hover {
+    color: var(--accent-soft);
+  }
 }
 .control-actions {
   gap: 5px;

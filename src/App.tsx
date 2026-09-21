@@ -37,7 +37,7 @@ import {
   type WorkoutExecution,
   type Workout,
 } from "./storage/database";
-type Screen = "list" | "preview" | "detail";
+type Screen = "list" | "workouts" | "preview" | "detail";
 type Dialog =
   | null
   | "workout"
@@ -64,8 +64,15 @@ export default function App() {
   const [exerciseTransition, setExerciseTransition] = useState<
     "none" | "next" | "previous"
   >("none");
+  const [screenTransition, setScreenTransition] = useState<"forward" | "back">(
+    "forward",
+  );
   const exerciseTransitionTimeout = useRef<number | undefined>(undefined);
   const dialogCloseTimeout = useRef<number | undefined>(undefined);
+  const navigate = (next: Screen, direction: "forward" | "back") => {
+    setScreenTransition(direction);
+    setScreen(next);
+  };
   useEffect(() => {
     void loadWorkoutStore().then((store: WorkoutStore) => {
       const active = store.sessions
@@ -318,7 +325,7 @@ export default function App() {
           if (workoutId === id) {
             setWorkoutId("");
             setExerciseId("");
-            setScreen("list");
+            navigate("list", "back");
           }
         },
       });
@@ -354,7 +361,7 @@ export default function App() {
       setExerciseId(
         sort(workout.exercises).find((x) => x.id !== exercise.id)?.id ?? "",
       );
-      setScreen("detail");
+      navigate("detail", "back");
       close();
     };
     if (hasData)
@@ -613,18 +620,23 @@ export default function App() {
             <button
               aria-label="Retour aux séances"
               className="link"
-              onClick={() =>
-                setScreen(
-                  screen === "detail" && workout && !workout.execution
-                    ? "preview"
-                    : "list",
-                )
-              }
+              onPointerUp={(event) => event.currentTarget.blur()}
+              onClick={() => {
+                if (screen === "workouts") navigate("list", "back");
+                else if (screen === "preview") navigate("workouts", "back");
+                else
+                  navigate(
+                    screen === "detail" && workout && !workout.execution
+                      ? "preview"
+                      : "list",
+                    "back",
+                  );
+              }}
             >
               <Icon name="arrow-left" size={19} />
               <span className="sr-only">Retour</span>
             </button>
-            <h1>{workout?.name}</h1>
+            <h1>{screen === "workouts" ? "Mes séances" : workout?.name}</h1>
             {isWorkoutDetail && (
               <div className="control-actions">
                 <button
@@ -646,90 +658,147 @@ export default function App() {
       </header>
       {screen === "list" && (
         <section
-          className="workout-library dashboard"
+          className={`workout-library dashboard page-${screenTransition}`}
           aria-label="Entraînement"
         >
           <div className="library-heading">
-            <span>
-              {workouts.length} séance{workouts.length > 1 ? "s" : ""} préparée
-              {workouts.length > 1 ? "s" : ""}
-            </span>
+            <span>Votre espace d’entraînement</span>
           </div>
-          <button
-            className="primary create-workout"
-            aria-label="Créer une séance"
-            onClick={() => setDialog("workout")}
-          >
-            <Icon name="plus" size={18} /> Nouvelle séance
-          </button>
-          {workouts.length === 0 ? (
-            <section className="empty">
+          <div className="dashboard-grid">
+            {activeWorkout && (
+              <section
+                className="active-session-module"
+                aria-label="Séance en cours"
+              >
+                <header>
+                  <span className="active-session-dot" aria-hidden="true" />
+                  <span>Séance en cours</span>
+                </header>
+                <ul className="workout-list active-workout-list">
+                  <WorkoutRow
+                    workout={activeWorkout}
+                    variant="active"
+                    onDelete={() => removeWorkout(activeWorkout.id)}
+                    onOpen={() => {
+                      setWorkoutId(activeWorkout.id);
+                      setExerciseId(sort(activeWorkout.exercises)[0]?.id ?? "");
+                      navigate("detail", "forward");
+                    }}
+                  />
+                </ul>
+              </section>
+            )}
+            <button
+              className="dashboard-tile sessions-tile"
+              aria-label="Ouvrir Mes séances"
+              onClick={() => navigate("workouts", "forward")}
+            >
+              <span className="dashboard-tile-art" aria-hidden="true">
+                <Icon name="dumbbell" size={46} strokeWidth={1.45} />
+                <Icon name="list" size={22} />
+              </span>
+              <span className="dashboard-tile-copy">
+                <small>
+                  {preparedWorkouts.length} prête
+                  {preparedWorkouts.length > 1 ? "s" : ""}
+                </small>
+                <strong>Mes séances</strong>
+              </span>
+              <Icon name="chevron-right" size={18} />
+            </button>
+            <section
+              className="dashboard-tile future-tile"
+              aria-label="Calendrier bientôt disponible"
+            >
+              <span className="future-tile-icon" aria-hidden="true">
+                <Icon name="calendar" size={30} />
+              </span>
+              <small>Bientôt</small>
+              <strong>Calendrier</strong>
+            </section>
+            <section
+              className="dashboard-tile future-tile"
+              aria-label="Performances bientôt disponibles"
+            >
+              <span className="future-tile-icon" aria-hidden="true">
+                <Icon name="performance" size={30} />
+              </span>
+              <small>—</small>
+              <strong>Performances</strong>
+            </section>
+            <section
+              className="dashboard-tile future-tile"
+              aria-label="Trophées bientôt disponibles"
+            >
+              <span className="future-tile-icon" aria-hidden="true">
+                <Icon name="trophy" size={30} />
+              </span>
+              <small>Bientôt</small>
+              <strong>Trophées</strong>
+            </section>
+          </div>
+        </section>
+      )}
+      {screen === "workouts" && (
+        <section
+          className={`workout-library sessions-library page-${screenTransition}`}
+          aria-label="Mes séances"
+        >
+          <div className="sessions-library-heading">
+            <div>
+              <span>Programme</span>
+              <h2>Mes séances</h2>
+              <p>
+                {preparedWorkouts.length} séance
+                {preparedWorkouts.length > 1 ? "s" : ""} prête
+                {preparedWorkouts.length > 1 ? "s" : ""}
+              </p>
+            </div>
+            <button
+              className="create-workout-icon"
+              aria-label="Créer une séance"
+              onClick={() => setDialog("workout")}
+            >
+              <Icon name="plus" size={21} />
+            </button>
+          </div>
+          {preparedWorkouts.length ? (
+            <ul className="workout-list sessions-library-list">
+              {preparedWorkouts.map((item) => (
+                <WorkoutRow
+                  key={item.id}
+                  workout={item}
+                  variant="compact"
+                  onDelete={() => removeWorkout(item.id)}
+                  onOpen={() => {
+                    setWorkoutId(item.id);
+                    setExerciseId(sort(item.exercises)[0]?.id ?? "");
+                    navigate("preview", "forward");
+                  }}
+                />
+              ))}
+            </ul>
+          ) : (
+            <section className="empty sessions-empty">
               <span className="empty-icon" aria-hidden="true">
                 <Icon name="dumbbell" size={28} />
               </span>
-              <h2>Aucune séance</h2>
+              <h2>Aucune séance prête</h2>
               <span>Créez votre première séance.</span>
+              <button
+                className="primary"
+                aria-label="Créer votre première séance"
+                onClick={() => setDialog("workout")}
+              >
+                Créer une séance
+              </button>
             </section>
-          ) : (
-            <div className="dashboard-grid">
-              {activeWorkout && (
-                <section
-                  className="active-session-module"
-                  aria-label="Séance en cours"
-                >
-                  <header>
-                    <span className="active-session-dot" aria-hidden="true" />
-                    <span>Séance en cours</span>
-                  </header>
-                  <ul className="workout-list active-workout-list">
-                    <WorkoutRow
-                      workout={activeWorkout}
-                      variant="active"
-                      onDelete={() => removeWorkout(activeWorkout.id)}
-                      onOpen={() => {
-                        setWorkoutId(activeWorkout.id);
-                        setExerciseId(
-                          sort(activeWorkout.exercises)[0]?.id ?? "",
-                        );
-                        setScreen("detail");
-                      }}
-                    />
-                  </ul>
-                </section>
-              )}
-              {preparedWorkouts.length > 0 && (
-                <section className="sessions-module" aria-label="Mes séances">
-                  <header className="module-heading">
-                    <div>
-                      <span>Programme</span>
-                      <h2>Mes séances</h2>
-                    </div>
-                    <strong>{preparedWorkouts.length}</strong>
-                  </header>
-                  <ul className="workout-list compact-workout-grid">
-                    {preparedWorkouts.map((item) => (
-                      <WorkoutRow
-                        key={item.id}
-                        workout={item}
-                        variant="compact"
-                        onDelete={() => removeWorkout(item.id)}
-                        onOpen={() => {
-                          setWorkoutId(item.id);
-                          setExerciseId(sort(item.exercises)[0]?.id ?? "");
-                          setScreen("preview");
-                        }}
-                      />
-                    ))}
-                  </ul>
-                </section>
-              )}
-            </div>
           )}
         </section>
       )}
       {screen === "preview" && workout && (
         <section
-          className="workout-preview"
+          className={`workout-preview page-${screenTransition}`}
           aria-label={`Aperçu de ${workout.name}`}
         >
           <div className="preview-hero">
@@ -749,6 +818,16 @@ export default function App() {
             <div>
               <strong>{totalPlannedSets}</strong>
               <span>Séries prévues</span>
+            </div>
+            <div className="preview-metric-unavailable">
+              <strong>—</strong>
+              <span>Durée moyenne</span>
+              <small>Pas encore de données</small>
+            </div>
+            <div className="preview-metric-unavailable">
+              <strong>—</strong>
+              <span>Calories moyennes</span>
+              <small>Pas encore de données</small>
             </div>
           </div>
           <section
@@ -779,21 +858,13 @@ export default function App() {
           <div className="preview-actions">
             <button
               className="primary"
-              disabled={workout.exercises.length === 0}
               onClick={() => {
                 const firstExerciseId = sort(workout.exercises)[0]?.id ?? "";
                 setExerciseId(firstExerciseId);
-                startExecution(firstExerciseId);
-                setScreen("detail");
+                navigate("detail", "forward");
               }}
             >
-              <Icon name="play" size={16} /> Démarrer la séance
-            </button>
-            <button
-              className="preview-edit"
-              onClick={() => setScreen("detail")}
-            >
-              Modifier la séance
+              <Icon name="edit" size={16} /> Refaire la séance
             </button>
           </div>
         </section>
@@ -1096,30 +1167,56 @@ export default function App() {
           onClose={close}
         >
           {dialog === "addMenu" ? (
-            <>
-              <button onClick={() => setDialog("exercise")}>
-                Ajouter un exercice
+            <div className="action-sheet">
+              <h2>Actions de la séance</h2>
+              <div className="action-sheet-menu">
+                <button onClick={() => setDialog("exercise")}>
+                  <span className="action-sheet-icon" aria-hidden="true">
+                    <Icon name="plus" size={19} />
+                  </span>
+                  <span>Ajouter un exercice</span>
+                  <Icon name="chevron-right" size={17} />
+                </button>
+                <button className="danger" onClick={removeExercise}>
+                  <span className="action-sheet-icon" aria-hidden="true">
+                    <Icon name="trash" size={18} />
+                  </span>
+                  <span>Supprimer l’exercice</span>
+                  <Icon name="chevron-right" size={17} />
+                </button>
+              </div>
+              <button className="action-sheet-cancel" onClick={close}>
+                Annuler
               </button>
-              <button className="danger" onClick={removeExercise}>
-                Supprimer l’exercice
-              </button>
-              <button onClick={close}>Annuler</button>
-            </>
+            </div>
           ) : dialog === "organizeMenu" ? (
-            <>
-              <button onClick={() => setDialog("reorder")}>
-                Réordonner les exercices
+            <div className="action-sheet">
+              <h2>Organisation</h2>
+              <div className="action-sheet-menu">
+                <button onClick={() => setDialog("reorder")}>
+                  <span className="action-sheet-icon" aria-hidden="true">
+                    <Icon name="reorder" size={19} />
+                  </span>
+                  <span>Réordonner les exercices</span>
+                  <Icon name="chevron-right" size={17} />
+                </button>
+                <button
+                  onClick={() => {
+                    setName(workout.name);
+                    setDialog("renameWorkout");
+                  }}
+                >
+                  <span className="action-sheet-icon" aria-hidden="true">
+                    <Icon name="edit" size={18} />
+                  </span>
+                  <span>Renommer la séance</span>
+                  <Icon name="chevron-right" size={17} />
+                </button>
+              </div>
+              <button className="action-sheet-cancel" onClick={close}>
+                Annuler
               </button>
-              <button
-                onClick={() => {
-                  setName(workout.name);
-                  setDialog("renameWorkout");
-                }}
-              >
-                Renommer la séance
-              </button>
-              <button onClick={close}>Annuler</button>
-            </>
+            </div>
           ) : (
             <>
               <h2>Réordonner les exercices</h2>
@@ -1193,32 +1290,39 @@ export default function App() {
             </label>
             {dialog === "exercise" && (
               <div className="compact-form-fields">
-                <label className="compact-field">
-                  <span>Séries</span>
-                  <input
-                    aria-label="Nombre de séries initiales"
-                    type="number"
-                    min="1"
-                    step="1"
-                    inputMode="numeric"
-                    value={initialSetCount}
-                    onChange={(e) => setInitialSetCount(e.target.value)}
-                    required
-                  />
-                </label>
-                <label className="compact-field">
-                  <span>Repos (s)</span>
-                  <input
-                    aria-label="Repos par défaut (secondes)"
-                    type="number"
-                    min="0"
-                    step="1"
-                    inputMode="numeric"
-                    value={rest}
-                    onChange={(e) => setRest(e.target.value)}
-                    required
-                  />
-                </label>
+                <SetValuePicker
+                  label="Nombre de séries initiales"
+                  displayLabel="Séries"
+                  value={Number(initialSetCount)}
+                  columns={[
+                    {
+                      label: "Séries",
+                      values: pickerValues.sets,
+                      value: Number(initialSetCount),
+                    },
+                  ]}
+                  formatValue={(value) => String(value ?? 1)}
+                  onSave={(value) => setInitialSetCount(String(value))}
+                />
+                <SetValuePicker
+                  label="Repos par défaut"
+                  displayLabel="Repos"
+                  value={Number(rest)}
+                  columns={[
+                    {
+                      label: "Minutes",
+                      values: pickerValues.minutes,
+                      value: Math.min(6, Math.floor(Number(rest) / 60)),
+                    },
+                    {
+                      label: "Secondes",
+                      values: pickerValues.seconds,
+                      value: Number(rest) % 60,
+                    },
+                  ]}
+                  formatValue={(value) => formatRest(value ?? 0)}
+                  onSave={(value) => setRest(String(value))}
+                />
               </div>
             )}
             <button className="primary">Enregistrer</button>

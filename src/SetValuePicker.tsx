@@ -102,6 +102,7 @@ type PickerColumn = {
 
 export function SetValuePicker({
   label,
+  displayLabel,
   value,
   columns,
   disabled,
@@ -109,6 +110,7 @@ export function SetValuePicker({
   onSave,
 }: {
   label: string;
+  displayLabel?: string;
   value: number | null;
   columns: PickerColumn[];
   disabled?: boolean;
@@ -163,7 +165,7 @@ export function SetValuePicker({
 
   return (
     <div className="set-field">
-      <span>{label}</span>
+      <span>{displayLabel ?? label}</span>
       <button
         type="button"
         className="set-picker-trigger"

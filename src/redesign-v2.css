@@ -767,7 +767,7 @@ body {
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
   order: 2;
 }
 
@@ -803,22 +803,224 @@ body {
 
 .active-session-dot {
   display: inline-block;
-  flex: 0 0 8px;
-  width: 8px;
-  height: 8px;
+  flex: 0 0 10px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: #ff632f;
   box-shadow:
-    0 0 0 4px #ff5a1f18,
-    0 0 13px #ff5a1fa8;
-  animation: active-session-pulse 2.2s ease-in-out infinite;
+    0 0 0 5px #ff5a1f22,
+    0 0 17px #ff5a1fd1;
+  animation: active-session-pulse 1.8s ease-in-out infinite;
 }
 
 @keyframes active-session-pulse {
   50% {
     box-shadow:
       0 0 0 7px #ff5a1f09,
-      0 0 18px #ff5a1fe0;
+      0 0 23px #ff5a1fff;
+  }
+}
+
+.dashboard-tile {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  aspect-ratio: 1;
+  overflow: hidden;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 13px;
+  border: 1px solid #2f3037;
+  border-radius: 19px;
+  background:
+    radial-gradient(circle at 85% 10%, #ffffff08, transparent 48%),
+    linear-gradient(145deg, #1a1b20, #101114);
+  color: var(--text);
+  text-align: left;
+  box-shadow: 0 12px 30px #0004;
+  animation: dashboard-card-in 220ms ease-out both;
+}
+
+.dashboard-tile:nth-child(3) {
+  animation-delay: 35ms;
+}
+
+.dashboard-tile:nth-child(4) {
+  animation-delay: 70ms;
+}
+
+.dashboard-tile:nth-child(5) {
+  animation-delay: 105ms;
+}
+
+.dashboard-tile > svg {
+  position: absolute;
+  right: 11px;
+  bottom: 12px;
+  color: #8c8c95;
+}
+
+.sessions-tile {
+  border-color: #ff693d69;
+  background:
+    radial-gradient(circle at 75% 12%, #ff5a1f2d, transparent 45%),
+    linear-gradient(145deg, #261a17, #111216 72%);
+}
+
+.sessions-tile > svg {
+  color: #ff956c;
+}
+
+.dashboard-tile-art {
+  position: absolute;
+  inset: 7px 6px auto auto;
+  width: 78%;
+  height: 62%;
+  color: #ff7545;
+  opacity: 0.9;
+}
+
+.dashboard-tile-art > svg:first-child {
+  position: absolute;
+  top: 13px;
+  right: 18px;
+  filter: drop-shadow(0 0 15px #ff5a1f4f);
+  transform: rotate(-12deg);
+}
+
+.dashboard-tile-art > svg:last-child {
+  position: absolute;
+  top: 45px;
+  right: 4px;
+  color: #ffad8b;
+}
+
+.dashboard-tile-copy {
+  display: grid;
+  gap: 3px;
+  padding-right: 20px;
+}
+
+.dashboard-tile small,
+.future-tile small {
+  color: #85858f;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.dashboard-tile strong {
+  font-family: var(--display);
+  font-size: clamp(20px, 6.5vw, 28px);
+  font-weight: 400;
+  line-height: 0.95;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.future-tile {
+  justify-content: space-between;
+  color: #a4a4ac;
+}
+
+.future-tile-icon {
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  border: 1px solid #33343b;
+  border-radius: 15px;
+  background: #ffffff04;
+  color: #777983;
+}
+
+.future-tile strong {
+  color: #b7b7be;
+}
+
+@keyframes dashboard-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+.sessions-library {
+  gap: 13px;
+  padding-bottom: calc(64px + env(safe-area-inset-bottom));
+}
+
+.sessions-library-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 86px;
+  padding: 15px;
+  border: 1px solid #2e2f35;
+  border-radius: 19px;
+  background: linear-gradient(145deg, #1a1b20, #111216);
+}
+
+.sessions-library-heading span,
+.sessions-library-heading p {
+  color: #84848d;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.sessions-library-heading h2 {
+  margin: 2px 0 4px;
+  font-size: 31px;
+}
+
+.create-workout-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  min-width: 46px;
+  height: 46px;
+  padding: 0;
+  border: 1px solid #ff6b3c75;
+  border-radius: 14px;
+  background: #ff5a1f10;
+  color: #ff8c60;
+}
+
+.sessions-library-list {
+  margin: 0;
+}
+
+.sessions-library-list .workout-card-compact {
+  min-height: 112px;
+}
+
+.sessions-empty {
+  margin-top: 0;
+}
+
+.page-forward {
+  animation: page-forward-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.page-back {
+  animation: page-back-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes page-forward-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+
+@keyframes page-back-in {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
   }
 }
 
@@ -988,6 +1190,16 @@ body {
   font-weight: 400;
 }
 
+.preview-metric-unavailable strong {
+  color: #6f7079;
+}
+
+.preview-metric-unavailable small {
+  margin-top: 2px;
+  color: #686871;
+  font-size: 7px;
+}
+
 .preview-exercises {
   padding: 14px;
   border: 1px solid #2d2d34;
@@ -1065,6 +1277,7 @@ body {
   height: var(--visual-viewport-height, 100dvh);
   overscroll-behavior: none;
   touch-action: none;
+  transition: none;
 }
 
 .modal > .bottom-sheet {
@@ -1075,7 +1288,7 @@ body {
   padding: 0;
   transform: translateY(var(--sheet-drag-y, 0px));
   transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  animation: bottom-sheet-reveal 200ms ease-out both;
+  animation: bottom-sheet-reveal 220ms ease-out both;
   touch-action: auto;
   will-change: transform;
 }
@@ -1139,6 +1352,10 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
+.sheet-backdrop[data-keyboard-open="true"] .sheet-scroll {
+  padding-bottom: 14px;
+}
+
 .sheet-form h2 {
   margin: 0 0 10px;
 }
@@ -1156,6 +1373,97 @@ body {
 .compact-form-fields .compact-field {
   min-width: 0;
   margin: 4px 0 10px;
+}
+
+.sheet-form .compact-form-fields .set-field {
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  margin: 4px 0 10px;
+}
+
+.sheet-form .compact-form-fields .set-field:nth-child(n) {
+  order: initial;
+}
+
+.sheet-form .compact-form-fields .set-field > span {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0;
+  text-align: left;
+  text-transform: none;
+}
+
+.sheet-form .compact-form-fields .set-picker-trigger {
+  justify-content: space-between;
+  height: 48px;
+  padding: 8px 11px;
+  border-color: #45454d;
+  font-family: inherit;
+  font-size: 16px;
+  text-align: left;
+}
+
+.sheet-form .compact-form-fields .picker-trigger-chevron {
+  display: inline;
+}
+
+.action-sheet h2 {
+  margin: 0 0 11px;
+}
+
+.action-sheet-menu {
+  overflow: hidden;
+  border: 1px solid #2e2f36;
+  border-radius: 15px;
+  background: #121316;
+}
+
+.action-sheet-menu button {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) 18px;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  min-height: 56px;
+  margin: 0;
+  padding: 7px 11px;
+  border: 0;
+  border-bottom: 1px solid #292a30;
+  border-radius: 0;
+  background: transparent;
+  color: #e6e6e8;
+  text-align: left;
+}
+
+.action-sheet-menu button:last-child {
+  border-bottom: 0;
+}
+
+.action-sheet-menu button > svg {
+  color: #696a73;
+}
+
+.action-sheet-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid #ff6b3b42;
+  border-radius: 11px;
+  background: #ff5a1f0d;
+  color: #ff895d;
+}
+
+.action-sheet-menu .danger .action-sheet-icon,
+.action-sheet-menu .danger {
+  color: var(--danger);
+}
+
+.action-sheet-cancel {
+  width: 100%;
+  margin-top: 10px !important;
+  text-align: center !important;
 }
 
 .compact-form-fields input {
@@ -1205,21 +1513,35 @@ button:active,
   filter: brightness(1.16);
 }
 
+.dashboard-tile:active,
+.create-workout-icon:active,
+.action-sheet-menu button:active,
+.preview-actions .primary:active {
+  transform: scale(0.975);
+}
+
 .link:active {
   color: #fff;
   background: #242429;
+  transform: scale(0.92);
+}
+
+.link:focus:not(:focus-visible) {
+  border-color: #2e2e34;
+  background: #17171b;
+  color: #b9b9c0;
 }
 
 .bottom-navigation {
   grid-template-columns: 1fr 1fr;
-  min-height: 62px;
-  padding-top: 6px;
+  min-height: 54px;
+  padding: 4px 14px calc(2px + env(safe-area-inset-bottom));
 }
 
 .bottom-navigation button {
   display: grid;
   place-items: center;
-  min-height: 50px;
+  min-height: 46px;
   padding: 0;
 }
 
@@ -1384,6 +1706,23 @@ button:active,
     gap: 7px;
   }
 
+  .dashboard-grid {
+    gap: 8px;
+  }
+
+  .dashboard-tile {
+    padding: 11px;
+    border-radius: 17px;
+  }
+
+  .dashboard-tile strong {
+    font-size: 20px;
+  }
+
+  .dashboard-tile-art > svg:first-child {
+    right: 10px;
+  }
+
   .exercise-tabs {
     gap: 22px;
   }
@@ -1477,6 +1816,9 @@ button:active,
   .active-rest-timer,
   .active-session-dot,
   .workout-preview,
+  .page-forward,
+  .page-back,
+  .dashboard-tile,
   .modal,
   .modal > div,
   .picker-dialog,
@@ -1494,6 +1836,7 @@ button:active,
   }
 
   button,
+  .dashboard-tile,
   .workout-card,
   .bottom-sheet {
     transition: none;

@@ -4,7 +4,10 @@ import App from "./App";
 import { __storageKey, type Workout } from "./storage/database";
 
 beforeEach(() => localStorage.clear());
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 async function waitForMotion() {
   await act(() => new Promise((resolve) => window.setTimeout(resolve, 190)));
@@ -30,15 +33,24 @@ const storedWorkouts = (): Workout[] => {
 };
 async function openEmptyWorkout() {
   const view = render(<App />);
-  await screen.findByText("Aucune séance");
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Ouvrir Mes séances" }),
+  );
   fireEvent.click(screen.getByRole("button", { name: "Créer une séance" }));
   fireEvent.change(screen.getByLabelText("Nom"), { target: { value: "Push" } });
   fireEvent.click(screen.getByText("Enregistrer"));
   expect(storedWorkouts()[0].name).toBe("Push");
   await waitForMotion();
   fireEvent.click(screen.getByText("Push").closest("button")!);
-  fireEvent.click(screen.getByRole("button", { name: "Modifier la séance" }));
+  fireEvent.click(screen.getByRole("button", { name: "Refaire la séance" }));
   return view;
+}
+
+async function openPreparedWorkout(name = "Push") {
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Ouvrir Mes séances" }),
+  );
+  fireEvent.click((await screen.findByText(name)).closest("button")!);
 }
 function openAddMenu() {
   screen.getByLabelText("Gérer les exercices").focus();
@@ -52,19 +64,15 @@ function openOrganizeMenu() {
 async function createExercise(name: string, count = 1, rest = 90) {
   fireEvent.click(within(openAddMenu()).getByText("Ajouter un exercice"));
   fireEvent.change(screen.getByLabelText("Nom"), { target: { value: name } });
-  fireEvent.change(screen.getByLabelText("Nombre de séries initiales"), {
-    target: { value: String(count) },
-  });
-  fireEvent.change(screen.getByLabelText("Repos par défaut (secondes)"), {
-    target: { value: String(rest) },
-  });
+  await chooseValue("Nombre de séries initiales", count);
+  await chooseValue("Repos par défaut", rest);
   fireEvent.click(screen.getByText("Enregistrer"));
   await waitForMotion();
 }
 async function chooseValue(label: string, value: number, index = 0) {
   fireEvent.click(screen.getAllByLabelText(label)[index]);
   const dialog = screen.getByRole("dialog", { name: `Choisir ${label}` });
-  if (label === "Repos (secondes)") {
+  if (label.startsWith("Repos")) {
     fireEvent.click(
       within(
         within(dialog).getByRole("listbox", { name: "Minutes" }),
@@ -81,7 +89,12 @@ async function chooseValue(label: string, value: number, index = 0) {
     fireEvent.click(
       within(
         within(dialog).getByRole("listbox", {
-          name: label === "Charge (kg)" ? "Kilogrammes" : "Répétitions",
+          name:
+            label === "Charge (kg)"
+              ? "Kilogrammes"
+              : label === "Nombre de séries initiales"
+                ? "Séries"
+                : "Répétitions",
         }),
       ).getByRole("option", { name: new RegExp(`^${value}$`) }),
     );
@@ -121,7 +134,9 @@ it("shows a new workout without zones 1, 2 and 3", async () => {
 
 it("opens forms without input autofocus and locks the background", async () => {
   render(<App />);
-  await screen.findByText("Aucune séance");
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Ouvrir Mes séances" }),
+  );
   expect(screen.getByRole("button", { name: "Musculation" })).toHaveAttribute(
     "aria-current",
     "page",
@@ -146,6 +161,46 @@ it("opens forms without input autofocus and locks the background", async () => {
   expect(document.body.style.overflow).toBe("");
 });
 
+it("tracks visualViewport keyboard changes without scrolling the document", async () => {
+  const visualViewport = new EventTarget() as VisualViewport;
+  Object.defineProperties(visualViewport, {
+    height: { configurable: true, value: 844 },
+    offsetTop: { configurable: true, value: 0 },
+  });
+  vi.stubGlobal("visualViewport", visualViewport);
+
+  render(<App />);
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Ouvrir Mes séances" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Créer une séance" }));
+  const name = screen.getByRole("textbox", { name: "Nom" });
+  fireEvent.focus(name);
+  const backdrop = document.querySelector<HTMLElement>(".sheet-backdrop")!;
+
+  Object.defineProperties(visualViewport, {
+    height: { configurable: true, value: 430 },
+    offsetTop: { configurable: true, value: 96 },
+  });
+  act(() => visualViewport.dispatchEvent(new Event("resize")));
+  expect(backdrop.style.getPropertyValue("--visual-viewport-height")).toBe(
+    "430px",
+  );
+  expect(backdrop.style.getPropertyValue("--visual-viewport-top")).toBe("96px");
+  expect(backdrop).toHaveAttribute("data-keyboard-open", "true");
+
+  Object.defineProperties(visualViewport, {
+    height: { configurable: true, value: 844 },
+    offsetTop: { configurable: true, value: 0 },
+  });
+  act(() => visualViewport.dispatchEvent(new Event("resize")));
+  expect(backdrop.style.getPropertyValue("--visual-viewport-height")).toBe(
+    "844px",
+  );
+  expect(backdrop.style.getPropertyValue("--visual-viewport-top")).toBe("0px");
+  expect(backdrop).toHaveAttribute("data-keyboard-open", "false");
+});
+
 it("opens a prepared workout preview with only persisted program data", async () => {
   const view = await openEmptyWorkout();
   await createExercise("Squat", 3, 90);
@@ -158,14 +213,25 @@ it("opens a prepared workout preview with only persisted program data", async ()
     Array.from(preview.querySelectorAll(".preview-metrics strong")).map(
       (metric) => metric.textContent,
     ),
-  ).toEqual(["2", "5"]);
+  ).toEqual(["2", "5", "—", "—"]);
   expect(within(preview).getByText("Squat")).toBeInTheDocument();
   expect(within(preview).getByText("3 séries")).toBeInTheDocument();
   expect(within(preview).getByText("Row")).toBeInTheDocument();
   expect(within(preview).getByText("2 séries")).toBeInTheDocument();
   expect(
-    within(preview).getByRole("button", { name: "Démarrer la séance" }),
+    within(preview).queryByRole("button", { name: "Démarrer la séance" }),
+  ).not.toBeInTheDocument();
+  expect(
+    within(preview).getByRole("button", { name: "Refaire la séance" }),
   ).toBeEnabled();
+  expect(within(preview).getAllByText("Pas encore de données")).toHaveLength(2);
+  fireEvent.click(
+    within(preview).getByRole("button", { name: "Refaire la séance" }),
+  );
+  expect(storedWorkouts()[0].execution).toBeUndefined();
+  expect(
+    screen.getByRole("button", { name: "Démarrer la séance" }),
+  ).toBeInTheDocument();
   view.unmount();
 });
 
@@ -349,8 +415,8 @@ it("selects bounded picker values and persists repetitions, half-kilograms and s
   await clickAndWaitForMotion(screen.getByRole("button", { name: "Annuler" }));
   view.unmount();
   render(<App />);
-  fireEvent.click(await screen.findByText("Push"));
-  fireEvent.click(screen.getByRole("button", { name: "Modifier la séance" }));
+  await openPreparedWorkout();
+  fireEvent.click(screen.getByRole("button", { name: "Refaire la séance" }));
   expect(screen.getByLabelText("Répétitions")).toHaveAttribute(
     "data-value",
     "24",
@@ -390,8 +456,8 @@ it("reorders exercises in a dedicated sheet and retains selection and persisted 
   ]);
   view.unmount();
   render(<App />);
-  fireEvent.click(await screen.findByText("Push"));
-  fireEvent.click(screen.getByRole("button", { name: "Modifier la séance" }));
+  await openPreparedWorkout();
+  fireEvent.click(screen.getByRole("button", { name: "Refaire la séance" }));
   expect(
     within(screen.getByRole("list", { name: "Exercices" })).getAllByRole(
       "button",
@@ -486,8 +552,8 @@ it("creates N blank sets with the requested rest and preserves blanks after relo
   expect(new Set(sets.map((s) => s.id)).size).toBe(4);
   view.unmount();
   render(<App />);
-  fireEvent.click(await screen.findByText("Push"));
-  fireEvent.click(screen.getByRole("button", { name: "Modifier la séance" }));
+  await openPreparedWorkout();
+  fireEvent.click(screen.getByRole("button", { name: "Refaire la séance" }));
   expect(screen.getAllByLabelText("Charge (kg)")).toHaveLength(4);
   for (const field of screen.getAllByLabelText("Charge (kg)"))
     expect(field).toHaveAttribute("data-value", "");
@@ -497,20 +563,29 @@ it("creates N blank sets with the requested rest and preserves blanks after relo
     expect(field).toHaveAttribute("data-value", "120");
 });
 
-it.each(["", "0", "-1", "1.5"])(
-  "rejects invalid initial set count %s",
-  async (value) => {
+it("offers only valid initial set counts through the native wheel picker", async () => {
+  await openEmptyWorkout();
+  fireEvent.click(within(openAddMenu()).getByText("Ajouter un exercice"));
+  expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByLabelText("Nombre de séries initiales"));
+  const picker = screen.getByRole("dialog", {
+    name: "Choisir Nombre de séries initiales",
+  });
+  const options = within(picker).getAllByRole("option");
+  expect(options).toHaveLength(50);
+  expect(options[0]).toHaveTextContent("1");
+  expect(options.at(-1)).toHaveTextContent("50");
+  await clickAndWaitForMotion(
+    within(picker).getByRole("button", { name: "Annuler" }),
+  );
+});
+
+it.each([1, 50])(
+  "persists the valid initial set count boundary %i",
+  async (count) => {
     await openEmptyWorkout();
-    fireEvent.click(within(openAddMenu()).getByText("Ajouter un exercice"));
-    fireEvent.change(screen.getByLabelText("Nom"), {
-      target: { value: "Squat" },
-    });
-    fireEvent.change(screen.getByLabelText("Nombre de séries initiales"), {
-      target: { value },
-    });
-    fireEvent.click(screen.getByText("Enregistrer"));
-    expect(screen.getByLabelText("Nombre de séries initiales")).toBeInvalid();
-    expect(storedWorkouts()[0].exercises).toEqual([]);
+    await createExercise("Squat", count, 90);
+    expect(storedWorkouts()[0].exercises[0].plannedSets).toHaveLength(count);
   },
 );
 
@@ -640,7 +715,9 @@ it("shows an active series and advances it when its rest ends", async () => {
 
 it("reveals a confirmed workout deletion action after a horizontal swipe", async () => {
   render(<App />);
-  await screen.findByText("Aucune séance");
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Ouvrir Mes séances" }),
+  );
   const create = async (name: string) => {
     fireEvent.click(screen.getByRole("button", { name: "Créer une séance" }));
     fireEvent.change(screen.getByLabelText("Nom"), { target: { value: name } });
@@ -660,7 +737,7 @@ it("reveals a confirmed workout deletion action after a horizontal swipe", async
   fireEvent.click(cardButton);
   expect(card).not.toHaveClass("open");
   expect(
-    screen.getByRole("heading", { name: "Mes séances" }),
+    screen.getByRole("heading", { name: "Mes séances", level: 1 }),
   ).toBeInTheDocument();
   fireEvent.pointerDown(card, { clientX: 160 });
   fireEvent.pointerMove(card, { clientX: 80 });
@@ -790,10 +867,12 @@ it("keeps a completed workout final after returning home and reloading", async (
   ).toBeInTheDocument();
   fireEvent.click(screen.getByLabelText("Retour aux séances"));
   fireEvent.click(screen.getByText("Push"));
+  fireEvent.click(screen.getByRole("button", { name: "Refaire la séance" }));
   expect(screen.getByText("Démarrer la séance")).toBeInTheDocument();
   view.unmount();
   render(<App />);
-  fireEvent.click(await screen.findByText("Push"));
+  await openPreparedWorkout();
+  fireEvent.click(screen.getByRole("button", { name: "Refaire la séance" }));
   expect(screen.getByText("Démarrer la séance")).toBeInTheDocument();
   expect(storedWorkouts()[0].execution?.status).toBe("completed");
 });

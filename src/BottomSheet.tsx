@@ -15,6 +15,13 @@ type SheetStyle = CSSProperties & {
   "--visual-viewport-top"?: string;
 };
 
+function currentViewport() {
+  return {
+    height: window.visualViewport?.height ?? window.innerHeight,
+    top: window.visualViewport?.offsetTop ?? 0,
+  };
+}
+
 export function BottomSheet({
   title,
   closing,
@@ -26,15 +33,14 @@ export function BottomSheet({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const backdrop = useRef<HTMLDivElement>(null);
   const dialog = useRef<HTMLDivElement>(null);
+  const scrollArea = useRef<HTMLDivElement>(null);
   const dragStart = useRef<number | null>(null);
   const dragStartedAt = useRef(0);
   const [dragY, setDragY] = useState(0);
   const [dragging, setDragging] = useState(false);
-  const [viewport, setViewport] = useState(() => ({
-    height: window.visualViewport?.height ?? window.innerHeight,
-    top: window.visualViewport?.offsetTop ?? 0,
-  }));
+  const viewport = currentViewport();
 
   useBodyScrollLock(true);
 
@@ -51,11 +57,30 @@ export function BottomSheet({
 
   useEffect(() => {
     const visualViewport = window.visualViewport;
-    const updateViewport = () =>
-      setViewport({
-        height: visualViewport?.height ?? window.innerHeight,
-        top: visualViewport?.offsetTop ?? 0,
+    const updateViewport = () => {
+      const element = backdrop.current;
+      if (!element) return;
+      const next = currentViewport();
+      element.style.setProperty("--visual-viewport-height", `${next.height}px`);
+      element.style.setProperty("--visual-viewport-top", `${next.top}px`);
+      element.dataset.keyboardOpen = String(
+        next.height < window.innerHeight - 80,
+      );
+
+      const field = document.activeElement;
+      const scroller = scrollArea.current;
+      if (!(field instanceof HTMLInputElement) || !scroller) return;
+      window.requestAnimationFrame(() => {
+        const fieldBounds = field.getBoundingClientRect();
+        const scrollBounds = scroller.getBoundingClientRect();
+        const inset = 12;
+        if (fieldBounds.bottom > scrollBounds.bottom - inset)
+          scroller.scrollTop +=
+            fieldBounds.bottom - scrollBounds.bottom + inset;
+        else if (fieldBounds.top < scrollBounds.top + inset)
+          scroller.scrollTop -= scrollBounds.top + inset - fieldBounds.top;
       });
+    };
     updateViewport();
     visualViewport?.addEventListener("resize", updateViewport);
     visualViewport?.addEventListener("scroll", updateViewport);
@@ -86,6 +111,7 @@ export function BottomSheet({
 
   return (
     <div
+      ref={backdrop}
       className={`modal sheet-backdrop${closing ? " is-closing" : ""}`}
       style={style}
       onPointerDown={(event) => {
@@ -102,15 +128,6 @@ export function BottomSheet({
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
-        onFocusCapture={(event) => {
-          if (!(event.target instanceof HTMLInputElement)) return;
-          window.requestAnimationFrame(() =>
-            event.target.scrollIntoView({
-              block: "nearest",
-              behavior: "smooth",
-            }),
-          );
-        }}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.preventDefault();
@@ -159,7 +176,9 @@ export function BottomSheet({
         >
           <span aria-hidden="true" />
         </div>
-        <div className="sheet-scroll">{children}</div>
+        <div ref={scrollArea} className="sheet-scroll">
+          {children}
+        </div>
       </div>
     </div>
   );
