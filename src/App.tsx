@@ -64,6 +64,10 @@ export default function App() {
   const [exerciseTransition, setExerciseTransition] = useState<
     "none" | "next" | "previous"
   >("none");
+  const [outgoingExerciseVisual, setOutgoingExerciseVisual] = useState<{
+    name: string;
+    plannedSetCount: number;
+  } | null>(null);
   const [screenTransition, setScreenTransition] = useState<"forward" | "back">(
     "forward",
   );
@@ -557,12 +561,17 @@ export default function App() {
       (item) => item.id === nextExerciseId,
     );
     if (previousIndex >= 0 && nextIndex >= 0 && previousIndex !== nextIndex) {
+      const outgoingExercise = orderedExercises[previousIndex];
+      setOutgoingExerciseVisual({
+        name: outgoingExercise.name,
+        plannedSetCount: outgoingExercise.plannedSets.length,
+      });
       setExerciseTransition(nextIndex > previousIndex ? "next" : "previous");
       window.clearTimeout(exerciseTransitionTimeout.current);
-      exerciseTransitionTimeout.current = window.setTimeout(
-        () => setExerciseTransition("none"),
-        240,
-      );
+      exerciseTransitionTimeout.current = window.setTimeout(() => {
+        setExerciseTransition("none");
+        setOutgoingExerciseVisual(null);
+      }, 340);
     }
     setExerciseId(nextExerciseId);
   };
@@ -883,15 +892,39 @@ export default function App() {
                   onSelect={selectExercise}
                 />
                 <section className="exercise-hero">
-                  <div className="exercise-art" aria-hidden="true">
-                    <Icon name="dumbbell" size={28} />
-                  </div>
-                  <div className="exercise-heading">
-                    <h2>{exercise.name}</h2>
-                    <p>
-                      {exercise.plannedSets.length} série
-                      {exercise.plannedSets.length > 1 ? "s" : ""}
-                    </p>
+                  <div className="exercise-identity-viewport">
+                    {outgoingExerciseVisual &&
+                      exerciseTransition !== "none" && (
+                        <div
+                          className="exercise-identity exercise-transition-outgoing"
+                          aria-hidden="true"
+                        >
+                          <div className="exercise-art">
+                            <Icon name="dumbbell" size={28} />
+                          </div>
+                          <div className="exercise-heading">
+                            <h2>{outgoingExerciseVisual.name}</h2>
+                            <p>
+                              {outgoingExerciseVisual.plannedSetCount} série
+                              {outgoingExerciseVisual.plannedSetCount > 1
+                                ? "s"
+                                : ""}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    <div className="exercise-identity exercise-transition-current">
+                      <div className="exercise-art" aria-hidden="true">
+                        <Icon name="dumbbell" size={28} />
+                      </div>
+                      <div className="exercise-heading">
+                        <h2>{exercise.name}</h2>
+                        <p>
+                          {exercise.plannedSets.length} série
+                          {exercise.plannedSets.length > 1 ? "s" : ""}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                   <div className="exercise-menu">
                     <button
@@ -921,7 +954,7 @@ export default function App() {
                           })
                         }
                       >
-                        Terminer l’exercice
+                        <span>Terminer l’exercice</span>
                       </button>
                     ) : (
                       <button onClick={removeExercise}>Supprimer</button>

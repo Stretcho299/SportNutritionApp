@@ -192,6 +192,16 @@ for (const width of [390, 320]) {
     await expect(
       page.getByRole("button", { name: "Nutrition" }),
     ).toHaveAttribute("aria-disabled", "true");
+    const simulatedSafeInset = await page.evaluate(() => {
+      const inset = Math.round(
+        (window.visualViewport?.height ?? window.innerHeight) * 0.04,
+      );
+      document.documentElement.style.setProperty(
+        "--bottom-navigation-safe-inset",
+        `${inset}px`,
+      );
+      return inset;
+    });
     const navigationGeometry = await page
       .getByRole("navigation")
       .evaluate((navigation) => {
@@ -199,13 +209,21 @@ for (const width of [390, 320]) {
         const buttonBounds = navigation
           .querySelector("button")!
           .getBoundingClientRect();
+        const iconBounds = navigation
+          .querySelector("button svg")!
+          .getBoundingClientRect();
+        const styles = getComputedStyle(navigation);
+        const viewportBottom =
+          (window.visualViewport?.offsetTop ?? 0) +
+          (window.visualViewport?.height ?? window.innerHeight);
         return {
           bottom: bounds.bottom,
           height: bounds.height,
           buttonHeight: buttonBounds.height,
-          viewportBottom:
-            (window.visualViewport?.offsetTop ?? 0) +
-            (window.visualViewport?.height ?? window.innerHeight),
+          buttonBottomGap: viewportBottom - buttonBounds.bottom,
+          iconBottomGap: viewportBottom - iconBounds.bottom,
+          paddingBottom: Number.parseFloat(styles.paddingBottom),
+          viewportBottom,
         };
       });
     expect(navigationGeometry.bottom).toBeCloseTo(
@@ -213,11 +231,25 @@ for (const width of [390, 320]) {
       0,
     );
     expect(navigationGeometry.height).toBeLessThan(
-      navigationGeometry.viewportBottom * 0.09,
+      navigationGeometry.viewportBottom * 0.08,
+    );
+    expect(navigationGeometry.buttonHeight).toBeGreaterThanOrEqual(44);
+    expect(navigationGeometry.buttonBottomGap).toBeCloseTo(
+      navigationGeometry.paddingBottom,
+      0,
+    );
+    expect(navigationGeometry.buttonBottomGap).toBeGreaterThanOrEqual(
+      simulatedSafeInset * 0.4,
+    );
+    expect(navigationGeometry.buttonBottomGap).toBeLessThan(
+      simulatedSafeInset * 0.6,
+    );
+    expect(navigationGeometry.iconBottomGap).toBeGreaterThan(
+      navigationGeometry.buttonBottomGap + 8,
     );
     expect(
       navigationGeometry.height - navigationGeometry.buttonHeight,
-    ).toBeLessThan(44);
+    ).toBeLessThanOrEqual(navigationGeometry.paddingBottom + 2);
     const sessionsTile = page.getByRole("button", {
       name: "Ouvrir Mes séances",
     });
@@ -479,6 +511,41 @@ for (const width of [390, 320]) {
     await choosePickerValue(page, "Charge (kg)", 62.5);
     await choosePickerValue(page, "Répétitions", 10);
     await page.getByRole("button", { name: "Démarrer la séance" }).click();
+    const finishExercise = page.getByRole("button", {
+      name: "Terminer l’exercice",
+    });
+    const finishAlignment = await finishExercise.evaluate((button) => {
+      const buttonBounds = button.getBoundingClientRect();
+      const labelBounds = button.querySelector("span")!.getBoundingClientRect();
+      const styles = getComputedStyle(button);
+      return {
+        display: styles.display,
+        alignItems: styles.alignItems,
+        justifyContent: styles.justifyContent,
+        textAlign: styles.textAlign,
+        horizontalOffset: Math.abs(
+          buttonBounds.x +
+            buttonBounds.width / 2 -
+            (labelBounds.x + labelBounds.width / 2),
+        ),
+        verticalOffset: Math.abs(
+          buttonBounds.y +
+            buttonBounds.height / 2 -
+            (labelBounds.y + labelBounds.height / 2),
+        ),
+        overflows: button.scrollWidth > button.clientWidth + 1,
+      };
+    });
+    expect(finishAlignment).toMatchObject({
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      textAlign: "center",
+      overflows: false,
+    });
+    expect(finishAlignment.horizontalOffset).toBeLessThan(1);
+    expect(finishAlignment.verticalOffset).toBeLessThan(1);
+    await screenshot(page, info, "execution-started");
     await page.getByRole("button", { name: "Retour aux séances" }).click();
     const activeModule = page.getByRole("region", { name: "Séance en cours" });
     await expect(activeModule.locator(".active-session-dot")).toBeVisible();
@@ -702,15 +769,22 @@ test("exercise navigation animates according to workout order without changing e
 
   await rail.getByRole("button").nth(1).click();
   await expect(preparation).toHaveClass(/transition-next/);
-  await expect(page.locator(".exercise-heading")).toHaveCSS(
-    "animation-name",
-    "exercise-next-in",
-  );
-  await expect(page.locator(".exercise-heading")).toHaveCSS(
-    "animation-duration",
-    "0.21s",
-  );
+  const currentVisual = page.locator(".exercise-transition-current");
+  const outgoingVisual = page.locator(".exercise-transition-outgoing");
+  await expect(currentVisual).toHaveCSS("animation-name", "exercise-next-in");
+  await expect(currentVisual).toHaveCSS("animation-duration", "0.32s");
+  await expect(outgoingVisual).toHaveCSS("animation-name", "exercise-next-out");
+  await expect(outgoingVisual).toHaveCSS("pointer-events", "none");
   await expect(page.getByRole("heading", { name: "Deuxième" })).toBeVisible();
+  expect(
+    await page
+      .locator(
+        ".workout-preparation, .workout-fixed-zones, .exercise-hero, .exercise-identity-viewport",
+      )
+      .evaluateAll((elements) =>
+        elements.map((element) => getComputedStyle(element).transform),
+      ),
+  ).toEqual(["none", "none", "none", "none"]);
 
   await rail.getByRole("button").nth(2).click();
   await expect(preparation).toHaveClass(/transition-next/);
@@ -718,9 +792,14 @@ test("exercise navigation animates according to workout order without changing e
 
   await rail.getByRole("button").nth(1).click();
   await expect(preparation).toHaveClass(/transition-previous/);
-  await expect(page.locator(".exercise-heading")).toHaveCSS(
+  await expect(currentVisual).toHaveCSS(
     "animation-name",
     "exercise-previous-in",
+  );
+  await expect(currentVisual).toHaveCSS("animation-duration", "0.32s");
+  await expect(outgoingVisual).toHaveCSS(
+    "animation-name",
+    "exercise-previous-out",
   );
   await expect(page.getByRole("heading", { name: "Deuxième" })).toBeVisible();
   expect(
@@ -731,4 +810,21 @@ test("exercise navigation animates according to workout order without changing e
       ),
   ).toEqual(statusesBefore.map((status) => status.replace("selected ", "")));
   await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await rail.getByRole("button").nth(2).click();
+  expect(
+    await page.locator(".exercise-hero").evaluate((hero) => {
+      const current = hero.querySelector(".exercise-transition-current")!;
+      const outgoing = hero.querySelector(".exercise-transition-outgoing")!;
+      return {
+        currentAnimation: getComputedStyle(current).animationName,
+        outgoingDisplay: getComputedStyle(outgoing).display,
+      };
+    }),
+  ).toEqual({
+    currentAnimation: "none",
+    outgoingDisplay: "none",
+  });
+  await expect(page.getByRole("heading", { name: "Troisième" })).toBeVisible();
 });

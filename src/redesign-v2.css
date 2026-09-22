@@ -12,10 +12,12 @@
   --success: #55e68b;
   --success-soft: #9af3b9;
   --danger: #ff7068;
-  --bottom-navigation-safe-space: max(
-    8px,
-    calc(env(safe-area-inset-bottom) - 10px)
+  --bottom-navigation-safe-inset: env(safe-area-inset-bottom, 0px);
+  --bottom-navigation-system-clearance: max(
+    6px,
+    calc(var(--bottom-navigation-safe-inset) - 18px)
   );
+  --bottom-navigation-action-height: 44px;
 }
 
 body {
@@ -32,7 +34,10 @@ body {
 }
 
 .app-shell:not(.workout-detail) {
-  padding-bottom: calc(44px + var(--bottom-navigation-safe-space));
+  padding-bottom: calc(
+    var(--bottom-navigation-action-height) +
+      var(--bottom-navigation-system-clearance)
+  );
 }
 
 .home-header {
@@ -328,7 +333,7 @@ body {
 
 .exercise-hero {
   display: grid;
-  grid-template-columns: 54px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 11px;
   padding: 11px;
   border-color: #303037;
@@ -336,7 +341,24 @@ body {
   background: linear-gradient(125deg, #1e1e23, #131316 72%);
 }
 
+.exercise-identity-viewport {
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.exercise-identity {
+  grid-column: 1;
+  grid-row: 1;
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 11px;
+  min-width: 0;
+}
+
 .exercise-art {
+  grid-column: 1;
+  grid-row: 1;
   display: grid;
   place-items: center;
   width: 54px;
@@ -348,6 +370,8 @@ body {
 }
 
 .exercise-heading {
+  grid-column: 2;
+  grid-row: 1;
   align-self: center;
 }
 
@@ -366,6 +390,8 @@ body {
 }
 
 .exercise-menu {
+  grid-column: 2;
+  grid-row: 1;
   align-self: center;
   max-width: 102px;
   flex-wrap: wrap;
@@ -1503,8 +1529,22 @@ body {
 }
 
 .exercise-menu button:last-child:not(:first-child) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   min-height: 40px;
-  white-space: nowrap;
+  min-width: 0;
+  padding-right: 6px;
+  padding-left: 6px;
+  font-size: 9px;
+  line-height: 1.1;
+  text-align: center;
+  white-space: normal;
+}
+
+.exercise-menu button:last-child:not(:first-child) span {
+  display: block;
+  max-width: 100%;
 }
 
 button,
@@ -1548,14 +1588,15 @@ button:active,
   bottom: auto;
   grid-template-columns: 1fr 1fr;
   min-height: 0;
-  padding: 2px 12px var(--bottom-navigation-safe-space);
+  padding: 0 12px var(--bottom-navigation-system-clearance);
   transform: translate(-50%, -100%);
 }
 
 .bottom-navigation button {
   display: grid;
   place-items: center;
-  min-height: 42px;
+  height: var(--bottom-navigation-action-height);
+  min-height: var(--bottom-navigation-action-height);
   padding: 0;
 }
 
@@ -1663,8 +1704,8 @@ button:active,
 
 @keyframes exercise-next-in {
   from {
-    opacity: 0.16;
-    transform: translateX(24px);
+    opacity: 0.12;
+    transform: translateX(calc(100% + 12px));
   }
   to {
     opacity: 1;
@@ -1674,8 +1715,8 @@ button:active,
 
 @keyframes exercise-previous-in {
   from {
-    opacity: 0.16;
-    transform: translateX(-24px);
+    opacity: 0.12;
+    transform: translateX(calc(-100% - 12px));
   }
   to {
     opacity: 1;
@@ -1683,20 +1724,47 @@ button:active,
   }
 }
 
-.workout-preparation.transition-next .exercise-art,
-.workout-preparation.transition-next .exercise-heading,
-.workout-preparation.transition-next .advanced,
-.workout-preparation.transition-next .workout-progress,
-.workout-preparation.transition-next .execution-resume {
-  animation: exercise-next-in 210ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+@keyframes exercise-next-out {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(calc(-100% - 12px));
+  }
 }
 
-.workout-preparation.transition-previous .exercise-art,
-.workout-preparation.transition-previous .exercise-heading,
-.workout-preparation.transition-previous .advanced,
-.workout-preparation.transition-previous .workout-progress,
-.workout-preparation.transition-previous .execution-resume {
-  animation: exercise-previous-in 210ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+@keyframes exercise-previous-out {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(calc(100% + 12px));
+  }
+}
+
+.exercise-transition-outgoing {
+  z-index: 1;
+  pointer-events: none;
+}
+
+.workout-preparation.transition-next .exercise-transition-current {
+  animation: exercise-next-in 320ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.workout-preparation.transition-next .exercise-transition-outgoing {
+  animation: exercise-next-out 320ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.workout-preparation.transition-previous .exercise-transition-current {
+  animation: exercise-previous-in 320ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.workout-preparation.transition-previous .exercise-transition-outgoing {
+  animation: exercise-previous-out 320ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
 @media (max-width: 350px) {
@@ -1760,9 +1828,14 @@ button:active,
   }
 
   .exercise-hero {
-    grid-template-columns: 46px minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
     padding: 9px;
+  }
+
+  .exercise-identity {
+    grid-template-columns: 46px minmax(0, 1fr);
+    gap: 8px;
   }
 
   .exercise-art {
@@ -1783,7 +1856,7 @@ button:active,
   .exercise-menu button:last-child:not(:first-child) {
     padding-right: 6px;
     padding-left: 6px;
-    font-size: 8px;
+    font-size: 9px;
   }
 
   .preview-hero {
@@ -1854,17 +1927,15 @@ button:active,
   .modal,
   .modal > div,
   .picker-dialog,
-  .workout-preparation.transition-next .exercise-art,
-  .workout-preparation.transition-next .exercise-heading,
-  .workout-preparation.transition-next .advanced,
-  .workout-preparation.transition-next .workout-progress,
-  .workout-preparation.transition-next .execution-resume,
-  .workout-preparation.transition-previous .exercise-art,
-  .workout-preparation.transition-previous .exercise-heading,
-  .workout-preparation.transition-previous .advanced,
-  .workout-preparation.transition-previous .workout-progress,
-  .workout-preparation.transition-previous .execution-resume {
-    animation: none;
+  .workout-preparation.transition-next .exercise-transition-current,
+  .workout-preparation.transition-next .exercise-transition-outgoing,
+  .workout-preparation.transition-previous .exercise-transition-current,
+  .workout-preparation.transition-previous .exercise-transition-outgoing {
+    animation: none !important;
+  }
+
+  .exercise-transition-outgoing {
+    display: none;
   }
 
   button,
