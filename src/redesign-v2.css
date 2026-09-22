@@ -18,7 +18,7 @@
     calc(var(--bottom-navigation-safe-inset) - 18px)
   );
   --bottom-navigation-action-height: 44px;
-  --bottom-nav-visual-offset: 3px;
+  --bottom-nav-visual-offset: 6px;
 }
 
 body {
@@ -1936,11 +1936,19 @@ button:active,
   -webkit-user-select: none;
   -webkit-touch-callout: none;
   -webkit-user-drag: none;
-  transition: transform 280ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  transition: transform 150ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 .exercise-tabs li.is-reordering {
   z-index: 2;
+}
+
+.exercise-tabs li.reorder-shift-left .exercise-tab {
+  transform: translateX(-70px);
+}
+
+.exercise-tabs li.reorder-shift-right .exercise-tab {
+  transform: translateX(70px);
 }
 
 .exercise-tabs li.is-reordering .exercise-tab {

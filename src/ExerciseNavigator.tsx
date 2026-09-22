@@ -65,13 +65,22 @@ export function ExerciseNavigator({
 
   const findDropIndex = (clientX: number, from: number) => {
     const list = tabs.current;
-    if (!list) return from;
+    const active = gesture.current;
+    if (!list || !active) return from;
     const items = Array.from(list.children) as HTMLElement[];
-    let target = items.findIndex(
-      (item) =>
-        clientX < item.getBoundingClientRect().left + item.offsetWidth / 2,
-    );
-    if (target < 0) target = items.length - 1;
+    const source = items[from];
+    if (!source) return from;
+    const sourceBounds = source.getBoundingClientRect();
+    const dragCenter =
+      sourceBounds.left + sourceBounds.width / 2 + (clientX - active.startX);
+    const centers = items.map((item) => {
+      const bounds = item.getBoundingClientRect();
+      return bounds.left + bounds.width / 2;
+    });
+    let target = from;
+    while (target < centers.length - 1 && dragCenter > centers[target + 1])
+      target += 1;
+    while (target > 0 && dragCenter < centers[target - 1]) target -= 1;
     return canReorder?.(from, target) === false ? from : target;
   };
 
@@ -212,9 +221,21 @@ export function ExerciseNavigator({
           const selected = exercise.id === selectedExerciseId;
           const dragging = draggingIndex === index;
           const target = dropIndex === index && draggingIndex !== null;
+          const shiftsLeft =
+            draggingIndex !== null &&
+            dropIndex !== null &&
+            draggingIndex < dropIndex &&
+            index > draggingIndex &&
+            index <= dropIndex;
+          const shiftsRight =
+            draggingIndex !== null &&
+            dropIndex !== null &&
+            draggingIndex > dropIndex &&
+            index >= dropIndex &&
+            index < draggingIndex;
           return (
             <li
-              className={`${selected ? "selected " : ""}execution-${status}${dragging ? " is-reordering" : ""}${target ? " reorder-target" : ""}`}
+              className={`${selected ? "selected " : ""}execution-${status}${dragging ? " is-reordering" : ""}${target ? " reorder-target" : ""}${shiftsLeft ? " reorder-shift-left" : ""}${shiftsRight ? " reorder-shift-right" : ""}`}
               key={exercise.id}
             >
               <button
