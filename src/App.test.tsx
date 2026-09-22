@@ -17,6 +17,12 @@ async function clickAndWaitForMotion(element: HTMLElement) {
   fireEvent.click(element);
   await waitForMotion();
 }
+async function dismissSheetAndWait() {
+  const backdrop = document.querySelector<HTMLElement>(".sheet-backdrop");
+  if (!backdrop) throw new Error("sheet backdrop not found");
+  fireEvent.pointerDown(backdrop);
+  await waitForMotion();
+}
 
 const storedWorkouts = (): Workout[] => {
   const raw = JSON.parse(localStorage.getItem(__storageKey) ?? "[]");
@@ -157,9 +163,7 @@ it("opens forms without input autofocus and locks the background", async () => {
   expect(document.body).toHaveStyle({ position: "fixed", overflow: "hidden" });
   await act(() => new Promise((resolve) => window.setTimeout(resolve, 20)));
   expect(dialog).toHaveFocus();
-  await clickAndWaitForMotion(
-    within(dialog).getByRole("button", { name: "Annuler" }),
-  );
+  await dismissSheetAndWait();
   expect(
     screen.queryByRole("dialog", { name: "Séance" }),
   ).not.toBeInTheDocument();
@@ -251,10 +255,10 @@ it("exposes exactly the requested actions in each header sheet", async () => {
       .getAllByRole("button")
       .map((b) => b.textContent?.trim())
       .filter(Boolean),
-  ).toEqual(["Ajouter un exercice", "Supprimer l’exercice", "Annuler"]);
+  ).toEqual(["Ajouter un exercice", "Supprimer l’exercice"]);
   await act(() => new Promise((resolve) => window.setTimeout(resolve, 20)));
   expect(menu).toHaveFocus();
-  await clickAndWaitForMotion(within(menu).getByText("Annuler"));
+  await dismissSheetAndWait();
   expect(screen.getByLabelText("Gérer les exercices")).toHaveFocus();
   menu = openOrganizeMenu();
   expect(
@@ -262,7 +266,7 @@ it("exposes exactly the requested actions in each header sheet", async () => {
       .getAllByRole("button")
       .map((b) => b.textContent?.trim())
       .filter(Boolean),
-  ).toEqual(["Réordonner les exercices", "Renommer la séance", "Annuler"]);
+  ).toEqual(["Réordonner les exercices", "Renommer la séance"]);
   fireEvent.keyDown(menu, { key: "Escape" });
   await waitForMotion();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -393,7 +397,7 @@ it("selects bounded picker values and persists repetitions, half-kilograms and s
   expect(
     within(repDialog).getByRole("option", { name: /^24$/ }),
   ).toHaveAttribute("aria-selected", "true");
-  await clickAndWaitForMotion(screen.getByRole("button", { name: "Annuler" }));
+  await dismissSheetAndWait();
   fireEvent.click(screen.getByLabelText("Charge (kg)"));
   const weightDialog = screen.getByRole("dialog", {
     name: "Choisir Charge (kg)",
@@ -402,7 +406,7 @@ it("selects bounded picker values and persists repetitions, half-kilograms and s
   expect(
     within(weightDialog).getByRole("option", { name: /^82\.5$/ }),
   ).toHaveAttribute("aria-selected", "true");
-  await clickAndWaitForMotion(screen.getByRole("button", { name: "Annuler" }));
+  await dismissSheetAndWait();
   fireEvent.click(screen.getByLabelText("Repos"));
   const restDialog = screen.getByRole("dialog", {
     name: "Choisir Repos",
@@ -418,7 +422,7 @@ it("selects bounded picker values and persists repetitions, half-kilograms and s
       within(restDialog).getByRole("listbox", { name: "Secondes" }),
     ).getAllByRole("option"),
   ).toHaveLength(60);
-  await clickAndWaitForMotion(screen.getByRole("button", { name: "Annuler" }));
+  await dismissSheetAndWait();
   view.unmount();
   render(<App />);
   await openPreparedWorkout();
@@ -578,9 +582,7 @@ it("offers only valid initial set counts through the native wheel picker", async
   expect(options).toHaveLength(50);
   expect(options[0]).toHaveTextContent("1");
   expect(options.at(-1)).toHaveTextContent("50");
-  await clickAndWaitForMotion(
-    within(picker).getByRole("button", { name: "Annuler" }),
-  );
+  await dismissSheetAndWait();
 });
 
 it.each([1, 50])(

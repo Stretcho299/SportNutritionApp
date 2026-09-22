@@ -200,9 +200,6 @@ export function SetValuePicker({
                   <span>PARAMÈTRE DE SÉRIE</span>
                   <h2>{label}</h2>
                 </div>
-                <button type="button" aria-label="Fermer" onClick={closePicker}>
-                  ×
-                </button>
               </header>
               <div
                 className={`picker-wheels${columns.length > 1 ? " picker-wheels-pair" : ""}`}
@@ -225,13 +222,6 @@ export function SetValuePicker({
                 ))}
               </div>
               <footer className="picker-actions">
-                <button
-                  type="button"
-                  className="picker-cancel"
-                  onClick={closePicker}
-                >
-                  Annuler
-                </button>
                 <button type="button" className="picker-save" onClick={save}>
                   Valider
                 </button>

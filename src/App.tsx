@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent,
+} from "react";
 import "./App.css";
 import "./redesign-v2.css";
 import { Icon } from "./Icon";
@@ -47,6 +53,17 @@ type Dialog =
   | "addMenu"
   | "organizeMenu"
   | "reorder";
+type ExerciseSwipeGesture = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  startedAt: number;
+  mode: "pending" | "horizontal" | "vertical";
+};
+
+const EXERCISE_SWIPE_SLOP = 8;
+const EXERCISE_SWIPE_SETTLE_MS = 300;
+const EXERCISE_SWIPE_VELOCITY = 0.45;
 export default function App() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [screen, setScreen] = useState<Screen>("list");
@@ -68,10 +85,16 @@ export default function App() {
     name: string;
     plannedSetCount: number;
   } | null>(null);
+  const [exerciseSwipeOffset, setExerciseSwipeOffset] = useState(0);
+  const [exerciseSwipePhase, setExerciseSwipePhase] = useState<
+    "idle" | "dragging" | "settling"
+  >("idle");
   const [screenTransition, setScreenTransition] = useState<"forward" | "back">(
     "forward",
   );
   const exerciseTransitionTimeout = useRef<number | undefined>(undefined);
+  const exerciseSwipeTimeout = useRef<number | undefined>(undefined);
+  const exerciseSwipeGesture = useRef<ExerciseSwipeGesture | null>(null);
   const dialogCloseTimeout = useRef<number | undefined>(undefined);
   const navigate = (next: Screen, direction: "forward" | "back") => {
     setScreenTransition(direction);
@@ -526,8 +549,19 @@ export default function App() {
       });
     else remove();
   };
+  const canMoveExercise = (from: number, to: number) => {
+    if (!workout) return false;
+    if (execution?.status === "completed") return false;
+    if (from === to) return true;
+    const orderedExercises = sort(workout.exercises);
+    const first = Math.min(from, to);
+    const last = Math.max(from, to);
+    return orderedExercises
+      .slice(first, last + 1)
+      .every((item) => executionExercise(item.id)?.status !== "completed");
+  };
   const moveExercise = (from: number, to: number) => {
-    if (!workout) return;
+    if (!workout || !canMoveExercise(from, to)) return;
     update(
       workouts.map((w) =>
         w.id === workout.id
@@ -552,7 +586,7 @@ export default function App() {
       ),
     );
   };
-  const selectExercise = (nextExerciseId: string) => {
+  const selectExercise = (nextExerciseId: string, animate = true) => {
     const orderedExercises = sort(workout?.exercises ?? []);
     const previousIndex = orderedExercises.findIndex(
       (item) => item.id === exerciseId,
@@ -560,7 +594,12 @@ export default function App() {
     const nextIndex = orderedExercises.findIndex(
       (item) => item.id === nextExerciseId,
     );
-    if (previousIndex >= 0 && nextIndex >= 0 && previousIndex !== nextIndex) {
+    if (
+      animate &&
+      previousIndex >= 0 &&
+      nextIndex >= 0 &&
+      previousIndex !== nextIndex
+    ) {
       const outgoingExercise = orderedExercises[previousIndex];
       setOutgoingExerciseVisual({
         name: outgoingExercise.name,
@@ -573,12 +612,113 @@ export default function App() {
         setOutgoingExerciseVisual(null);
       }, 340);
     }
+    if (!animate) {
+      window.clearTimeout(exerciseTransitionTimeout.current);
+      setExerciseTransition("none");
+      setOutgoingExerciseVisual(null);
+    }
     setExerciseId(nextExerciseId);
+  };
+  const exerciseSwipeTarget = (direction: -1 | 1) => {
+    const orderedExercises = sort(workout?.exercises ?? []);
+    const currentIndex = orderedExercises.findIndex(
+      (item) => item.id === exerciseId,
+    );
+    const targetIndex = currentIndex + direction;
+    return targetIndex >= 0 && targetIndex < orderedExercises.length
+      ? orderedExercises[targetIndex]
+      : null;
+  };
+  const settleExerciseSwipe = (offset: number, onSettled?: () => void) => {
+    window.clearTimeout(exerciseSwipeTimeout.current);
+    setExerciseSwipePhase("settling");
+    setExerciseSwipeOffset(offset);
+    exerciseSwipeTimeout.current = window.setTimeout(() => {
+      onSettled?.();
+      setExerciseSwipeOffset(0);
+      setExerciseSwipePhase("idle");
+      exerciseSwipeGesture.current = null;
+    }, EXERCISE_SWIPE_SETTLE_MS);
+  };
+  const handleExercisePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    const target = event.target as HTMLElement;
+    if (
+      target.closest(
+        "button,input,textarea,select,[role=button],[contenteditable=true]",
+      )
+    )
+      return;
+    exerciseSwipeGesture.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startedAt: event.timeStamp,
+      mode: "pending",
+    };
+  };
+  const handleExercisePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const active = exerciseSwipeGesture.current;
+    if (!active || active.pointerId !== event.pointerId) return;
+    const dx = event.clientX - active.startX;
+    const dy = event.clientY - active.startY;
+    if (active.mode === "pending") {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < EXERCISE_SWIPE_SLOP) return;
+      if (Math.abs(dx) <= Math.abs(dy) * 1.1) {
+        active.mode = "vertical";
+        exerciseSwipeGesture.current = null;
+        return;
+      }
+      active.mode = "horizontal";
+      event.currentTarget.setPointerCapture(event.pointerId);
+      setExerciseSwipePhase("dragging");
+    }
+    if (active.mode !== "horizontal") return;
+    event.preventDefault();
+    const direction = dx < 0 ? 1 : -1;
+    const target = exerciseSwipeTarget(direction);
+    const resistance = target ? 1 : 0.28;
+    const width = event.currentTarget.getBoundingClientRect().width || 280;
+    setExerciseSwipeOffset(Math.max(-width, Math.min(width, dx * resistance)));
+  };
+  const handleExercisePointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    const active = exerciseSwipeGesture.current;
+    if (!active || active.pointerId !== event.pointerId) return;
+    exerciseSwipeGesture.current = null;
+    if (active.mode !== "horizontal") return;
+    const dx = event.clientX - active.startX;
+    const elapsed = Math.max(1, event.timeStamp - active.startedAt);
+    const width = event.currentTarget.getBoundingClientRect().width || 280;
+    const threshold = Math.max(48, width * 0.18);
+    const committed =
+      Math.abs(dx) >= threshold ||
+      (Math.abs(dx) >= 32 && Math.abs(dx) / elapsed >= EXERCISE_SWIPE_VELOCITY);
+    const direction = dx < 0 ? 1 : -1;
+    const target = committed ? exerciseSwipeTarget(direction) : null;
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      // The pointer may already have been released by WebKit.
+    }
+    if (!target) {
+      settleExerciseSwipe(0);
+      return;
+    }
+    settleExerciseSwipe(direction === 1 ? -(width + 16) : width + 16, () =>
+      selectExercise(target.id, false),
+    );
+  };
+  const handleExercisePointerCancel = (event: PointerEvent<HTMLDivElement>) => {
+    const active = exerciseSwipeGesture.current;
+    if (!active || active.pointerId !== event.pointerId) return;
+    exerciseSwipeGesture.current = null;
+    if (active.mode === "horizontal") settleExerciseSwipe(0);
   };
   useEffect(
     () => () => {
       window.clearTimeout(exerciseTransitionTimeout.current);
       window.clearTimeout(dialogCloseTimeout.current);
+      window.clearTimeout(exerciseSwipeTimeout.current);
     },
     [],
   );
@@ -890,9 +1030,22 @@ export default function App() {
                   selectedExerciseId={exerciseId}
                   statusFor={(id) => executionExercise(id)?.status}
                   onSelect={selectExercise}
+                  onReorder={moveExercise}
+                  canDrag={(index) => canMoveExercise(index, index)}
+                  canReorder={canMoveExercise}
                 />
                 <section className="exercise-hero">
-                  <div className="exercise-identity-viewport">
+                  <div
+                    className="exercise-identity-viewport"
+                    data-swipe-phase={exerciseSwipePhase}
+                    style={{
+                      transform: `translate3d(${exerciseSwipeOffset}px, 0, 0)`,
+                    }}
+                    onPointerDown={handleExercisePointerDown}
+                    onPointerMove={handleExercisePointerMove}
+                    onPointerUp={handleExercisePointerUp}
+                    onPointerCancel={handleExercisePointerCancel}
+                  >
                     {outgoingExerciseVisual &&
                       exerciseTransition !== "none" && (
                         <div
@@ -1211,9 +1364,6 @@ export default function App() {
                   <Icon name="chevron-right" size={17} />
                 </button>
               </div>
-              <button className="action-sheet-cancel" onClick={close}>
-                Annuler
-              </button>
             </div>
           ) : dialog === "organizeMenu" ? (
             <div className="action-sheet">
@@ -1239,9 +1389,6 @@ export default function App() {
                   <Icon name="chevron-right" size={17} />
                 </button>
               </div>
-              <button className="action-sheet-cancel" onClick={close}>
-                Annuler
-              </button>
             </div>
           ) : (
             <>
@@ -1352,9 +1499,6 @@ export default function App() {
               </div>
             )}
             <button className="primary">Enregistrer</button>
-            <button type="button" onClick={close}>
-              Annuler
-            </button>
           </form>
         </BottomSheet>
       )}

@@ -32,13 +32,11 @@ async function choosePickerValue(page: Page, label: string, value: number) {
       selected: true,
     }),
   ).toBeVisible();
-  const close = picker.getByRole("button", { name: "Fermer", exact: true });
+  const close = picker.getByRole("button", { name: "Fermer le panneau" });
   const closeBox = await close.boundingBox();
   expect(closeBox?.width).toBeGreaterThanOrEqual(42);
-  expect(closeBox?.height).toBeGreaterThanOrEqual(42);
-  expect(
-    Math.abs((closeBox?.width ?? 0) - (closeBox?.height ?? 0)),
-  ).toBeLessThan(2);
+  expect(closeBox?.height).toBeGreaterThanOrEqual(32);
+  expect(closeBox?.width).toBeGreaterThanOrEqual(42);
   if (label.startsWith("Repos")) {
     await picker
       .getByRole("listbox", { name: "Minutes" })
@@ -223,6 +221,10 @@ for (const width of [390, 320]) {
           buttonBottomGap: viewportBottom - buttonBounds.bottom,
           iconBottomGap: viewportBottom - iconBounds.bottom,
           paddingBottom: Number.parseFloat(styles.paddingBottom),
+          activeBackgroundBottom: getComputedStyle(
+            navigation.querySelector("button.active")!,
+            "::after",
+          ).bottom,
           viewportBottom,
         };
       });
@@ -234,6 +236,9 @@ for (const width of [390, 320]) {
       navigationGeometry.viewportBottom * 0.08,
     );
     expect(navigationGeometry.buttonHeight).toBeGreaterThanOrEqual(44);
+    expect(
+      Number.parseFloat(navigationGeometry.activeBackgroundBottom),
+    ).toBeLessThanOrEqual(0);
     expect(navigationGeometry.buttonBottomGap).toBeCloseTo(
       navigationGeometry.paddingBottom,
       0,
@@ -388,15 +393,14 @@ for (const width of [390, 320]) {
     );
     await screenshot(page, info, "picker-weight");
     await flickWheel(page, weightWheel);
-    await weightPicker.getByRole("button", { name: "Annuler" }).click();
+    await page.locator(".picker-backdrop").dispatchEvent("pointerdown");
+    await expect(weightPicker).toHaveCount(0);
     await choosePickerValue(page, "Charge (kg)", 62.5);
     await page.getByRole("button", { name: "Répétitions" }).first().click();
     const repetitionsPicker = page.getByRole("dialog", {
       name: "Choisir Répétitions",
     });
-    await repetitionsPicker
-      .getByRole("button", { name: "Fermer", exact: true })
-      .click();
+    await page.locator(".picker-backdrop").dispatchEvent("pointerdown");
     await expect(repetitionsPicker).toHaveCount(0);
     await choosePickerValue(page, "Répétitions", 10);
     await page.getByRole("button", { name: "Repos" }).first().click();
@@ -491,15 +495,15 @@ for (const width of [390, 320]) {
       .getByRole("button", { name: "Ajouter un exercice", exact: true })
       .click();
     await page.getByRole("textbox", { name: "Nom" }).fill("Mobilité");
-    await page
-      .getByRole("button", { name: "Annuler", exact: true })
-      .scrollIntoViewIfNeeded();
-    await expect(
-      page.getByRole("button", { name: "Annuler", exact: true }),
-    ).toBeInViewport();
+    const shortSheet = page.getByRole("dialog", { name: "Exercice" });
+    const shortHandle = shortSheet.getByRole("button", {
+      name: "Fermer le panneau",
+    });
+    await shortHandle.scrollIntoViewIfNeeded();
+    await expect(shortHandle).toBeInViewport();
     await screenshot(page, info, "exercise-sheet-short-viewport");
     await noOverflow(page);
-    await page.getByRole("button", { name: "Annuler", exact: true }).click();
+    await page.locator(".sheet-backdrop").dispatchEvent("pointerdown");
   });
 
   test(`mobile persistent execution at ${width}px`, async ({ page }, info) => {
@@ -776,6 +780,28 @@ test("exercise navigation animates according to workout order without changing e
   await expect(outgoingVisual).toHaveCSS("animation-name", "exercise-next-out");
   await expect(outgoingVisual).toHaveCSS("pointer-events", "none");
   await expect(page.getByRole("heading", { name: "Deuxième" })).toBeVisible();
+
+  const identityViewport = page.locator(".exercise-identity-viewport");
+  const identityBox = await identityViewport.boundingBox();
+  expect(identityBox).not.toBeNull();
+  await page.mouse.move(
+    identityBox!.x + identityBox!.width / 2,
+    identityBox!.y + 30,
+  );
+  await page.mouse.down();
+  await page.mouse.move(identityBox!.x + 24, identityBox!.y + 30, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.getByRole("heading", { name: "Troisième" })).toBeVisible();
+  await page.mouse.move(identityBox!.x + 24, identityBox!.y + 30);
+  await page.mouse.down();
+  await page.mouse.move(
+    identityBox!.x + identityBox!.width - 24,
+    identityBox!.y + 30,
+    { steps: 5 },
+  );
+  await page.mouse.up();
+  await expect(page.getByRole("heading", { name: "Deuxième" })).toBeVisible();
+
   expect(
     await page
       .locator(
@@ -784,7 +810,12 @@ test("exercise navigation animates according to workout order without changing e
       .evaluateAll((elements) =>
         elements.map((element) => getComputedStyle(element).transform),
       ),
-  ).toEqual(["none", "none", "none", "none"]);
+  ).toEqual([
+    "none",
+    "none",
+    "none",
+    expect.stringMatching(/^(none|matrix\()/),
+  ]);
 
   await rail.getByRole("button").nth(2).click();
   await expect(preparation).toHaveClass(/transition-next/);
@@ -811,20 +842,39 @@ test("exercise navigation animates according to workout order without changing e
   ).toEqual(statusesBefore.map((status) => status.replace("selected ", "")));
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
+  const thirdTab = rail.getByRole("button").nth(2);
+  const thirdBox = await thirdTab.boundingBox();
+  const firstBox = await rail.getByRole("button").first().boundingBox();
+  expect(thirdBox).not.toBeNull();
+  expect(firstBox).not.toBeNull();
+  await page.mouse.move(
+    thirdBox!.x + thirdBox!.width / 2,
+    thirdBox!.y + thirdBox!.height / 2,
+  );
+  await page.mouse.down();
+  await page.waitForTimeout(450);
+  await page.mouse.move(firstBox!.x - 12, thirdBox!.y + thirdBox!.height / 2, {
+    steps: 6,
+  });
+  await page.mouse.up();
+  await expect(rail.getByRole("button").first()).toHaveAccessibleName(
+    /Troisième/,
+  );
+
   await page.emulateMedia({ reducedMotion: "reduce" });
   await rail.getByRole("button").nth(2).click();
   expect(
     await page.locator(".exercise-hero").evaluate((hero) => {
       const current = hero.querySelector(".exercise-transition-current")!;
-      const outgoing = hero.querySelector(".exercise-transition-outgoing")!;
+      const outgoing = hero.querySelector(".exercise-transition-outgoing");
       return {
         currentAnimation: getComputedStyle(current).animationName,
-        outgoingDisplay: getComputedStyle(outgoing).display,
+        outgoingDisplay: outgoing ? getComputedStyle(outgoing).display : "none",
       };
     }),
   ).toEqual({
     currentAnimation: "none",
     outgoingDisplay: "none",
   });
-  await expect(page.getByRole("heading", { name: "Troisième" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Deuxième" })).toBeVisible();
 });

@@ -1031,7 +1031,7 @@ nav button.active {
 }
 .picker-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 8px;
   margin-top: 6px;
 }
@@ -1040,11 +1040,6 @@ nav button.active {
   border-radius: 10px;
   font-size: 13px;
   font-weight: 800;
-}
-.picker-cancel {
-  border: 1px solid var(--line);
-  background: var(--surface-raised);
-  color: var(--text);
 }
 .picker-save {
   border: 1px solid transparent;
