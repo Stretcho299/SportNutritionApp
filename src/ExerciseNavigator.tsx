@@ -16,6 +16,8 @@ type TimelineGesture = {
   mode: "pending" | "cancelled" | "reordering";
 };
 
+type TouchGesture = TimelineGesture;
+
 export function ExerciseNavigator({
   exercises,
   selectedExerciseId,
@@ -39,6 +41,12 @@ export function ExerciseNavigator({
   );
   const tabs = useRef<HTMLUListElement>(null);
   const gesture = useRef<TimelineGesture | null>(null);
+  const touchGesture = useRef<TouchGesture | null>(null);
+  const touchListeners = useRef<{
+    move: (event: TouchEvent) => void;
+    end: (event: TouchEvent) => void;
+    cancel: () => void;
+  } | null>(null);
   const longPressTimer = useRef<number | undefined>(undefined);
   const autoScrollFrame = useRef<number | undefined>(undefined);
   const lastPointerX = useRef(0);
@@ -73,7 +81,7 @@ export function ExerciseNavigator({
 
   const findDropIndex = (clientX: number, from: number) => {
     const list = tabs.current;
-    const active = gesture.current;
+    const active = gesture.current ?? touchGesture.current;
     if (!list || !active) return from;
     const items = Array.from(list.children) as HTMLElement[];
     const source = items[from];
@@ -133,6 +141,14 @@ export function ExerciseNavigator({
       window.clearTimeout(longPressTimer.current);
       if (autoScrollFrame.current !== undefined)
         window.cancelAnimationFrame(autoScrollFrame.current);
+      const listeners = touchListeners.current;
+      if (listeners) {
+        document.removeEventListener("touchmove", listeners.move);
+        document.removeEventListener("touchend", listeners.end);
+        document.removeEventListener("touchcancel", listeners.cancel);
+      }
+      touchListeners.current = null;
+      touchGesture.current = null;
     },
     [],
   );
@@ -152,11 +168,122 @@ export function ExerciseNavigator({
     button.setPointerCapture(active.pointerId);
   };
 
+  const finishTouchGesture = (
+    commit: boolean,
+    clientX: number,
+    clientY: number,
+  ) => {
+    const active = touchGesture.current;
+    if (!active) return;
+    if (commit && active.mode === "reordering") {
+      const moved =
+        Math.max(
+          Math.abs(clientX - active.startX),
+          Math.abs(clientY - active.startY),
+        ) >= MOVE_SLOP;
+      if (moved) {
+        const target = findDropIndex(clientX, active.index);
+        if (
+          target !== active.index &&
+          canReorder?.(active.index, target) !== false
+        )
+          onReorder?.(active.index, target);
+        suppressClick.current = true;
+      }
+    }
+    window.clearTimeout(longPressTimer.current);
+    longPressTimer.current = undefined;
+    clearAutoScroll();
+    touchGesture.current = null;
+    const listeners = touchListeners.current;
+    if (listeners) {
+      document.removeEventListener("touchmove", listeners.move);
+      document.removeEventListener("touchend", listeners.end);
+      document.removeEventListener("touchcancel", listeners.cancel);
+      touchListeners.current = null;
+    }
+    setDraggingIndex(null);
+    setDragPosition(null);
+    setDropIndex(null);
+  };
+
+  const handleTouchStart = (
+    event: React.TouchEvent<HTMLButtonElement>,
+    index: number,
+  ) => {
+    if (touchGesture.current || gesture.current) return;
+    const touch = event.changedTouches[0];
+    if (!touch) return;
+    const active: TouchGesture = {
+      index,
+      pointerId: touch.identifier,
+      button: event.currentTarget,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      lastX: touch.clientX,
+      mode: "pending",
+    };
+    touchGesture.current = active;
+    lastPointerX.current = touch.clientX;
+    longPressTimer.current = window.setTimeout(() => {
+      const current = touchGesture.current;
+      if (!current || current.mode !== "pending" || canDrag?.(index) === false)
+        return;
+      current.mode = "reordering";
+      const bounds = event.currentTarget.getBoundingClientRect();
+      setDraggingIndex(index);
+      setDropIndex(index);
+      setDragPosition({
+        x: bounds.left + bounds.width / 2,
+        y: bounds.top + bounds.height / 2,
+      });
+    }, LONG_PRESS_MS);
+
+    const move = (moveEvent: TouchEvent) => {
+      const current = touchGesture.current;
+      const point = Array.from(moveEvent.touches).find(
+        (item) => item.identifier === touch.identifier,
+      );
+      if (!current || !point) return;
+      lastPointerX.current = point.clientX;
+      const dx = point.clientX - current.startX;
+      const dy = point.clientY - current.startY;
+      if (current.mode === "pending") {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) < MOVE_SLOP) return;
+        window.clearTimeout(longPressTimer.current);
+        longPressTimer.current = undefined;
+        current.mode = "cancelled";
+        return;
+      }
+      if (current.mode !== "reordering") return;
+      moveEvent.preventDefault();
+      setDragPosition({ x: point.clientX, y: point.clientY });
+      setDropIndex(findDropIndex(point.clientX, current.index));
+      updateAutoScroll(point.clientX);
+    };
+    const end = (endEvent: TouchEvent) => {
+      const point = Array.from(endEvent.changedTouches).find(
+        (item) => item.identifier === touch.identifier,
+      );
+      finishTouchGesture(
+        true,
+        point?.clientX ?? active.lastX,
+        point?.clientY ?? active.startY,
+      );
+    };
+    const cancel = () => finishTouchGesture(false, active.lastX, active.startY);
+    touchListeners.current = { move, end, cancel };
+    document.addEventListener("touchmove", move, { passive: false });
+    document.addEventListener("touchend", end);
+    document.addEventListener("touchcancel", cancel);
+  };
+
   const handlePointerDown = (
     event: React.PointerEvent<HTMLButtonElement>,
     index: number,
   ) => {
-    if (event.button !== 0 || gesture.current) return;
+    if (event.pointerType === "touch" || event.button !== 0 || gesture.current)
+      return;
     const active: TimelineGesture = {
       index,
       pointerId: event.pointerId,
@@ -177,6 +304,7 @@ export function ExerciseNavigator({
 
   const handlePointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
     const active = gesture.current;
+    if (event.pointerType === "touch") return;
     if (!active || active.pointerId !== event.pointerId) return;
     lastPointerX.current = event.clientX;
     const dx = event.clientX - active.startX;
@@ -197,6 +325,7 @@ export function ExerciseNavigator({
 
   const handlePointerUp = (event: React.PointerEvent<HTMLButtonElement>) => {
     const active = gesture.current;
+    if (event.pointerType === "touch") return;
     if (!active || active.pointerId !== event.pointerId) return;
     if (active.mode === "reordering") {
       const moved =
@@ -266,11 +395,17 @@ export function ExerciseNavigator({
                 aria-pressed={selected}
                 aria-grabbed={dragging || undefined}
                 onPointerDown={(event) => handlePointerDown(event, index)}
+                onTouchStart={(event) => handleTouchStart(event, index)}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
-                onPointerCancel={clearGesture}
+                onPointerCancel={(event) => {
+                  if (event.pointerType !== "touch") clearGesture();
+                }}
                 onLostPointerCapture={(event) => {
-                  if (gesture.current?.pointerId === event.pointerId)
+                  if (
+                    event.pointerType !== "touch" &&
+                    gesture.current?.pointerId === event.pointerId
+                  )
                     clearGesture();
                 }}
                 onClick={() => {

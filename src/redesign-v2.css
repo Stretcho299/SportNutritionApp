@@ -1593,22 +1593,22 @@ button:active,
 
 .workout-detail .bottom-navigation {
   position: fixed;
-  top: 100dvh;
+  top: auto;
   right: auto;
-  bottom: auto;
+  bottom: calc(-1 * var(--bottom-nav-visual-offset));
   left: 50%;
   width: min(100%, 680px);
   margin: 0;
-  transform: translate(-50%, calc(-100% + var(--bottom-nav-visual-offset)));
+  transform: translateX(-50%);
 }
 
 .bottom-navigation {
-  top: 100dvh;
-  bottom: auto;
+  top: auto;
+  bottom: calc(-1 * var(--bottom-nav-visual-offset));
   grid-template-columns: 1fr 1fr;
   min-height: 0;
   padding: 0 12px var(--bottom-navigation-system-clearance);
-  transform: translate(-50%, calc(-100% + var(--bottom-nav-visual-offset)));
+  transform: translateX(-50%);
 }
 
 .bottom-navigation button {
