@@ -13,7 +13,7 @@ type TimelineGesture = {
   startX: number;
   startY: number;
   lastX: number;
-  mode: "pending" | "timelineScroll" | "cancelled" | "reordering";
+  mode: "pending" | "cancelled" | "reordering";
 };
 
 export function ExerciseNavigator({
@@ -44,7 +44,10 @@ export function ExerciseNavigator({
   const lastPointerX = useRef(0);
   const suppressClick = useRef(false);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
-  const [dragOffset, setDragOffset] = useState(0);
+  const [dragPosition, setDragPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
 
   const clearAutoScroll = () => {
@@ -64,7 +67,7 @@ export function ExerciseNavigator({
       active.button.releasePointerCapture(active.pointerId);
     }
     setDraggingIndex(null);
-    setDragOffset(0);
+    setDragPosition(null);
     setDropIndex(null);
   };
 
@@ -139,8 +142,13 @@ export function ExerciseNavigator({
     if (!active || active.mode !== "pending" || canDrag?.(index) === false)
       return;
     active.mode = "reordering";
+    const bounds = button.getBoundingClientRect();
     setDraggingIndex(index);
     setDropIndex(index);
+    setDragPosition({
+      x: bounds.left + bounds.width / 2,
+      y: bounds.top + bounds.height / 2,
+    });
     button.setPointerCapture(active.pointerId);
   };
 
@@ -170,8 +178,6 @@ export function ExerciseNavigator({
   const handlePointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
     const active = gesture.current;
     if (!active || active.pointerId !== event.pointerId) return;
-    const previousX = active.lastX;
-    active.lastX = event.clientX;
     lastPointerX.current = event.clientX;
     const dx = event.clientX - active.startX;
     const dy = event.clientY - active.startY;
@@ -179,24 +185,12 @@ export function ExerciseNavigator({
       if (Math.max(Math.abs(dx), Math.abs(dy)) < MOVE_SLOP) return;
       window.clearTimeout(longPressTimer.current);
       longPressTimer.current = undefined;
-      if (Math.abs(dx) > Math.abs(dy) * 1.1) {
-        active.mode = "timelineScroll";
-        active.button.setPointerCapture(active.pointerId);
-        event.preventDefault();
-        if (tabs.current) tabs.current.scrollLeft -= event.clientX - previousX;
-      } else {
-        active.mode = "cancelled";
-      }
-      return;
-    }
-    if (active.mode === "timelineScroll") {
-      event.preventDefault();
-      if (tabs.current) tabs.current.scrollLeft -= event.clientX - previousX;
+      active.mode = "cancelled";
       return;
     }
     if (active.mode !== "reordering") return;
     event.preventDefault();
-    setDragOffset(dx);
+    setDragPosition({ x: event.clientX, y: event.clientY });
     setDropIndex(findDropIndex(event.clientX, active.index));
     updateAutoScroll(event.clientX);
   };
@@ -222,6 +216,12 @@ export function ExerciseNavigator({
     }
     clearGesture();
   };
+
+  const draggedExercise =
+    draggingIndex === null ? null : exercises[draggingIndex];
+  const draggedStatus = draggedExercise
+    ? (statusFor(draggedExercise.id) ?? "upcoming")
+    : null;
 
   return (
     <section
@@ -265,11 +265,6 @@ export function ExerciseNavigator({
                 className="exercise-tab"
                 aria-pressed={selected}
                 aria-grabbed={dragging || undefined}
-                style={
-                  dragging
-                    ? { transform: `translateX(${dragOffset}px)` }
-                    : undefined
-                }
                 onPointerDown={(event) => handlePointerDown(event, index)}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
@@ -306,6 +301,21 @@ export function ExerciseNavigator({
           );
         })}
       </ul>
+      {draggingIndex !== null && draggedExercise && dragPosition && (
+        <div
+          className="exercise-tab-drag-clone"
+          style={{ left: dragPosition.x, top: dragPosition.y }}
+          aria-hidden="true"
+        >
+          <span className="exercise-tab-circle">
+            {draggedStatus === "completed" ? (
+              <Icon name="check" size={18} strokeWidth={2.4} />
+            ) : (
+              String(draggingIndex + 1).padStart(2, "0")
+            )}
+          </span>
+        </div>
+      )}
     </section>
   );
 }

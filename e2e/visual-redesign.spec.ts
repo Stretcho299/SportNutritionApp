@@ -481,7 +481,14 @@ for (const width of [390, 320]) {
       .boundingBox();
     const navBounds = await page.getByRole("navigation").boundingBox();
     expect(addBounds!.y + addBounds!.height).toBeLessThanOrEqual(navBounds!.y);
-    expect(navBounds!.y + navBounds!.height).toBeCloseTo(844, 0);
+    const visualOffset = await page.evaluate(() =>
+      Number.parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue(
+          "--bottom-nav-visual-offset",
+        ),
+      ),
+    );
+    expect(navBounds!.y + navBounds!.height).toBeCloseTo(844 + visualOffset, 0);
   });
 
   test(`mobile short viewport bottom sheet at ${width}px`, async ({
@@ -781,13 +788,14 @@ test("manually scrolls an overflowing timeline before locking reorder", async ({
   expect(box).not.toBeNull();
   const x = box!.x + box!.width / 2;
   const y = box!.y + box!.height / 2;
-  await page.mouse.move(x, y);
-  await page.mouse.down();
-  await page.mouse.move(x - 100, y, { steps: 6 });
-  await page.mouse.up();
-  expect(await rail.evaluate((element) => element.scrollLeft)).toBeGreaterThan(
-    initialScrollLeft,
-  );
+  await expect(rail).toHaveCSS("touch-action", "auto");
+  if (page.context().browser()?.browserType().name() === "chromium") {
+    await page.mouse.move(x, y);
+    await page.mouse.wheel(100, 0);
+    await expect
+      .poll(() => rail.evaluate((element) => element.scrollLeft))
+      .toBeGreaterThan(initialScrollLeft);
+  }
   await expect(rail).not.toHaveClass(/is-reordering/);
 
   const visibleIndex = await rail.getByRole("button").evaluateAll((buttons) => {

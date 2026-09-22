@@ -1584,6 +1584,24 @@ button:active,
   color: #b9b9c0;
 }
 
+.workout-detail {
+  padding-bottom: calc(
+    var(--bottom-navigation-action-height) +
+      var(--bottom-navigation-system-clearance)
+  );
+}
+
+.workout-detail .bottom-navigation {
+  position: fixed;
+  top: 100dvh;
+  right: auto;
+  bottom: auto;
+  left: 50%;
+  width: min(100%, 680px);
+  margin: 0;
+  transform: translate(-50%, calc(-100% + var(--bottom-nav-visual-offset)));
+}
+
 .bottom-navigation {
   top: 100dvh;
   bottom: auto;
@@ -1924,7 +1942,7 @@ button:active,
 }
 
 .exercise-tabs {
-  touch-action: pan-y;
+  touch-action: auto;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
@@ -1940,7 +1958,7 @@ button:active,
 }
 
 .exercise-tab {
-  touch-action: pan-y;
+  touch-action: auto;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
@@ -1961,9 +1979,33 @@ button:active,
 }
 
 .exercise-tabs li.is-reordering .exercise-tab {
-  filter: brightness(1.14);
-  transform: translateX(0) scale(1.04);
+  visibility: hidden;
   transition: none;
+}
+
+.exercise-tab-drag-clone {
+  position: fixed;
+  z-index: 20;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(1.04);
+  border: 1px solid #ff8b5d;
+  border-radius: 50%;
+  background: var(--surface-raised);
+  color: var(--accent-soft);
+  box-shadow:
+    0 10px 24px #0008,
+    0 0 0 3px #ff5a1f2e;
+}
+
+.exercise-tab-drag-clone .exercise-tab-circle {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
 }
 
 .exercise-tabs li.reorder-target .exercise-tab-circle {
