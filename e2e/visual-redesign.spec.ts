@@ -236,7 +236,7 @@ for (const width of [390, 320]) {
     ).toBeGreaterThanOrEqual(0);
     expect(
       navigationGeometry.bottom - navigationGeometry.viewportBottom,
-    ).toBeLessThanOrEqual(8);
+    ).toBeLessThanOrEqual(12);
     expect(navigationGeometry.height).toBeLessThan(
       navigationGeometry.viewportBottom * 0.08,
     );

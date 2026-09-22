@@ -9,6 +9,7 @@ const EDGE_SIZE = 44;
 type TimelineGesture = {
   index: number;
   pointerId: number;
+  button: HTMLButtonElement;
   startX: number;
   startY: number;
   lastX: number;
@@ -57,7 +58,11 @@ export function ExerciseNavigator({
     window.clearTimeout(longPressTimer.current);
     longPressTimer.current = undefined;
     clearAutoScroll();
+    const active = gesture.current;
     gesture.current = null;
+    if (active?.button.hasPointerCapture(active.pointerId)) {
+      active.button.releasePointerCapture(active.pointerId);
+    }
     setDraggingIndex(null);
     setDragOffset(0);
     setDropIndex(null);
@@ -147,12 +152,14 @@ export function ExerciseNavigator({
     const active: TimelineGesture = {
       index,
       pointerId: event.pointerId,
+      button: event.currentTarget,
       startX: event.clientX,
       startY: event.clientY,
       lastX: event.clientX,
       mode: "pending",
     };
     gesture.current = active;
+    lastPointerX.current = event.clientX;
     const button = event.currentTarget;
     longPressTimer.current = window.setTimeout(
       () => startLongPress(index, button),
@@ -164,6 +171,7 @@ export function ExerciseNavigator({
     const active = gesture.current;
     if (!active || active.pointerId !== event.pointerId) return;
     active.lastX = event.clientX;
+    lastPointerX.current = event.clientX;
     const dx = event.clientX - active.startX;
     const dy = event.clientY - active.startY;
     if (active.mode === "pending") {
@@ -215,7 +223,11 @@ export function ExerciseNavigator({
           {selectedIndex + 1} / {exercises.length}
         </strong>
       </div>
-      <ul ref={tabs} className="exercise-tabs" aria-label="Exercices">
+      <ul
+        ref={tabs}
+        className={`exercise-tabs${draggingIndex !== null ? " is-reordering" : ""}`}
+        aria-label="Exercices"
+      >
         {exercises.map((exercise, index) => {
           const status = statusFor(exercise.id) ?? "upcoming";
           const selected = exercise.id === selectedExerciseId;
@@ -251,6 +263,10 @@ export function ExerciseNavigator({
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
                 onPointerCancel={clearGesture}
+                onLostPointerCapture={(event) => {
+                  if (gesture.current?.pointerId === event.pointerId)
+                    clearGesture();
+                }}
                 onClick={() => {
                   if (suppressClick.current) {
                     suppressClick.current = false;

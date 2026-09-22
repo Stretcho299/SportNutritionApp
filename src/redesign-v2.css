@@ -18,7 +18,7 @@
     calc(var(--bottom-navigation-safe-inset) - 18px)
   );
   --bottom-navigation-action-height: 44px;
-  --bottom-nav-visual-offset: 6px;
+  --bottom-nav-visual-offset: 10px;
 }
 
 body {
@@ -1928,6 +1928,15 @@ button:active,
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+}
+
+.exercise-tabs.is-reordering {
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
+.exercise-tabs.is-reordering .exercise-tab {
+  touch-action: none;
 }
 
 .exercise-tab {
