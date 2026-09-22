@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
 import type { Exercise, ExerciseExecutionStatus } from "./storage/database";
 
-const LONG_PRESS_MS = 400;
+const LONG_PRESS_MS = 300;
 const MOVE_SLOP = 8;
 const EDGE_SIZE = 44;
 
@@ -177,13 +177,20 @@ export function ExerciseNavigator({
     const active = gesture.current;
     if (!active || active.pointerId !== event.pointerId) return;
     if (active.mode === "reordering") {
-      const target = dropIndex ?? active.index;
-      if (
-        target !== active.index &&
-        canReorder?.(active.index, target) !== false
-      )
-        onReorder?.(active.index, target);
-      suppressClick.current = true;
+      const moved =
+        Math.max(
+          Math.abs(event.clientX - active.startX),
+          Math.abs(event.clientY - active.startY),
+        ) >= MOVE_SLOP;
+      if (moved) {
+        const target = dropIndex ?? active.index;
+        if (
+          target !== active.index &&
+          canReorder?.(active.index, target) !== false
+        )
+          onReorder?.(active.index, target);
+        suppressClick.current = true;
+      }
     }
     clearGesture();
   };

@@ -211,6 +211,7 @@ for (const width of [390, 320]) {
           .querySelector("button svg")!
           .getBoundingClientRect();
         const styles = getComputedStyle(navigation);
+        const rootStyles = getComputedStyle(document.documentElement);
         const viewportBottom =
           (window.visualViewport?.offsetTop ?? 0) +
           (window.visualViewport?.height ?? window.innerHeight);
@@ -221,33 +222,35 @@ for (const width of [390, 320]) {
           buttonBottomGap: viewportBottom - buttonBounds.bottom,
           iconBottomGap: viewportBottom - iconBounds.bottom,
           paddingBottom: Number.parseFloat(styles.paddingBottom),
-          activeBackgroundBottom: getComputedStyle(
+          visualOffset: Number.parseFloat(
+            rootStyles.getPropertyValue("--bottom-nav-visual-offset"),
+          ),
+          activeRadius: getComputedStyle(
             navigation.querySelector("button.active")!,
-            "::after",
-          ).bottom,
+          ).borderRadius,
           viewportBottom,
         };
       });
-    expect(navigationGeometry.bottom).toBeCloseTo(
-      navigationGeometry.viewportBottom,
-      0,
-    );
+    expect(
+      navigationGeometry.bottom - navigationGeometry.viewportBottom,
+    ).toBeGreaterThanOrEqual(0);
+    expect(
+      navigationGeometry.bottom - navigationGeometry.viewportBottom,
+    ).toBeLessThanOrEqual(4);
     expect(navigationGeometry.height).toBeLessThan(
       navigationGeometry.viewportBottom * 0.08,
     );
     expect(navigationGeometry.buttonHeight).toBeGreaterThanOrEqual(44);
-    expect(
-      Number.parseFloat(navigationGeometry.activeBackgroundBottom),
-    ).toBeLessThanOrEqual(0);
+    expect(navigationGeometry.activeRadius).toBe("12px");
     expect(navigationGeometry.buttonBottomGap).toBeCloseTo(
-      navigationGeometry.paddingBottom,
+      navigationGeometry.paddingBottom - navigationGeometry.visualOffset,
       0,
     );
     expect(navigationGeometry.buttonBottomGap).toBeGreaterThanOrEqual(
-      simulatedSafeInset * 0.4,
+      simulatedSafeInset * 0.4 - navigationGeometry.visualOffset,
     );
     expect(navigationGeometry.buttonBottomGap).toBeLessThan(
-      simulatedSafeInset * 0.6,
+      simulatedSafeInset * 0.6 - navigationGeometry.visualOffset,
     );
     expect(navigationGeometry.iconBottomGap).toBeGreaterThan(
       navigationGeometry.buttonBottomGap + 8,
@@ -781,41 +784,13 @@ test("exercise navigation animates according to workout order without changing e
   await expect(outgoingVisual).toHaveCSS("pointer-events", "none");
   await expect(page.getByRole("heading", { name: "Deuxième" })).toBeVisible();
 
-  const identityViewport = page.locator(".exercise-identity-viewport");
-  const identityBox = await identityViewport.boundingBox();
-  expect(identityBox).not.toBeNull();
-  await page.mouse.move(
-    identityBox!.x + identityBox!.width / 2,
-    identityBox!.y + 30,
-  );
-  await page.mouse.down();
-  await page.mouse.move(identityBox!.x + 24, identityBox!.y + 30, { steps: 5 });
-  await page.mouse.up();
-  await expect(page.getByRole("heading", { name: "Troisième" })).toBeVisible();
-  await page.mouse.move(identityBox!.x + 24, identityBox!.y + 30);
-  await page.mouse.down();
-  await page.mouse.move(
-    identityBox!.x + identityBox!.width - 24,
-    identityBox!.y + 30,
-    { steps: 5 },
-  );
-  await page.mouse.up();
-  await expect(page.getByRole("heading", { name: "Deuxième" })).toBeVisible();
-
   expect(
     await page
-      .locator(
-        ".workout-preparation, .workout-fixed-zones, .exercise-hero, .exercise-identity-viewport",
-      )
+      .locator(".workout-preparation, .workout-fixed-zones, .exercise-hero")
       .evaluateAll((elements) =>
         elements.map((element) => getComputedStyle(element).transform),
       ),
-  ).toEqual([
-    "none",
-    "none",
-    "none",
-    expect.stringMatching(/^(none|matrix\()/),
-  ]);
+  ).toEqual(["none", "none", "none"]);
 
   await rail.getByRole("button").nth(2).click();
   await expect(preparation).toHaveClass(/transition-next/);

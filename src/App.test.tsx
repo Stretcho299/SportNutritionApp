@@ -450,7 +450,18 @@ it("reorders exercises in a dedicated sheet and retains selection and persisted 
   expect(sheet.getByLabelText("Monter Squat")).toBeDisabled();
   expect(sheet.getByLabelText("Descendre Curl")).toBeDisabled();
   fireEvent.click(sheet.getByLabelText("Monter Row"));
-  fireEvent.click(sheet.getByText("Terminer"));
+  await dismissSheetAndWait();
+  expect(storedWorkouts()[0].exercises.map((e) => e.name)).toEqual([
+    "Squat",
+    "Row",
+    "Curl",
+  ]);
+  fireEvent.click(
+    within(openOrganizeMenu()).getByText("Réordonner les exercices"),
+  );
+  const savedSheet = within(screen.getByRole("dialog"));
+  fireEvent.click(savedSheet.getByLabelText("Monter Row"));
+  fireEvent.click(savedSheet.getByRole("button", { name: "ENREGISTRER" }));
   expect(screen.getByRole("button", { pressed: true })).toHaveTextContent(
     "Squat",
   );
@@ -500,19 +511,30 @@ it("keeps sets in their natural order and renumbers them after deletion", async 
   ).toHaveAttribute("data-value", "90");
   blocks = within(seriesRegion("Squat")).getAllByRole("listitem");
   fireEvent.click(within(blocks[0]).getByText("Supprimer"));
+  const deleteExercise = screen.getByRole("alertdialog", {
+    name: "Supprimer cet exercice ?",
+  });
+  await clickAndWaitForMotion(
+    within(deleteExercise).getByRole("button", { name: "Supprimer" }),
+  );
+  expect(screen.getByRole("heading", { name: "Row" })).toBeInTheDocument();
+  expect(storedWorkouts()[0].exercises.map((item) => item.name)).toEqual([
+    "Row",
+  ]);
+  const rowActions = screen.getByLabelText(
+    "Actions de l’exercice",
+  ).parentElement!;
+  fireEvent.click(
+    within(rowActions).getByRole("button", { name: "Supprimer" }),
+  );
   await clickAndWaitForMotion(
     within(screen.getByRole("alertdialog")).getByRole("button", {
       name: "Supprimer",
     }),
   );
   expect(
-    within(seriesRegion("Squat")).queryByRole("listitem"),
-  ).not.toBeInTheDocument();
-  selectExercise("Row");
-  expect(
-    within(seriesRegion("Row")).getByLabelText("Charge (kg)"),
-  ).toHaveAttribute("data-value", "40");
-  expect(storedWorkouts()[0].exercises[1].plannedSets).toEqual([]);
+    screen.getByRole("heading", { name: "Aucun exercice" }),
+  ).toBeInTheDocument();
 });
 
 it("selects a remaining exercise after deletion and restores the empty state after the last", async () => {

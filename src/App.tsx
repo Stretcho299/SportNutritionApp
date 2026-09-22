@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type PointerEvent,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
 import "./redesign-v2.css";
 import { Icon } from "./Icon";
@@ -53,17 +47,6 @@ type Dialog =
   | "addMenu"
   | "organizeMenu"
   | "reorder";
-type ExerciseSwipeGesture = {
-  pointerId: number;
-  startX: number;
-  startY: number;
-  startedAt: number;
-  mode: "pending" | "horizontal" | "vertical";
-};
-
-const EXERCISE_SWIPE_SLOP = 8;
-const EXERCISE_SWIPE_SETTLE_MS = 300;
-const EXERCISE_SWIPE_VELOCITY = 0.45;
 export default function App() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [screen, setScreen] = useState<Screen>("list");
@@ -71,6 +54,7 @@ export default function App() {
   const [exerciseId, setExerciseId] = useState("");
   const [dialog, setDialog] = useState<Dialog>(null);
   const [dialogClosing, setDialogClosing] = useState(false);
+  const [reorderDraftIds, setReorderDraftIds] = useState<string[] | null>(null);
   const [name, setName] = useState("");
   const [initialSetCount, setInitialSetCount] = useState("1");
   const [rest, setRest] = useState(String(defaultRestSeconds));
@@ -85,16 +69,10 @@ export default function App() {
     name: string;
     plannedSetCount: number;
   } | null>(null);
-  const [exerciseSwipeOffset, setExerciseSwipeOffset] = useState(0);
-  const [exerciseSwipePhase, setExerciseSwipePhase] = useState<
-    "idle" | "dragging" | "settling"
-  >("idle");
   const [screenTransition, setScreenTransition] = useState<"forward" | "back">(
     "forward",
   );
   const exerciseTransitionTimeout = useRef<number | undefined>(undefined);
-  const exerciseSwipeTimeout = useRef<number | undefined>(undefined);
-  const exerciseSwipeGesture = useRef<ExerciseSwipeGesture | null>(null);
   const dialogCloseTimeout = useRef<number | undefined>(undefined);
   const navigate = (next: Screen, direction: "forward" | "back") => {
     setScreenTransition(direction);
@@ -284,6 +262,7 @@ export default function App() {
     dialogCloseTimeout.current = window.setTimeout(() => {
       setDialog(null);
       setDialogClosing(false);
+      setReorderDraftIds(null);
       setName("");
       setInitialSetCount("1");
       setRest(String(defaultRestSeconds));
@@ -500,6 +479,30 @@ export default function App() {
       ),
     );
   };
+  const removeExerciseAfterLastSet = () => {
+    if (!workout || !exercise) return;
+    const ordered = sort(workout.exercises);
+    const index = ordered.findIndex((item) => item.id === exercise.id);
+    const remaining = ordered
+      .filter((item) => item.id !== exercise.id)
+      .map((item, position) => ({ ...item, position }));
+    const nextExerciseId =
+      remaining[index]?.id ?? remaining[index - 1]?.id ?? "";
+    update(
+      workouts.map((w) =>
+        w.id !== workout.id
+          ? w
+          : {
+              ...w,
+              exercises: remaining,
+              execution: w.execution
+                ? removeExecutedExercise(w.execution, exercise.id)
+                : undefined,
+            },
+      ),
+    );
+    setExerciseId(nextExerciseId);
+  };
   const removeSet = (id: string) => {
     if (!workout || !exercise) return;
     const current = executionSet(id);
@@ -516,7 +519,11 @@ export default function App() {
       set.repetitions !== null ||
       set.weightKg !== null ||
       set.restSeconds !== (exercise.defaultRestSeconds ?? defaultRestSeconds);
-    const remove = () =>
+    const remove = () => {
+      if (exercise.plannedSets.length === 1) {
+        removeExerciseAfterLastSet();
+        return;
+      }
       update(
         workouts.map((w) =>
           w.id !== workout.id
@@ -539,26 +546,73 @@ export default function App() {
               },
         ),
       );
+    };
     if (hasData)
       requestConfirmation({
-        title: "Supprimer cette série ?",
+        title:
+          exercise.plannedSets.length === 1
+            ? "Supprimer cet exercice ?"
+            : "Supprimer cette série ?",
         description:
-          "Les répétitions, la charge et le repos de cette série seront supprimés.",
+          exercise.plannedSets.length === 1
+            ? `« ${exercise.name} » sera supprimé de la séance.`
+            : "Les répétitions, la charge et le repos de cette série seront supprimés.",
         confirmLabel: "Supprimer",
         onConfirm: remove,
       });
     else remove();
   };
   const canMoveExercise = (from: number, to: number) => {
-    if (!workout) return false;
-    if (execution?.status === "completed") return false;
-    if (from === to) return true;
-    const orderedExercises = sort(workout.exercises);
-    const first = Math.min(from, to);
-    const last = Math.max(from, to);
-    return orderedExercises
-      .slice(first, last + 1)
-      .every((item) => executionExercise(item.id)?.status !== "completed");
+    if (!workout || execution?.status === "completed") return false;
+    return (
+      from >= 0 &&
+      to >= 0 &&
+      from < workout.exercises.length &&
+      to < workout.exercises.length
+    );
+  };
+  const openReorderSheet = () => {
+    if (!workout) return;
+    setReorderDraftIds(sort(workout.exercises).map((item) => item.id));
+    setDialog("reorder");
+  };
+  const moveReorderDraft = (index: number, delta: -1 | 1) => {
+    if (!reorderDraftIds || execution?.status === "completed") return;
+    const target = index + delta;
+    if (target < 0 || target >= reorderDraftIds.length) return;
+    const next = [...reorderDraftIds];
+    [next[index], next[target]] = [next[target], next[index]];
+    setReorderDraftIds(next);
+  };
+  const saveReorderDraft = () => {
+    if (!workout || !reorderDraftIds) return;
+    const byId = new Map(workout.exercises.map((item) => [item.id, item]));
+    const exercises = reorderDraftIds
+      .map((id) => byId.get(id))
+      .filter((item): item is Workout["exercises"][number] => !!item)
+      .map((item, position) => ({ ...item, position }));
+    update(
+      workouts.map((w) =>
+        w.id !== workout.id
+          ? w
+          : {
+              ...w,
+              exercises,
+              execution: w.execution
+                ? {
+                    ...w.execution,
+                    exercises: exercises.map((item) =>
+                      w.execution!.exercises.find(
+                        (entry) => entry.exerciseId === item.id,
+                      )!,
+                    ),
+                  }
+                : undefined,
+            },
+      ),
+    );
+    setReorderDraftIds(null);
+    close();
   };
   const moveExercise = (from: number, to: number) => {
     if (!workout || !canMoveExercise(from, to)) return;
@@ -619,106 +673,10 @@ export default function App() {
     }
     setExerciseId(nextExerciseId);
   };
-  const exerciseSwipeTarget = (direction: -1 | 1) => {
-    const orderedExercises = sort(workout?.exercises ?? []);
-    const currentIndex = orderedExercises.findIndex(
-      (item) => item.id === exerciseId,
-    );
-    const targetIndex = currentIndex + direction;
-    return targetIndex >= 0 && targetIndex < orderedExercises.length
-      ? orderedExercises[targetIndex]
-      : null;
-  };
-  const settleExerciseSwipe = (offset: number, onSettled?: () => void) => {
-    window.clearTimeout(exerciseSwipeTimeout.current);
-    setExerciseSwipePhase("settling");
-    setExerciseSwipeOffset(offset);
-    exerciseSwipeTimeout.current = window.setTimeout(() => {
-      onSettled?.();
-      setExerciseSwipeOffset(0);
-      setExerciseSwipePhase("idle");
-      exerciseSwipeGesture.current = null;
-    }, EXERCISE_SWIPE_SETTLE_MS);
-  };
-  const handleExercisePointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
-    const target = event.target as HTMLElement;
-    if (
-      target.closest(
-        "button,input,textarea,select,[role=button],[contenteditable=true]",
-      )
-    )
-      return;
-    exerciseSwipeGesture.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      startedAt: event.timeStamp,
-      mode: "pending",
-    };
-  };
-  const handleExercisePointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    const active = exerciseSwipeGesture.current;
-    if (!active || active.pointerId !== event.pointerId) return;
-    const dx = event.clientX - active.startX;
-    const dy = event.clientY - active.startY;
-    if (active.mode === "pending") {
-      if (Math.max(Math.abs(dx), Math.abs(dy)) < EXERCISE_SWIPE_SLOP) return;
-      if (Math.abs(dx) <= Math.abs(dy) * 1.1) {
-        active.mode = "vertical";
-        exerciseSwipeGesture.current = null;
-        return;
-      }
-      active.mode = "horizontal";
-      event.currentTarget.setPointerCapture(event.pointerId);
-      setExerciseSwipePhase("dragging");
-    }
-    if (active.mode !== "horizontal") return;
-    event.preventDefault();
-    const direction = dx < 0 ? 1 : -1;
-    const target = exerciseSwipeTarget(direction);
-    const resistance = target ? 1 : 0.28;
-    const width = event.currentTarget.getBoundingClientRect().width || 280;
-    setExerciseSwipeOffset(Math.max(-width, Math.min(width, dx * resistance)));
-  };
-  const handleExercisePointerUp = (event: PointerEvent<HTMLDivElement>) => {
-    const active = exerciseSwipeGesture.current;
-    if (!active || active.pointerId !== event.pointerId) return;
-    exerciseSwipeGesture.current = null;
-    if (active.mode !== "horizontal") return;
-    const dx = event.clientX - active.startX;
-    const elapsed = Math.max(1, event.timeStamp - active.startedAt);
-    const width = event.currentTarget.getBoundingClientRect().width || 280;
-    const threshold = Math.max(48, width * 0.18);
-    const committed =
-      Math.abs(dx) >= threshold ||
-      (Math.abs(dx) >= 32 && Math.abs(dx) / elapsed >= EXERCISE_SWIPE_VELOCITY);
-    const direction = dx < 0 ? 1 : -1;
-    const target = committed ? exerciseSwipeTarget(direction) : null;
-    try {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    } catch {
-      // The pointer may already have been released by WebKit.
-    }
-    if (!target) {
-      settleExerciseSwipe(0);
-      return;
-    }
-    settleExerciseSwipe(direction === 1 ? -(width + 16) : width + 16, () =>
-      selectExercise(target.id, false),
-    );
-  };
-  const handleExercisePointerCancel = (event: PointerEvent<HTMLDivElement>) => {
-    const active = exerciseSwipeGesture.current;
-    if (!active || active.pointerId !== event.pointerId) return;
-    exerciseSwipeGesture.current = null;
-    if (active.mode === "horizontal") settleExerciseSwipe(0);
-  };
   useEffect(
     () => () => {
       window.clearTimeout(exerciseTransitionTimeout.current);
       window.clearTimeout(dialogCloseTimeout.current);
-      window.clearTimeout(exerciseSwipeTimeout.current);
     },
     [],
   );
@@ -1035,17 +993,7 @@ export default function App() {
                   canReorder={canMoveExercise}
                 />
                 <section className="exercise-hero">
-                  <div
-                    className="exercise-identity-viewport"
-                    data-swipe-phase={exerciseSwipePhase}
-                    style={{
-                      transform: `translate3d(${exerciseSwipeOffset}px, 0, 0)`,
-                    }}
-                    onPointerDown={handleExercisePointerDown}
-                    onPointerMove={handleExercisePointerMove}
-                    onPointerUp={handleExercisePointerUp}
-                    onPointerCancel={handleExercisePointerCancel}
-                  >
+                  <div className="exercise-identity-viewport">
                     {outgoingExerciseVisual &&
                       exerciseTransition !== "none" && (
                         <div
@@ -1369,7 +1317,7 @@ export default function App() {
             <div className="action-sheet">
               <h2>Organisation</h2>
               <div className="action-sheet-menu">
-                <button onClick={() => setDialog("reorder")}>
+                <button onClick={openReorderSheet}>
                   <span className="action-sheet-icon" aria-hidden="true">
                     <Icon name="reorder" size={19} />
                   </span>
@@ -1397,41 +1345,47 @@ export default function App() {
                 <p>Aucun exercice à réordonner.</p>
               )}
               <ul aria-label="Ordre des exercices" className="reorder-list">
-                {sort(workout.exercises).map((x, i) => (
-                  <li key={x.id}>
-                    <strong>{x.name}</strong>
-                    <div className="order">
-                      <button
-                        aria-label={`Monter ${x.name}`}
-                        disabled={
-                          i === 0 ||
-                          executionExercise(x.id)?.status === "completed" ||
-                          executionExercise(
-                            sort(workout.exercises)[i - 1]?.id ?? "",
-                          )?.status === "completed"
-                        }
-                        onClick={() => moveExercise(i, i - 1)}
-                      >
-                        <Icon name="chevron-up" />
-                      </button>
-                      <button
-                        aria-label={`Descendre ${x.name}`}
-                        disabled={
-                          i === workout.exercises.length - 1 ||
-                          executionExercise(x.id)?.status === "completed" ||
-                          executionExercise(
-                            sort(workout.exercises)[i + 1]?.id ?? "",
-                          )?.status === "completed"
-                        }
-                        onClick={() => moveExercise(i, i + 1)}
-                      >
-                        <Icon name="chevron-down" />
-                      </button>
-                    </div>
-                  </li>
-                ))}
+                {(
+                  reorderDraftIds ??
+                  sort(workout.exercises).map((item) => item.id)
+                )
+                  .map((id) => workout.exercises.find((item) => item.id === id))
+                  .filter(
+                    (item): item is Workout["exercises"][number] => !!item,
+                  )
+                  .map((x, i, ordered) => (
+                    <li key={x.id}>
+                      <strong>{x.name}</strong>
+                      <div className="order">
+                        <button
+                          aria-label={`Monter ${x.name}`}
+                          disabled={
+                            i === 0 || execution?.status === "completed"
+                          }
+                          onClick={() => moveReorderDraft(i, -1)}
+                        >
+                          <Icon name="chevron-up" />
+                        </button>
+                        <button
+                          aria-label={`Descendre ${x.name}`}
+                          disabled={
+                            i === ordered.length - 1 ||
+                            execution?.status === "completed"
+                          }
+                          onClick={() => moveReorderDraft(i, 1)}
+                        >
+                          <Icon name="chevron-down" />
+                        </button>
+                      </div>
+                    </li>
+                  ))}
               </ul>
-              <button onClick={close}>Terminer</button>
+              <button
+                className="primary reorder-save"
+                onClick={saveReorderDraft}
+              >
+                ENREGISTRER
+              </button>
             </>
           )}
         </BottomSheet>
