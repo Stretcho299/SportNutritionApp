@@ -102,7 +102,7 @@ export function ExerciseNavigator({
 
   const updateAutoScroll = (clientX: number) => {
     const list = tabs.current;
-    const active = gesture.current;
+    const active = gesture.current ?? touchGesture.current;
     if (!list || !active || active.mode !== "reordering") {
       clearAutoScroll();
       return;
@@ -246,6 +246,7 @@ export function ExerciseNavigator({
       );
       if (!current || !point) return;
       lastPointerX.current = point.clientX;
+      current.lastX = point.clientX;
       const dx = point.clientX - current.startX;
       const dy = point.clientY - current.startY;
       if (current.mode === "pending") {
