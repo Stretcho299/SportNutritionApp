@@ -236,7 +236,7 @@ for (const width of [390, 320]) {
     ).toBeGreaterThanOrEqual(0);
     expect(
       navigationGeometry.bottom - navigationGeometry.viewportBottom,
-    ).toBeLessThanOrEqual(12);
+    ).toBeLessThanOrEqual(16);
     expect(navigationGeometry.height).toBeLessThan(
       navigationGeometry.viewportBottom * 0.08,
     );
@@ -751,6 +751,68 @@ test("finishing the rest marks the set performed and advances progress", async (
   await expect(firstSet).toHaveClass(/status-resting/);
   await expect(firstSet).toHaveClass(/status-performed/, { timeout: 5_000 });
   await expect(page.getByRole("progressbar")).toHaveAttribute("value", "1");
+});
+
+test("manually scrolls an overflowing timeline before locking reorder", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 844 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
+  await page.getByRole("button", { name: "Créer une séance" }).click();
+  await page.getByRole("textbox", { name: "Nom" }).fill("Overflow");
+  await page.getByRole("button", { name: "Enregistrer" }).click();
+  await page.locator(".workout-card").click();
+  await page.getByRole("button", { name: "Refaire la séance" }).click();
+  for (let index = 0; index < 8; index += 1)
+    await addExercise(page, "Exercice " + (index + 1), "1");
+
+  const rail = page.getByRole("list", { name: "Exercices" });
+  const overflow = await rail.evaluate((element) => ({
+    scrollWidth: element.scrollWidth,
+    clientWidth: element.clientWidth,
+  }));
+  expect(overflow.scrollWidth).toBeGreaterThan(overflow.clientWidth);
+  const initialScrollLeft = await rail.evaluate(
+    (element) => element.scrollLeft,
+  );
+  const first = rail.getByRole("button").first();
+  const box = await first.boundingBox();
+  expect(box).not.toBeNull();
+  const x = box!.x + box!.width / 2;
+  const y = box!.y + box!.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x - 100, y, { steps: 6 });
+  await page.mouse.up();
+  expect(await rail.evaluate((element) => element.scrollLeft)).toBeGreaterThan(
+    initialScrollLeft,
+  );
+  await expect(rail).not.toHaveClass(/is-reordering/);
+
+  const visibleIndex = await rail.getByRole("button").evaluateAll((buttons) => {
+    const railBounds = (
+      buttons[0].parentElement?.parentElement as HTMLElement
+    ).getBoundingClientRect();
+    return buttons.findIndex((button) => {
+      const bounds = button.getBoundingClientRect();
+      return bounds.left >= railBounds.left && bounds.right <= railBounds.right;
+    });
+  });
+  expect(visibleIndex).toBeGreaterThanOrEqual(0);
+  const reorderButton = rail.getByRole("button").nth(visibleIndex);
+  const reorderBox = await reorderButton.boundingBox();
+  expect(reorderBox).not.toBeNull();
+  const reorderX = reorderBox!.x + reorderBox!.width / 2;
+  const reorderY = reorderBox!.y + reorderBox!.height / 2;
+  await page.mouse.move(reorderX, reorderY);
+  await page.mouse.down();
+  await page.waitForTimeout(350);
+  await expect(rail).toHaveClass(/is-reordering/);
+  await page.mouse.move(reorderX + 120, reorderY, { steps: 2 });
+  await expect(rail).toHaveClass(/is-reordering/);
+  await page.mouse.up();
+  await expect(rail).not.toHaveClass(/is-reordering/);
 });
 
 test("exercise navigation animates according to workout order without changing execution state", async ({

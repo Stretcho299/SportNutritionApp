@@ -170,6 +170,7 @@ export function ExerciseNavigator({
   const handlePointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
     const active = gesture.current;
     if (!active || active.pointerId !== event.pointerId) return;
+    const previousX = active.lastX;
     active.lastX = event.clientX;
     lastPointerX.current = event.clientX;
     const dx = event.clientX - active.startX;
@@ -178,9 +179,19 @@ export function ExerciseNavigator({
       if (Math.max(Math.abs(dx), Math.abs(dy)) < MOVE_SLOP) return;
       window.clearTimeout(longPressTimer.current);
       longPressTimer.current = undefined;
-      active.mode =
-        Math.abs(dx) > Math.abs(dy) * 1.1 ? "timelineScroll" : "cancelled";
-      if (active.mode === "timelineScroll") gesture.current = null;
+      if (Math.abs(dx) > Math.abs(dy) * 1.1) {
+        active.mode = "timelineScroll";
+        active.button.setPointerCapture(active.pointerId);
+        event.preventDefault();
+        if (tabs.current) tabs.current.scrollLeft -= event.clientX - previousX;
+      } else {
+        active.mode = "cancelled";
+      }
+      return;
+    }
+    if (active.mode === "timelineScroll") {
+      event.preventDefault();
+      if (tabs.current) tabs.current.scrollLeft -= event.clientX - previousX;
       return;
     }
     if (active.mode !== "reordering") return;
