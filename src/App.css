@@ -3,7 +3,7 @@
   min-height: 100dvh;
   margin: auto;
   padding: calc(12px + env(safe-area-inset-top)) 16px
-    calc(88px + env(safe-area-inset-bottom));
+    calc(64px + env(safe-area-inset-bottom));
   background: radial-gradient(ellipse at 100% 0, #ff57080d, transparent 340px);
 }
 .workout-control {
@@ -970,6 +970,7 @@ nav button.active {
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
   scroll-snap-type: y mandatory;
+  scroll-padding-block: 88px;
   scrollbar-width: none;
   touch-action: pan-y;
 }
@@ -995,7 +996,6 @@ nav button.active {
   font-size: 24px;
   font-variant-numeric: tabular-nums;
   scroll-snap-align: center;
-  scroll-snap-stop: always;
 }
 .picker-wheel .picker-wheel-option[aria-selected="true"] {
   color: var(--accent-soft);
@@ -1031,7 +1031,7 @@ nav button.active {
 }
 .picker-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 8px;
   margin-top: 6px;
 }
@@ -1040,11 +1040,6 @@ nav button.active {
   border-radius: 10px;
   font-size: 13px;
   font-weight: 800;
-}
-.picker-cancel {
-  border: 1px solid var(--line);
-  background: var(--surface-raised);
-  color: var(--text);
 }
 .picker-save {
   border: 1px solid transparent;
@@ -1277,9 +1272,14 @@ nav button svg {
     color 160ms ease,
     transform 140ms ease;
 }
-.link:hover,
 .link:focus-visible {
   color: var(--accent-soft);
+}
+
+@media (hover: hover) {
+  .link:hover {
+    color: var(--accent-soft);
+  }
 }
 .control-actions {
   gap: 5px;
@@ -1417,6 +1417,9 @@ nav button svg {
   }
   .picker-wheel-frame {
     height: 176px;
+  }
+  .picker-wheel {
+    scroll-padding-block: 66px;
   }
   .picker-wheel-spacer {
     height: 66px;

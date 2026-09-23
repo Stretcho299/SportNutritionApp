@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
+import "./redesign-v2.css";
 import { Icon } from "./Icon";
 import { WorkoutProgress } from "./WorkoutProgress";
 import {
@@ -7,6 +8,9 @@ import {
   type ConfirmationRequest,
 } from "./ConfirmationDialog";
 import { SetValuePicker } from "./SetValuePicker";
+import { BottomNavigation } from "./BottomNavigation";
+import { BottomSheet, bottomSheetCloseDuration } from "./BottomSheet";
+import { ExerciseNavigator } from "./ExerciseNavigator";
 import { pickerValues } from "./pickerValues";
 import {
   activateExecutedExercise,
@@ -33,7 +37,7 @@ import {
   type WorkoutExecution,
   type Workout,
 } from "./storage/database";
-type Screen = "list" | "detail";
+type Screen = "list" | "workouts" | "preview" | "detail";
 type Dialog =
   | null
   | "workout"
@@ -49,13 +53,31 @@ export default function App() {
   const [workoutId, setWorkoutId] = useState("");
   const [exerciseId, setExerciseId] = useState("");
   const [dialog, setDialog] = useState<Dialog>(null);
+  const [dialogClosing, setDialogClosing] = useState(false);
+  const [reorderDraftIds, setReorderDraftIds] = useState<string[] | null>(null);
   const [name, setName] = useState("");
   const [initialSetCount, setInitialSetCount] = useState("1");
   const [rest, setRest] = useState(String(defaultRestSeconds));
-  const [clock, setClock] = useState(0);
+  const [clock, setClock] = useState(Date.now);
   const [confirmation, setConfirmation] = useState<ConfirmationRequest | null>(
     null,
   );
+  const [exerciseTransition, setExerciseTransition] = useState<
+    "none" | "next" | "previous"
+  >("none");
+  const [outgoingExerciseVisual, setOutgoingExerciseVisual] = useState<{
+    name: string;
+    plannedSetCount: number;
+  } | null>(null);
+  const [screenTransition, setScreenTransition] = useState<"forward" | "back">(
+    "forward",
+  );
+  const exerciseTransitionTimeout = useRef<number | undefined>(undefined);
+  const dialogCloseTimeout = useRef<number | undefined>(undefined);
+  const navigate = (next: Screen, direction: "forward" | "back") => {
+    setScreenTransition(direction);
+    setScreen(next);
+  };
   useEffect(() => {
     void loadWorkoutStore().then((store: WorkoutStore) => {
       const active = store.sessions
@@ -112,9 +134,15 @@ export default function App() {
     executionExercise(exercise?.id ?? "")?.sets.find(
       (item) => item.setId === id,
     );
-  const restingSet = execution?.exercises
-    .flatMap((item) => item.sets)
-    .find((item) => item.status === "resting");
+  const restingExecutionExercise = execution?.exercises.find((item) =>
+    item.sets.some((set) => set.status === "resting"),
+  );
+  const restingSet = restingExecutionExercise?.sets.find(
+    (item) => item.status === "resting",
+  );
+  const restRemaining = restingSet?.restEndsAt
+    ? Math.max(0, Math.ceil((restingSet.restEndsAt - clock) / 1000))
+    : 0;
   const updateExecution = useCallback(
     (next: WorkoutExecution) =>
       update(
@@ -124,7 +152,7 @@ export default function App() {
       ),
     [update, workoutId, workouts],
   );
-  const startExecution = () => {
+  const startExecution = (initialExerciseId = exerciseId) => {
     if (!workout || workout.execution) return;
     if (
       workouts.some(
@@ -136,7 +164,7 @@ export default function App() {
     )
       return;
     updateExecution(
-      createWorkoutSession(workout, undefined, exerciseId).execution,
+      createWorkoutSession(workout, undefined, initialExerciseId).execution,
     );
   };
   const startRest = (targetExerciseId: string, targetSetId: string) => {
@@ -217,11 +245,28 @@ export default function App() {
         request.onConfirm();
       },
     });
+  const finishCurrentRest = () => {
+    if (!execution || !restingSet) return;
+    const remaining = restRemaining;
+    requestConfirmation({
+      title: "Mettre fin au repos ?",
+      description: `Il reste ${remaining} ${remaining === 1 ? "seconde" : "secondes"}. La série sera considérée comme terminée et vous passerez à la suivante.`,
+      confirmLabel: "Mettre fin",
+      onConfirm: () => updateExecution(finishExecutedRest(execution)),
+    });
+  };
   const close = () => {
-    setDialog(null);
-    setName("");
-    setInitialSetCount("1");
-    setRest(String(defaultRestSeconds));
+    if (!dialog || dialogClosing) return;
+    setDialogClosing(true);
+    window.clearTimeout(dialogCloseTimeout.current);
+    dialogCloseTimeout.current = window.setTimeout(() => {
+      setDialog(null);
+      setDialogClosing(false);
+      setReorderDraftIds(null);
+      setName("");
+      setInitialSetCount("1");
+      setRest(String(defaultRestSeconds));
+    }, bottomSheetCloseDuration);
   };
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -286,7 +331,7 @@ export default function App() {
           if (workoutId === id) {
             setWorkoutId("");
             setExerciseId("");
-            setScreen("list");
+            navigate("list", "back");
           }
         },
       });
@@ -322,7 +367,7 @@ export default function App() {
       setExerciseId(
         sort(workout.exercises).find((x) => x.id !== exercise.id)?.id ?? "",
       );
-      setScreen("detail");
+      navigate("detail", "back");
       close();
     };
     if (hasData)
@@ -434,6 +479,30 @@ export default function App() {
       ),
     );
   };
+  const removeExerciseAfterLastSet = () => {
+    if (!workout || !exercise) return;
+    const ordered = sort(workout.exercises);
+    const index = ordered.findIndex((item) => item.id === exercise.id);
+    const remaining = ordered
+      .filter((item) => item.id !== exercise.id)
+      .map((item, position) => ({ ...item, position }));
+    const nextExerciseId =
+      remaining[index]?.id ?? remaining[index - 1]?.id ?? "";
+    update(
+      workouts.map((w) =>
+        w.id !== workout.id
+          ? w
+          : {
+              ...w,
+              exercises: remaining,
+              execution: w.execution
+                ? removeExecutedExercise(w.execution, exercise.id)
+                : undefined,
+            },
+      ),
+    );
+    setExerciseId(nextExerciseId);
+  };
   const removeSet = (id: string) => {
     if (!workout || !exercise) return;
     const current = executionSet(id);
@@ -450,7 +519,11 @@ export default function App() {
       set.repetitions !== null ||
       set.weightKg !== null ||
       set.restSeconds !== (exercise.defaultRestSeconds ?? defaultRestSeconds);
-    const remove = () =>
+    const remove = () => {
+      if (exercise.plannedSets.length === 1) {
+        removeExerciseAfterLastSet();
+        return;
+      }
       update(
         workouts.map((w) =>
           w.id !== workout.id
@@ -473,18 +546,76 @@ export default function App() {
               },
         ),
       );
+    };
     if (hasData)
       requestConfirmation({
-        title: "Supprimer cette série ?",
+        title:
+          exercise.plannedSets.length === 1
+            ? "Supprimer cet exercice ?"
+            : "Supprimer cette série ?",
         description:
-          "Les répétitions, la charge et le repos de cette série seront supprimés.",
+          exercise.plannedSets.length === 1
+            ? `« ${exercise.name} » sera supprimé de la séance.`
+            : "Les répétitions, la charge et le repos de cette série seront supprimés.",
         confirmLabel: "Supprimer",
         onConfirm: remove,
       });
     else remove();
   };
-  const moveExercise = (from: number, to: number) => {
+  const canMoveExercise = (from: number, to: number) => {
+    if (!workout || execution?.status === "completed") return false;
+    return (
+      from >= 0 &&
+      to >= 0 &&
+      from < workout.exercises.length &&
+      to < workout.exercises.length
+    );
+  };
+  const openReorderSheet = () => {
     if (!workout) return;
+    setReorderDraftIds(sort(workout.exercises).map((item) => item.id));
+    setDialog("reorder");
+  };
+  const moveReorderDraft = (index: number, delta: -1 | 1) => {
+    if (!reorderDraftIds || execution?.status === "completed") return;
+    const target = index + delta;
+    if (target < 0 || target >= reorderDraftIds.length) return;
+    const next = [...reorderDraftIds];
+    [next[index], next[target]] = [next[target], next[index]];
+    setReorderDraftIds(next);
+  };
+  const saveReorderDraft = () => {
+    if (!workout || !reorderDraftIds) return;
+    const byId = new Map(workout.exercises.map((item) => [item.id, item]));
+    const exercises = reorderDraftIds
+      .map((id) => byId.get(id))
+      .filter((item): item is Workout["exercises"][number] => !!item)
+      .map((item, position) => ({ ...item, position }));
+    update(
+      workouts.map((w) =>
+        w.id !== workout.id
+          ? w
+          : {
+              ...w,
+              exercises,
+              execution: w.execution
+                ? {
+                    ...w.execution,
+                    exercises: exercises.map((item) =>
+                      w.execution!.exercises.find(
+                        (entry) => entry.exerciseId === item.id,
+                      )!,
+                    ),
+                  }
+                : undefined,
+            },
+      ),
+    );
+    setReorderDraftIds(null);
+    close();
+  };
+  const moveExercise = (from: number, to: number) => {
+    if (!workout || !canMoveExercise(from, to)) return;
     update(
       workouts.map((w) =>
         w.id === workout.id
@@ -509,7 +640,60 @@ export default function App() {
       ),
     );
   };
+  const selectExercise = (nextExerciseId: string, animate = true) => {
+    const orderedExercises = sort(workout?.exercises ?? []);
+    const previousIndex = orderedExercises.findIndex(
+      (item) => item.id === exerciseId,
+    );
+    const nextIndex = orderedExercises.findIndex(
+      (item) => item.id === nextExerciseId,
+    );
+    if (
+      animate &&
+      previousIndex >= 0 &&
+      nextIndex >= 0 &&
+      previousIndex !== nextIndex
+    ) {
+      const outgoingExercise = orderedExercises[previousIndex];
+      setOutgoingExerciseVisual({
+        name: outgoingExercise.name,
+        plannedSetCount: outgoingExercise.plannedSets.length,
+      });
+      setExerciseTransition(nextIndex > previousIndex ? "next" : "previous");
+      window.clearTimeout(exerciseTransitionTimeout.current);
+      exerciseTransitionTimeout.current = window.setTimeout(() => {
+        setExerciseTransition("none");
+        setOutgoingExerciseVisual(null);
+      }, 340);
+    }
+    if (!animate) {
+      window.clearTimeout(exerciseTransitionTimeout.current);
+      setExerciseTransition("none");
+      setOutgoingExerciseVisual(null);
+    }
+    setExerciseId(nextExerciseId);
+  };
+  useEffect(
+    () => () => {
+      window.clearTimeout(exerciseTransitionTimeout.current);
+      window.clearTimeout(dialogCloseTimeout.current);
+    },
+    [],
+  );
   const isWorkoutDetail = screen === "detail" && !!workout;
+  const activeWorkout = workouts.find(
+    (item) =>
+      item.execution?.status === "inProgress" ||
+      item.execution?.status === "readyToFinish",
+  );
+  const preparedWorkouts = workouts.filter(
+    (item) => item.id !== activeWorkout?.id,
+  );
+  const totalPlannedSets =
+    workout?.exercises.reduce(
+      (total, item) => total + item.plannedSets.length,
+      0,
+    ) ?? 0;
   const displayedSets = exercise ? sort(exercise.plannedSets) : [];
   const isFirstPendingSet = (setId: string) => {
     const index = displayedSets.findIndex((set) => set.id === setId);
@@ -525,68 +709,261 @@ export default function App() {
     dialog === "addMenu" || dialog === "organizeMenu" || dialog === "reorder";
   return (
     <main
-      className={`app-shell${screen === "detail" && exercise ? " workout-detail" : ""}`}
+      className={`app-shell screen-${screen}${screen === "detail" && exercise ? " workout-detail" : ""}`}
     >
       <header
         className={`workout-control${screen === "list" ? " home-header" : ""}`}
       >
-        <p>Sport Nutrition</p>
-        <h1>{screen === "list" ? "Séances" : workout?.name}</h1>
-        {screen !== "list" && (
-          <button
-            aria-label="Retour aux séances"
-            className="link"
-            onClick={() => setScreen("list")}
-          >
-            <>
-              <Icon name="arrow-left" size={17} /> Retour
-            </>
-          </button>
-        )}
-        {isWorkoutDetail && (
-          <div className="control-actions">
-            <button
-              aria-label="Gérer les exercices"
-              onClick={() => setDialog("addMenu")}
-            >
-              <Icon name="plus" />
-            </button>
-            <button
-              aria-label="Réorganiser les exercices"
-              onClick={() => setDialog("organizeMenu")}
-            >
-              <Icon name="reorder" />
-            </button>
+        {screen === "list" ? (
+          <div className="brand-lockup">
+            <img src="/icons/app-logo.svg" alt="" width="42" height="42" />
+            <div>
+              <p>Sport Nutrition</p>
+              <h1>Entraînement</h1>
+            </div>
           </div>
+        ) : (
+          <>
+            <button
+              aria-label="Retour aux séances"
+              className="link"
+              onPointerUp={(event) => event.currentTarget.blur()}
+              onClick={() => {
+                if (screen === "workouts") navigate("list", "back");
+                else if (screen === "preview") navigate("workouts", "back");
+                else
+                  navigate(
+                    screen === "detail" && workout && !workout.execution
+                      ? "preview"
+                      : "list",
+                    "back",
+                  );
+              }}
+            >
+              <Icon name="arrow-left" size={19} />
+              <span className="sr-only">Retour</span>
+            </button>
+            <h1>{screen === "workouts" ? "Mes séances" : workout?.name}</h1>
+            {isWorkoutDetail && (
+              <div className="control-actions">
+                <button
+                  aria-label="Gérer les exercices"
+                  onClick={() => setDialog("addMenu")}
+                >
+                  <Icon name="plus" />
+                </button>
+                <button
+                  aria-label="Réorganiser les exercices"
+                  onClick={() => setDialog("organizeMenu")}
+                >
+                  <Icon name="more" />
+                </button>
+              </div>
+            )}
+          </>
         )}
       </header>
       {screen === "list" && (
-        <>
-          <button className="primary" onClick={() => setDialog("workout")}>
-            Créer une séance
-          </button>
-          {workouts.length === 0 ? (
-            <section className="empty">
-              <h2>Aucune séance</h2>
-              <span>Créez votre première séance.</span>
+        <section
+          className={`workout-library dashboard page-${screenTransition}`}
+          aria-label="Entraînement"
+        >
+          <div className="library-heading">
+            <span>Votre espace d’entraînement</span>
+          </div>
+          <div className="dashboard-grid">
+            {activeWorkout && (
+              <section
+                className="active-workout-list"
+                aria-label="Séance en cours"
+              >
+                <ul className="workout-list">
+                  <WorkoutRow
+                    workout={activeWorkout}
+                    variant="active"
+                    onDelete={() => removeWorkout(activeWorkout.id)}
+                    onOpen={() => {
+                      setWorkoutId(activeWorkout.id);
+                      setExerciseId(sort(activeWorkout.exercises)[0]?.id ?? "");
+                      navigate("detail", "forward");
+                    }}
+                  />
+                </ul>
+              </section>
+            )}
+            <button
+              className="dashboard-tile sessions-tile"
+              aria-label="Ouvrir Mes séances"
+              onClick={() => navigate("workouts", "forward")}
+            >
+              <span className="dashboard-tile-art" aria-hidden="true">
+                <Icon name="dumbbell" size={46} strokeWidth={1.45} />
+                <Icon name="list" size={22} />
+              </span>
+              <span className="dashboard-tile-copy">
+                <small>
+                  {preparedWorkouts.length} prête
+                  {preparedWorkouts.length > 1 ? "s" : ""}
+                </small>
+                <strong>Mes séances</strong>
+              </span>
+              <Icon name="chevron-right" size={18} />
+            </button>
+            <section
+              className="dashboard-tile future-tile"
+              aria-label="Calendrier bientôt disponible"
+            >
+              <span className="future-tile-icon" aria-hidden="true">
+                <Icon name="calendar" size={30} />
+              </span>
+              <small>Bientôt</small>
+              <strong>Calendrier</strong>
             </section>
-          ) : (
-            <ul className="workout-list">
-              {workouts.map((item) => (
+            <section
+              className="dashboard-tile future-tile"
+              aria-label="Performances bientôt disponibles"
+            >
+              <span className="future-tile-icon" aria-hidden="true">
+                <Icon name="performance" size={30} />
+              </span>
+              <small>—</small>
+              <strong>Performances</strong>
+            </section>
+            <section
+              className="dashboard-tile future-tile"
+              aria-label="Trophées bientôt disponibles"
+            >
+              <span className="future-tile-icon" aria-hidden="true">
+                <Icon name="trophy" size={30} />
+              </span>
+              <small>Bientôt</small>
+              <strong>Trophées</strong>
+            </section>
+          </div>
+        </section>
+      )}
+      {screen === "workouts" && (
+        <section
+          className={`workout-library sessions-library page-${screenTransition}`}
+          aria-label="Mes séances"
+        >
+          <div className="sessions-library-heading">
+            <div>
+              <span>Programme</span>
+              <h2>Mes séances</h2>
+              <p>
+                {preparedWorkouts.length} séance
+                {preparedWorkouts.length > 1 ? "s" : ""} prête
+                {preparedWorkouts.length > 1 ? "s" : ""}
+              </p>
+            </div>
+            <button
+              className="create-workout-icon"
+              aria-label="Créer une séance"
+              onClick={() => setDialog("workout")}
+            >
+              <Icon name="plus" size={21} />
+            </button>
+          </div>
+          {preparedWorkouts.length ? (
+            <ul className="workout-list sessions-library-list">
+              {preparedWorkouts.map((item) => (
                 <WorkoutRow
                   key={item.id}
                   workout={item}
+                  variant="compact"
                   onDelete={() => removeWorkout(item.id)}
                   onOpen={() => {
                     setWorkoutId(item.id);
                     setExerciseId(sort(item.exercises)[0]?.id ?? "");
-                    setScreen("detail");
+                    navigate("preview", "forward");
                   }}
                 />
               ))}
             </ul>
+          ) : (
+            <section className="empty sessions-empty">
+              <span className="empty-icon" aria-hidden="true">
+                <Icon name="dumbbell" size={28} />
+              </span>
+              <h2>Aucune séance prête</h2>
+              <span>Créez votre première séance.</span>
+            </section>
           )}
-        </>
+        </section>
+      )}
+      {screen === "preview" && workout && (
+        <section
+          className={`workout-preview page-${screenTransition}`}
+          aria-label={`Aperçu de ${workout.name}`}
+        >
+          <div className="preview-hero">
+            <span className="preview-art" aria-hidden="true">
+              <Icon name="dumbbell" size={34} strokeWidth={1.7} />
+            </span>
+            <div>
+              <span>Prêt pour votre séance ?</span>
+              <h2>{workout.name}</h2>
+            </div>
+          </div>
+          <div className="preview-metrics">
+            <div>
+              <strong>{workout.exercises.length}</strong>
+              <span>Exercices</span>
+            </div>
+            <div>
+              <strong>{totalPlannedSets}</strong>
+              <span>Séries prévues</span>
+            </div>
+            <div className="preview-metric-unavailable">
+              <strong>—</strong>
+              <span>Durée moyenne</span>
+              <small>Pas encore de données</small>
+            </div>
+            <div className="preview-metric-unavailable">
+              <strong>—</strong>
+              <span>Calories moyennes</span>
+              <small>Pas encore de données</small>
+            </div>
+          </div>
+          <section
+            className="preview-exercises"
+            aria-label="Programme de la séance"
+          >
+            <header>
+              <span>Programme</span>
+              <strong>{workout.exercises.length}</strong>
+            </header>
+            {workout.exercises.length ? (
+              <ol>
+                {sort(workout.exercises).map((item, index) => (
+                  <li key={item.id}>
+                    <span>{String(index + 1).padStart(2, "0")}</span>
+                    <strong>{item.name}</strong>
+                    <small>
+                      {item.plannedSets.length} série
+                      {item.plannedSets.length > 1 ? "s" : ""}
+                    </small>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p>Ajoutez des exercices avant de démarrer.</p>
+            )}
+          </section>
+          <div className="preview-actions">
+            <button
+              className="primary"
+              onClick={() => {
+                const firstExerciseId = sort(workout.exercises)[0]?.id ?? "";
+                setExerciseId(firstExerciseId);
+                navigate("detail", "forward");
+              }}
+            >
+              <Icon name="edit" size={16} /> Refaire la séance
+            </button>
+          </div>
+        </section>
       )}
       {screen === "detail" && workout && (
         <>
@@ -602,60 +979,53 @@ export default function App() {
             </section>
           )}
           {exercise && (
-            <div className="workout-preparation">
+            <div
+              className={`workout-preparation transition-${exerciseTransition}`}
+            >
               <div className="workout-fixed-zones">
-                <ul className="exercise-tabs" aria-label="Exercices">
-                  {sort(workout.exercises).map((x, i) => (
-                    <li
-                      className={
-                        (x.id === exerciseId ? "selected " : "") +
-                        "execution-" +
-                        (executionExercise(x.id)?.status ?? "upcoming")
-                      }
-                      key={x.id}
-                    >
-                      <button
-                        className="exercise-tab"
-                        aria-pressed={x.id === exerciseId}
-                        onClick={() => setExerciseId(x.id)}
-                      >
-                        <span
-                          className="exercise-tab-circle"
+                <ExerciseNavigator
+                  exercises={sort(workout.exercises)}
+                  selectedExerciseId={exerciseId}
+                  statusFor={(id) => executionExercise(id)?.status}
+                  onSelect={selectExercise}
+                  onReorder={moveExercise}
+                  canDrag={(index) => canMoveExercise(index, index)}
+                  canReorder={canMoveExercise}
+                />
+                <section className="exercise-hero">
+                  <div className="exercise-identity-viewport">
+                    {outgoingExerciseVisual &&
+                      exerciseTransition !== "none" && (
+                        <div
+                          className="exercise-identity exercise-transition-outgoing"
                           aria-hidden="true"
                         >
-                          {execution ? (
-                            executionExercise(x.id)?.status === "completed" ? (
-                              <Icon name="check" size={17} />
-                            ) : executionExercise(x.id)?.status === "active" ? (
-                              <Icon name="circle" size={17} strokeWidth={2.4} />
-                            ) : (
-                              <Icon name="circle" size={17} />
-                            )
-                          ) : (
-                            <Icon name="dumbbell" size={17} />
-                          )}
-                        </span>
-                        <span className="exercise-tab-index" aria-hidden="true">
-                          {i + 1}
-                        </span>
-                        <span className="sr-only">{x.name}</span>
-                        <span className="sr-only">
-                          {" "}
-                          ·{" "}
-                          {executionExercise(x.id)?.status === "completed"
-                            ? "Terminé"
-                            : executionExercise(x.id)?.status === "active"
-                              ? "En cours"
-                              : "À venir"}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-                <section className="exercise-hero">
-                  <div className="exercise-heading">
-                    <p>EXERCICE SÉLECTIONNÉ</p>
-                    <h2>{exercise?.name}</h2>
+                          <div className="exercise-art">
+                            <Icon name="dumbbell" size={28} />
+                          </div>
+                          <div className="exercise-heading">
+                            <h2>{outgoingExerciseVisual.name}</h2>
+                            <p>
+                              {outgoingExerciseVisual.plannedSetCount} série
+                              {outgoingExerciseVisual.plannedSetCount > 1
+                                ? "s"
+                                : ""}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    <div className="exercise-identity exercise-transition-current">
+                      <div className="exercise-art" aria-hidden="true">
+                        <Icon name="dumbbell" size={28} />
+                      </div>
+                      <div className="exercise-heading">
+                        <h2>{exercise.name}</h2>
+                        <p>
+                          {exercise.plannedSets.length} série
+                          {exercise.plannedSets.length > 1 ? "s" : ""}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                   <div className="exercise-menu">
                     <button
@@ -685,7 +1055,7 @@ export default function App() {
                           })
                         }
                       >
-                        Terminer l’exercice
+                        <span>Terminer l’exercice</span>
                       </button>
                     ) : (
                       <button onClick={removeExercise}>Supprimer</button>
@@ -695,17 +1065,13 @@ export default function App() {
                 <button
                   className="advanced"
                   type="button"
-                  onClick={() =>
-                    alert(
-                      "Les supersets, trisets et circuits arriveront bientôt.",
-                    )
-                  }
+                  aria-expanded="false"
                 >
-                  <Icon name="settings" size={15} />
                   <span>Options avancées</span>
+                  <Icon name="chevron-down" size={15} />
                 </button>
                 {!execution ? (
-                  <button className="primary" onClick={startExecution}>
+                  <button className="primary" onClick={() => startExecution()}>
                     Démarrer la séance
                   </button>
                 ) : execution.status === "readyToFinish" ? (
@@ -714,16 +1080,13 @@ export default function App() {
                   </button>
                 ) : execution.status === "completed" ? (
                   <p className="execution-resume">Séance terminée</p>
-                ) : (
-                  <p className="execution-resume">
-                    Séance en cours · Reprenez là où vous vous êtes arrêté.
-                  </p>
-                )}
+                ) : null}
                 {execution && (
                   <WorkoutProgress
                     execution={execution}
                     workout={workout}
                     clock={clock}
+                    onFinishRest={finishCurrentRest}
                     selectedExerciseId={exercise.id}
                   />
                 )}
@@ -760,11 +1123,14 @@ export default function App() {
                                   : "À venir"}
                         </p>
                       )}
-                      <h3>SÉRIE {i + 1}</h3>
+                      <h3 aria-label={`SÉRIE ${i + 1}`}>
+                        {String(i + 1).padStart(2, "0")}
+                      </h3>
                       {!execution && <p className="set-status">À venir</p>}
                       <div className="set-metrics">
                         <SetValuePicker
                           label="Répétitions"
+                          displayLabel="Répétitions"
                           value={
                             executionSet(s.id)?.repetitions ?? s.repetitions
                           }
@@ -784,8 +1150,9 @@ export default function App() {
                             },
                           ]}
                           formatValue={(value) =>
-                            value === null ? "—" : `${value} reps`
+                            value === null ? "—" : String(value)
                           }
+                          valueSuffix="reps"
                           disabled={execution?.status === "completed"}
                           onSave={(value) =>
                             saveSetValue(s.id, "repetitions", value)
@@ -793,6 +1160,7 @@ export default function App() {
                         />
                         <SetValuePicker
                           label="Charge (kg)"
+                          displayLabel="Charge"
                           value={executionSet(s.id)?.weightKg ?? s.weightKg}
                           columns={[
                             {
@@ -810,15 +1178,16 @@ export default function App() {
                             },
                           ]}
                           formatValue={(value) =>
-                            value === null ? "—" : `${value} kg`
+                            value === null ? "—" : String(value)
                           }
+                          valueSuffix="kg"
                           disabled={execution?.status === "completed"}
                           onSave={(value) =>
                             saveSetValue(s.id, "weightKg", value)
                           }
                         />
                         <SetValuePicker
-                          label="Repos (secondes)"
+                          label="Repos"
                           value={
                             executionSet(s.id)?.restSeconds ?? s.restSeconds
                           }
@@ -851,21 +1220,6 @@ export default function App() {
                           }
                         />
                       </div>
-                      {executionSet(s.id)?.status === "resting" && (
-                        <p className="rest-timer">
-                          {formatRest(
-                            Math.max(
-                              0,
-                              Math.ceil(
-                                ((executionSet(s.id)?.restEndsAt ?? clock) -
-                                  clock) /
-                                  1000,
-                              ),
-                            ),
-                          )}{" "}
-                          · Repos en cours
-                        </p>
-                      )}
                       {(executionSet(s.id)?.status === "active" ||
                         (executionSet(s.id)?.status === "upcoming" &&
                           isFirstPendingSet(s.id))) && (
@@ -881,34 +1235,17 @@ export default function App() {
                           onClick={() => startRest(exercise.id, s.id)}
                         >
                           <Icon name="play" size={16} />
-                          <span className="sr-only">Lancer le repos</span>
+                          <span>Lancer le repos</span>
                         </button>
                       )}
                       {executionSet(s.id)?.status === "resting" && (
                         <button
                           className="rest-icon-button rest-stop-button"
                           aria-label="Mettre fin au repos"
-                          onClick={() => {
-                            const activeSet = executionSet(s.id);
-                            const remaining = Math.max(
-                              0,
-                              Math.ceil(
-                                ((activeSet?.restEndsAt ?? clock) -
-                                  Date.now()) /
-                                  1000,
-                              ),
-                            );
-                            requestConfirmation({
-                              title: "Mettre fin au repos ?",
-                              description: `Il reste ${remaining} ${remaining === 1 ? "seconde" : "secondes"}. La série sera considérée comme terminée et vous passerez à la suivante.`,
-                              confirmLabel: "Mettre fin",
-                              onConfirm: () =>
-                                updateExecution(finishExecutedRest(execution!)),
-                            });
-                          }}
+                          onClick={finishCurrentRest}
                         >
                           <Icon name="stop" size={15} />
-                          <span className="sr-only">Terminer le repos</span>
+                          <span>Terminer le repos</span>
                         </button>
                       )}
                       {(!execution ||
@@ -945,7 +1282,7 @@ export default function App() {
         />
       )}
       {dialog && isMenu && workout && (
-        <Sheet
+        <BottomSheet
           title={
             dialog === "addMenu"
               ? "Actions de la séance"
@@ -953,33 +1290,54 @@ export default function App() {
                 ? "Organisation de la séance"
                 : "Réordonner les exercices"
           }
+          closing={dialogClosing}
           onClose={close}
         >
           {dialog === "addMenu" ? (
-            <>
-              <button onClick={() => setDialog("exercise")}>
-                Ajouter un exercice
-              </button>
-              <button className="danger" onClick={removeExercise}>
-                Supprimer l’exercice
-              </button>
-              <button onClick={close}>Annuler</button>
-            </>
+            <div className="action-sheet">
+              <h2>Actions de la séance</h2>
+              <div className="action-sheet-menu">
+                <button onClick={() => setDialog("exercise")}>
+                  <span className="action-sheet-icon" aria-hidden="true">
+                    <Icon name="plus" size={19} />
+                  </span>
+                  <span>Ajouter un exercice</span>
+                  <Icon name="chevron-right" size={17} />
+                </button>
+                <button className="danger" onClick={removeExercise}>
+                  <span className="action-sheet-icon" aria-hidden="true">
+                    <Icon name="trash" size={18} />
+                  </span>
+                  <span>Supprimer l’exercice</span>
+                  <Icon name="chevron-right" size={17} />
+                </button>
+              </div>
+            </div>
           ) : dialog === "organizeMenu" ? (
-            <>
-              <button onClick={() => setDialog("reorder")}>
-                Réordonner les exercices
-              </button>
-              <button
-                onClick={() => {
-                  setName(workout.name);
-                  setDialog("renameWorkout");
-                }}
-              >
-                Renommer la séance
-              </button>
-              <button onClick={close}>Annuler</button>
-            </>
+            <div className="action-sheet">
+              <h2>Organisation</h2>
+              <div className="action-sheet-menu">
+                <button onClick={openReorderSheet}>
+                  <span className="action-sheet-icon" aria-hidden="true">
+                    <Icon name="reorder" size={19} />
+                  </span>
+                  <span>Réordonner les exercices</span>
+                  <Icon name="chevron-right" size={17} />
+                </button>
+                <button
+                  onClick={() => {
+                    setName(workout.name);
+                    setDialog("renameWorkout");
+                  }}
+                >
+                  <span className="action-sheet-icon" aria-hidden="true">
+                    <Icon name="edit" size={18} />
+                  </span>
+                  <span>Renommer la séance</span>
+                  <Icon name="chevron-right" size={17} />
+                </button>
+              </div>
+            </div>
           ) : (
             <>
               <h2>Réordonner les exercices</h2>
@@ -987,55 +1345,62 @@ export default function App() {
                 <p>Aucun exercice à réordonner.</p>
               )}
               <ul aria-label="Ordre des exercices" className="reorder-list">
-                {sort(workout.exercises).map((x, i) => (
-                  <li key={x.id}>
-                    <strong>{x.name}</strong>
-                    <div className="order">
-                      <button
-                        aria-label={`Monter ${x.name}`}
-                        disabled={
-                          i === 0 ||
-                          executionExercise(x.id)?.status === "completed" ||
-                          executionExercise(
-                            sort(workout.exercises)[i - 1]?.id ?? "",
-                          )?.status === "completed"
-                        }
-                        onClick={() => moveExercise(i, i - 1)}
-                      >
-                        <Icon name="chevron-up" />
-                      </button>
-                      <button
-                        aria-label={`Descendre ${x.name}`}
-                        disabled={
-                          i === workout.exercises.length - 1 ||
-                          executionExercise(x.id)?.status === "completed" ||
-                          executionExercise(
-                            sort(workout.exercises)[i + 1]?.id ?? "",
-                          )?.status === "completed"
-                        }
-                        onClick={() => moveExercise(i, i + 1)}
-                      >
-                        <Icon name="chevron-down" />
-                      </button>
-                    </div>
-                  </li>
-                ))}
+                {(
+                  reorderDraftIds ??
+                  sort(workout.exercises).map((item) => item.id)
+                )
+                  .map((id) => workout.exercises.find((item) => item.id === id))
+                  .filter(
+                    (item): item is Workout["exercises"][number] => !!item,
+                  )
+                  .map((x, i, ordered) => (
+                    <li key={x.id}>
+                      <strong>{x.name}</strong>
+                      <div className="order">
+                        <button
+                          aria-label={`Monter ${x.name}`}
+                          disabled={
+                            i === 0 || execution?.status === "completed"
+                          }
+                          onClick={() => moveReorderDraft(i, -1)}
+                        >
+                          <Icon name="chevron-up" />
+                        </button>
+                        <button
+                          aria-label={`Descendre ${x.name}`}
+                          disabled={
+                            i === ordered.length - 1 ||
+                            execution?.status === "completed"
+                          }
+                          onClick={() => moveReorderDraft(i, 1)}
+                        >
+                          <Icon name="chevron-down" />
+                        </button>
+                      </div>
+                    </li>
+                  ))}
               </ul>
-              <button onClick={close}>Terminer</button>
+              <button
+                className="primary reorder-save"
+                onClick={saveReorderDraft}
+              >
+                ENREGISTRER
+              </button>
             </>
           )}
-        </Sheet>
+        </BottomSheet>
       )}
       {dialog && !isMenu && (
-        <Sheet
+        <BottomSheet
           title={
             dialog === "exercise" || dialog === "renameExercise"
               ? "Exercice"
               : "Séance"
           }
+          closing={dialogClosing}
           onClose={close}
         >
-          <form onSubmit={submit}>
+          <form className="sheet-form" onSubmit={submit}>
             <h2>
               {dialog === "exercise" || dialog === "renameExercise"
                 ? "Exercice"
@@ -1044,7 +1409,6 @@ export default function App() {
             <label>
               Nom
               <input
-                autoFocus
                 aria-label="Nom"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -1052,58 +1416,59 @@ export default function App() {
               />
             </label>
             {dialog === "exercise" && (
-              <>
-                <label>
-                  Nombre de séries initiales
-                  <input
-                    type="number"
-                    min="1"
-                    step="1"
-                    inputMode="numeric"
-                    value={initialSetCount}
-                    onChange={(e) => setInitialSetCount(e.target.value)}
-                    required
-                  />
-                </label>
-                <label>
-                  Repos par défaut (secondes)
-                  <input
-                    type="number"
-                    min="0"
-                    step="1"
-                    inputMode="numeric"
-                    value={rest}
-                    onChange={(e) => setRest(e.target.value)}
-                    required
-                  />
-                </label>
-              </>
+              <div className="compact-form-fields">
+                <SetValuePicker
+                  label="Nombre de séries initiales"
+                  displayLabel="Séries"
+                  value={Number(initialSetCount)}
+                  columns={[
+                    {
+                      label: "Séries",
+                      values: pickerValues.sets,
+                      value: Number(initialSetCount),
+                    },
+                  ]}
+                  formatValue={(value) => String(value ?? 1)}
+                  onSave={(value) => setInitialSetCount(String(value))}
+                />
+                <SetValuePicker
+                  label="Repos par défaut"
+                  displayLabel="Repos"
+                  value={Number(rest)}
+                  columns={[
+                    {
+                      label: "Minutes",
+                      values: pickerValues.minutes,
+                      value: Math.min(6, Math.floor(Number(rest) / 60)),
+                    },
+                    {
+                      label: "Secondes",
+                      values: pickerValues.seconds,
+                      value: Number(rest) % 60,
+                    },
+                  ]}
+                  formatValue={(value) => formatRest(value ?? 0)}
+                  onSave={(value) => setRest(String(value))}
+                />
+              </div>
             )}
             <button className="primary">Enregistrer</button>
-            <button type="button" onClick={close}>
-              Annuler
-            </button>
           </form>
-        </Sheet>
+        </BottomSheet>
       )}
-      <nav aria-label="Navigation principale">
-        <button className="active">
-          <Icon name="home" size={18} /> <span>Séances</span>
-        </button>
-        <button onClick={() => setScreen("list")}>
-          <Icon name="nutrition" size={18} /> <span>Nutrition</span>
-        </button>
-      </nav>
+      <BottomNavigation onWorkouts={() => setScreen("list")} />
     </main>
   );
 }
 
 function WorkoutRow({
   workout,
+  variant = "compact",
   onOpen,
   onDelete,
 }: {
   workout: Workout;
+  variant?: "active" | "compact";
   onOpen: () => void;
   onDelete: () => void;
 }) {
@@ -1117,6 +1482,16 @@ function WorkoutRow({
     if (distance < -36) setOpen(true);
     if (distance > 36) setOpen(false);
   };
+  const executionSets = workout.execution?.exercises.flatMap(
+    (exercise) => exercise.sets,
+  );
+  const settledSets =
+    executionSets?.filter(
+      (set) => set.status === "performed" || set.status === "skipped",
+    ).length ?? 0;
+  const isActive =
+    workout.execution?.status === "inProgress" ||
+    workout.execution?.status === "readyToFinish";
   return (
     <li
       className={"workout-swipe" + (open ? " open" : "")}
@@ -1145,7 +1520,7 @@ function WorkoutRow({
         <span>Supprimer</span>
       </button>
       <button
-        className="row workout-card"
+        className={`row workout-card workout-card-${variant}${isActive ? " workout-card-active" : ""}`}
         onClick={() => {
           if (moved.current) {
             moved.current = false;
@@ -1158,28 +1533,41 @@ function WorkoutRow({
           onOpen();
         }}
       >
-        <small
-          className={`workout-badge ${workout.execution?.status ?? "planned"}`}
-        >
-          {workout.execution?.status === "completed" ? (
-            <>
-              <Icon name="check" size={13} /> Terminée
-            </>
-          ) : workout.execution ? (
-            <>
-              <Icon name="circle" size={13} strokeWidth={2.4} /> En cours
-            </>
-          ) : (
-            "Préparation"
+        {isActive && variant === "active" && (
+          <span className="active-session-heading">
+            <span className="active-session-dot" aria-hidden="true" />
+            <span>Séance en cours</span>
+          </span>
+        )}
+        <span className="workout-card-art" aria-hidden="true">
+          <Icon name="dumbbell" size={24} />
+        </span>
+        <span className="workout-card-content">
+          {variant !== "active" && (
+            <small
+              className={`workout-badge ${workout.execution?.status ?? "planned"}`}
+            >
+              Préparée
+            </small>
           )}
-        </small>
-        <strong>{workout.name}</strong>
-        <small>
-          {workout.exercises.length} exercice
-          {workout.exercises.length > 1 ? "s" : ""}
-        </small>
-        <span className="row-arrow">
-          <Icon name="chevron-down" size={16} />
+          <strong>{workout.name}</strong>
+          <small>
+            {isActive && executionSets
+              ? `${settledSets} / ${executionSets.length} séries`
+              : `${workout.exercises.length} exercice${workout.exercises.length > 1 ? "s" : ""}`}
+          </small>
+          {isActive && executionSets && (
+            <span className="workout-card-progress">
+              <span
+                style={{
+                  width: `${executionSets.length ? (settledSets / executionSets.length) * 100 : 0}%`,
+                }}
+              />
+            </span>
+          )}
+        </span>
+        <span className="workout-card-cta">
+          {isActive ? "Reprendre" : "Aperçu"} <span aria-hidden="true">→</span>
         </span>
       </button>
     </li>
@@ -1188,64 +1576,4 @@ function WorkoutRow({
 
 function formatRest(seconds: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-}
-
-function Sheet({
-  title,
-  onClose,
-  children,
-}: {
-  title: string;
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    ref.current
-      ?.querySelector<HTMLElement>(
-        "input:not(:disabled), button:not(:disabled)",
-      )
-      ?.focus();
-    return () => previous?.focus();
-  }, [title]);
-  return (
-    <div
-      className="modal"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <div
-        ref={ref}
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            event.preventDefault();
-            onClose();
-          }
-          if (event.key === "Tab") {
-            const fields = ref.current?.querySelectorAll<HTMLElement>(
-              "button:not(:disabled), input:not(:disabled)",
-            );
-            if (!fields?.length) return;
-            const first = fields[0],
-              last = fields[fields.length - 1];
-            if (event.shiftKey && document.activeElement === first) {
-              event.preventDefault();
-              last.focus();
-            }
-            if (!event.shiftKey && document.activeElement === last) {
-              event.preventDefault();
-              first.focus();
-            }
-          }
-        }}
-      >
-        {children}
-      </div>
-    </div>
-  );
 }
