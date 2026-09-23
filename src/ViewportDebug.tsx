@@ -16,6 +16,9 @@ type Snapshot = {
   shellTop: number | null;
   shellBottom: number | null;
   standalone: boolean;
+  appViewportHeight: string;
+  htmlHeight: number;
+  rootHeight: number;
 };
 
 export function ViewportDebug() {
@@ -42,6 +45,9 @@ export function ViewportDebug() {
     const update = () => {
       const nav = document.querySelector<HTMLElement>(".bottom-navigation");
       const shell = document.querySelector<HTMLElement>(".app-shell");
+      const root = document.getElementById("root");
+      const htmlBounds = document.documentElement.getBoundingClientRect();
+      const rootBounds = root?.getBoundingClientRect();
       const navBounds = nav?.getBoundingClientRect();
       const shellBounds = shell?.getBoundingClientRect();
       const visual = window.visualViewport;
@@ -61,6 +67,11 @@ export function ViewportDebug() {
         shellTop: shellBounds?.top ?? null,
         shellBottom: shellBounds?.bottom ?? null,
         standalone,
+        appViewportHeight: getComputedStyle(document.documentElement)
+          .getPropertyValue("--app-viewport-height")
+          .trim(),
+        htmlHeight: htmlBounds.height,
+        rootHeight: rootBounds?.height ?? 0,
       });
     };
     update();

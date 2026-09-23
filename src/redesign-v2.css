@@ -2074,3 +2074,24 @@ button:active,
     monospace;
   white-space: pre-wrap;
 }
+
+/* iOS standalone: use the large viewport for the app shell from first paint.
+   The dynamic viewport can start collapsed and only expand after a gesture. */
+:root {
+  --app-viewport-height: 100lvh;
+}
+
+@supports not (height: 100lvh) {
+  :root {
+    --app-viewport-height: 100dvh;
+  }
+}
+
+body,
+.app-shell {
+  min-height: var(--app-viewport-height);
+}
+
+.workout-detail {
+  height: var(--app-viewport-height);
+}
