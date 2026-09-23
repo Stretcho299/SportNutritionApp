@@ -11,6 +11,7 @@ import { SetValuePicker } from "./SetValuePicker";
 import { BottomNavigation } from "./BottomNavigation";
 import { BottomSheet, bottomSheetCloseDuration } from "./BottomSheet";
 import { ExerciseNavigator } from "./ExerciseNavigator";
+import { ViewportDebug } from "./ViewportDebug";
 import { pickerValues } from "./pickerValues";
 import {
   activateExecutedExercise,
@@ -1457,6 +1458,7 @@ export default function App() {
         </BottomSheet>
       )}
       <BottomNavigation onWorkouts={() => setScreen("list")} />
+      <ViewportDebug />
     </main>
   );
 }

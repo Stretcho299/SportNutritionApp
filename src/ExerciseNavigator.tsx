@@ -120,7 +120,7 @@ export function ExerciseNavigator({
     }
     if (autoScrollFrame.current !== undefined) return;
     const tick = () => {
-      const current = gesture.current;
+      const current = gesture.current ?? touchGesture.current;
       if (!current || current.mode !== "reordering") {
         clearAutoScroll();
         return;
@@ -212,12 +212,13 @@ export function ExerciseNavigator({
     index: number,
   ) => {
     if (touchGesture.current || gesture.current) return;
+    const button = event.currentTarget;
     const touch = event.changedTouches[0];
     if (!touch) return;
     const active: TouchGesture = {
       index,
       pointerId: touch.identifier,
-      button: event.currentTarget,
+      button,
       startX: touch.clientX,
       startY: touch.clientY,
       lastX: touch.clientX,
@@ -230,7 +231,7 @@ export function ExerciseNavigator({
       if (!current || current.mode !== "pending" || canDrag?.(index) === false)
         return;
       current.mode = "reordering";
-      const bounds = event.currentTarget.getBoundingClientRect();
+      const bounds = button.getBoundingClientRect();
       setDraggingIndex(index);
       setDropIndex(index);
       setDragPosition({
