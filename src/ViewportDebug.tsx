@@ -19,10 +19,18 @@ type Snapshot = {
 };
 
 export function ViewportDebug() {
-  const enabled = new URLSearchParams(window.location.search).has(
+  const debugQuery = new URLSearchParams(window.location.search).get(
     "debugViewport",
   );
+  const enabled =
+    debugQuery === "1" ||
+    (debugQuery !== "0" && localStorage.getItem("debugViewport") === "1");
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+
+  useEffect(() => {
+    if (debugQuery === "1") localStorage.setItem("debugViewport", "1");
+    else if (debugQuery === "0") localStorage.removeItem("debugViewport");
+  }, [debugQuery]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -47,7 +55,8 @@ export function ViewportDebug() {
         navBottomStyle: nav ? getComputedStyle(nav).bottom : null,
         shellTop: shellBounds?.top ?? null,
         shellBottom: shellBounds?.bottom ?? null,
-        standalone: window.matchMedia("(display-mode: standalone)").matches,
+        standalone:
+          window.matchMedia?.("(display-mode: standalone)")?.matches ?? false,
       });
     };
     update();
