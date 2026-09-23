@@ -22,7 +22,12 @@ export function ViewportDebug() {
   const debugQuery = new URLSearchParams(window.location.search).get(
     "debugViewport",
   );
+  const standalone =
+    window.matchMedia?.("(display-mode: standalone)")?.matches === true ||
+    (window.navigator as Navigator & { standalone?: boolean }).standalone ===
+      true;
   const enabled =
+    standalone ||
     debugQuery === "1" ||
     (debugQuery !== "0" && localStorage.getItem("debugViewport") === "1");
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
@@ -55,8 +60,7 @@ export function ViewportDebug() {
         navBottomStyle: nav ? getComputedStyle(nav).bottom : null,
         shellTop: shellBounds?.top ?? null,
         shellBottom: shellBounds?.bottom ?? null,
-        standalone:
-          window.matchMedia?.("(display-mode: standalone)")?.matches ?? false,
+        standalone,
       });
     };
     update();
@@ -71,7 +75,7 @@ export function ViewportDebug() {
       visual?.removeEventListener("resize", update);
       visual?.removeEventListener("scroll", update);
     };
-  }, [enabled]);
+  }, [enabled, standalone]);
 
   if (!enabled || !snapshot) return null;
   return (
