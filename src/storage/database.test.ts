@@ -1,6 +1,7 @@
 import { IDBFactory } from "fake-indexeddb";
 import {
   activateExecutedExercise,
+  abandonWorkoutSession,
   addExercise,
   addExerciseToExecution,
   addSet,
@@ -702,6 +703,63 @@ it("rejects a store containing two active sessions", async () => {
       sessions: [sessionA, sessionB],
     }),
   ).rejects.toThrow("Une seule séance");
+});
+
+it("retains abandoned sessions without making them active or changing their template", async () => {
+  const template = addExercise(createWorkout("Push"), "Bench", 2, 90);
+  const session = createWorkoutSession(template, 1000);
+  await saveWorkoutStore({
+    version: 2,
+    templates: [template],
+    sessions: [session],
+  });
+
+  const abandoned = await abandonWorkoutSession(session.id, 2000);
+  expect(abandoned).toMatchObject({
+    id: session.id,
+    templateId: template.id,
+    status: "abandoned",
+    abandonedAt: 2000,
+    snapshot: session.snapshot,
+    execution: session.execution,
+  });
+  const store = await loadWorkoutStore();
+  expect(store.templates).toEqual([template]);
+  expect(store.sessions).toEqual([abandoned]);
+  expect(hasActiveWorkoutSession(store)).toBe(false);
+  expect(await loadWorkouts()).toEqual([template]);
+
+  const restarted = createWorkoutSession(template, 3000);
+  await saveWorkoutStore({
+    ...store,
+    sessions: [...store.sessions, restarted],
+  });
+  const nextStore = await loadWorkoutStore();
+  expect(hasActiveWorkoutSession(nextStore)).toBe(true);
+  expect(nextStore.sessions.map((item) => item.id)).toEqual([
+    session.id,
+    restarted.id,
+  ]);
+});
+
+it("does not allow abandoning a completed historical session", async () => {
+  const template = createWorkout("Push");
+  const session = createWorkoutSession(template, 1000);
+  const completed = {
+    ...session,
+    status: "completed" as const,
+    completedAt: 2000,
+    execution: { ...session.execution, status: "completed" as const },
+  };
+  await saveWorkoutStore({
+    version: 2,
+    templates: [template],
+    sessions: [completed],
+  });
+  await expect(abandonWorkoutSession(session.id, 3000)).rejects.toThrow(
+    "Seule une séance active peut être abandonnée",
+  );
+  expect((await loadWorkoutStore()).sessions).toEqual([completed]);
 });
 
 it("keeps the localStorage fallback versioned", async () => {

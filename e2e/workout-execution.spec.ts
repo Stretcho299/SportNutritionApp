@@ -797,3 +797,107 @@ test("reuses a template and persists independent session snapshots", async ({
   );
   expect(afterReload.sessions).toHaveLength(2);
 });
+
+test("returns to dashboard and resumes the same active session, then abandons it explicitly", async ({
+  page,
+}) => {
+  await prepareWorkout(page, "1");
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  const original = await readPersistedStore(page);
+  const sessionId = original.sessions[0].id;
+  await page.getByRole("button", { name: "Retour aux séances" }).click();
+  await expect(
+    page.getByRole("region", { name: "Séance en cours" }),
+  ).toBeVisible();
+  await expect(page.getByText("Reprendre")).toBeVisible();
+
+  await page.reload();
+  await expect(
+    page.getByRole("region", { name: "Séance en cours" }),
+  ).toBeVisible();
+  await page.locator(".workout-card-active").click();
+  expect(
+    (await readPersistedStore(page)).sessions.map((item) => item.id),
+  ).toEqual([sessionId]);
+  await expect(
+    page.getByRole("region", { name: "Séries de Exercice A" }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Réorganiser les exercices" }).click();
+  await page
+    .getByRole("dialog", { name: "Organisation de la séance" })
+    .getByRole("button", { name: "Abandonner la séance" })
+    .click();
+  const confirmation = page.getByRole("alertdialog", {
+    name: "Abandonner la séance ?",
+  });
+  await confirmation.getByRole("button", { name: "Annuler" }).click();
+  expect((await readPersistedStore(page)).sessions[0].status).toBe(
+    "inProgress",
+  );
+
+  await page
+    .getByRole("dialog", { name: "Organisation de la séance" })
+    .getByRole("button", { name: "Abandonner la séance" })
+    .click();
+  await page
+    .getByRole("alertdialog", { name: "Abandonner la séance ?" })
+    .getByRole("button", { name: "Abandonner la séance" })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Séance en cours" }),
+  ).toHaveCount(0);
+  await expect
+    .poll(async () => (await readPersistedStore(page)).sessions[0].status)
+    .toBe("abandoned");
+  const abandoned = await readPersistedStore(page);
+  expect(abandoned.sessions).toHaveLength(1);
+  expect(abandoned.sessions[0]).toMatchObject({
+    id: sessionId,
+    status: "abandoned",
+  });
+  expect(abandoned.templates).toHaveLength(1);
+  await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
+  await expect(page.getByText("Séance E2E")).toBeVisible();
+  await page.locator(".workout-card").click();
+  await page.getByRole("button", { name: "Refaire la séance" }).click();
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  await expect
+    .poll(async () =>
+      (await readPersistedStore(page)).sessions.map((item) => item.status),
+    )
+    .toEqual(["abandoned", "inProgress"]);
+  expect((await readPersistedStore(page)).sessions[0].id).toBe(sessionId);
+  expect((await readPersistedStore(page)).sessions[1].id).not.toBe(sessionId);
+});
+
+test("does not create a second active session while another template is active", async ({
+  page,
+}) => {
+  await prepareWorkout(page, "1");
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  await page.getByRole("button", { name: "Retour aux séances" }).click();
+  await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
+  await page.getByRole("button", { name: "Créer une séance" }).click();
+  await page.getByRole("textbox", { name: "Nom" }).fill("Deuxième modèle");
+  await saveSheet(page, "Séance", "Deuxième modèle");
+  await page.getByText("Deuxième modèle").click();
+  await page.getByRole("button", { name: "Refaire la séance" }).click();
+  await addExercise(page, "Exercice B", "1");
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  await expect
+    .poll(async () => {
+      const store = await readPersistedStore(page);
+      return store.sessions.filter(
+        (item) =>
+          item.status === "inProgress" || item.status === "readyToFinish",
+      ).length;
+    })
+    .toBe(1);
+  const store = await readPersistedStore(page);
+  expect(store.sessions).toHaveLength(1);
+  expect(store.templates.map((item) => item.name)).toEqual([
+    "Séance E2E",
+    "Deuxième modèle",
+  ]);
+});

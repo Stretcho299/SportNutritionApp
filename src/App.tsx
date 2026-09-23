@@ -14,6 +14,7 @@ import { ExerciseNavigator } from "./ExerciseNavigator";
 import { pickerValues } from "./pickerValues";
 import {
   activateExecutedExercise,
+  abandonWorkoutSession,
   addSetToExecution,
   addExercise,
   addExerciseToExecution,
@@ -81,7 +82,11 @@ export default function App() {
   useEffect(() => {
     void loadWorkoutStore().then((store: WorkoutStore) => {
       const active = store.sessions
-        .filter((session) => session.status !== "completed")
+        .filter(
+          (session) =>
+            session.status === "inProgress" ||
+            session.status === "readyToFinish",
+        )
         .sort((a, b) => b.startedAt - a.startedAt);
       setWorkouts(
         store.templates.map((template) => {
@@ -187,7 +192,8 @@ export default function App() {
         const session = store.sessions
           .filter(
             (item) =>
-              item.templateId === template.id && item.status !== "completed",
+              item.templateId === template.id &&
+              (item.status === "inProgress" || item.status === "readyToFinish"),
           )
           .sort((a, b) => b.startedAt - a.startedAt)[0];
         return session
@@ -236,6 +242,32 @@ export default function App() {
           );
         },
       });
+  };
+  const abandonWorkout = () => {
+    if (!workout || !execution?.sessionId) return;
+    const activeWorkoutId = workout.id;
+    const sessionId = execution.sessionId;
+    requestConfirmation({
+      title: "Abandonner la séance ?",
+      description:
+        "Cette séance sera abandonnée. Votre séance préparée restera disponible pour une prochaine fois.",
+      confirmLabel: "Abandonner la séance",
+      onConfirm: () => {
+        void abandonWorkoutSession(sessionId).then(() => {
+          setWorkouts((current) =>
+            current.map((item) =>
+              item.id === activeWorkoutId
+                ? { ...item, execution: undefined }
+                : item,
+            ),
+          );
+          setWorkoutId("");
+          setExerciseId("");
+          close();
+          navigate("list", "back");
+        });
+      },
+    });
   };
   const requestConfirmation = (request: ConfirmationRequest) =>
     setConfirmation({
@@ -1336,6 +1368,16 @@ export default function App() {
                   <span>Renommer la séance</span>
                   <Icon name="chevron-right" size={17} />
                 </button>
+                {(execution?.status === "inProgress" ||
+                  execution?.status === "readyToFinish") && (
+                  <button className="danger" onClick={abandonWorkout}>
+                    <span className="action-sheet-icon" aria-hidden="true">
+                      <Icon name="trash" size={18} />
+                    </span>
+                    <span>Abandonner la séance</span>
+                    <Icon name="chevron-right" size={17} />
+                  </button>
+                )}
               </div>
             </div>
           ) : (

@@ -29,7 +29,8 @@ export type WorkoutSession = {
   templateName: string;
   startedAt: number;
   completedAt: number | null;
-  status: WorkoutExecution["status"];
+  status: WorkoutExecution["status"] | "abandoned";
+  abandonedAt?: number;
   snapshot: WorkoutTemplate;
   execution: WorkoutExecution;
 };
@@ -209,7 +210,10 @@ export async function loadWorkouts(): Promise<Workout[]> {
   const store = await loadWorkoutStore();
   return store.templates.map((template) => {
     const latest = store.sessions
-      .filter((session) => session.templateId === template.id)
+      .filter(
+        (session) =>
+          session.templateId === template.id && session.status !== "abandoned",
+      )
       .sort((a, b) => b.startedAt - a.startedAt)[0];
     if (!latest) return template;
     const execution = { ...latest.execution };
@@ -479,6 +483,32 @@ export const hasActiveWorkoutSession = (store: WorkoutStore): boolean =>
     (session) =>
       session.status === "inProgress" || session.status === "readyToFinish",
   );
+
+export async function abandonWorkoutSession(
+  sessionId: string,
+  now = Date.now(),
+): Promise<WorkoutSession> {
+  await saveWorkoutsQueue;
+  const store = await loadWorkoutStore();
+  const session = store.sessions.find((item) => item.id === sessionId);
+  if (
+    !session ||
+    (session.status !== "inProgress" && session.status !== "readyToFinish")
+  )
+    throw new Error("Seule une séance active peut être abandonnée");
+  const abandoned: WorkoutSession = {
+    ...session,
+    status: "abandoned",
+    abandonedAt: now,
+  };
+  await saveWorkoutStore({
+    ...store,
+    sessions: store.sessions.map((item) =>
+      item.id === sessionId ? abandoned : item,
+    ),
+  });
+  return abandoned;
+}
 
 export const addExerciseToExecution = (
   execution: WorkoutExecution,
