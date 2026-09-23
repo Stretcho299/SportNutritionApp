@@ -5,6 +5,7 @@ type PersistedStore = {
     id: string;
     execution?: unknown;
     exercises: Array<{
+      permanentNote?: string;
       plannedSets: Array<{
         repetitions: number | null;
         weightKg: number | null;
@@ -15,6 +16,7 @@ type PersistedStore = {
   sessions: Array<{
     id: string;
     status: string;
+    sessionNotes?: Record<string, string>;
     templateId: string;
     snapshot: PersistedStore["templates"][number];
     execution: {
@@ -900,4 +902,119 @@ test("does not create a second active session while another template is active",
     "Séance E2E",
     "Deuxième modèle",
   ]);
+});
+
+test("persists permanent and session exercise notes independently", async ({
+  page,
+}) => {
+  await prepareWorkout(page, "1");
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  await page.getByRole("button", { name: "Ajouter une note" }).click();
+  const notes = page.getByRole("dialog", { name: "Notes de l’exercice" });
+  await notes
+    .getByRole("textbox", { name: "Note permanente" })
+    .fill("Banc position 4");
+  await notes
+    .getByRole("textbox", { name: "Note de cette séance" })
+    .fill("Épaule sensible aujourd’hui");
+  await notes.getByRole("button", { name: "ENREGISTRER" }).click();
+  await expect(notes).toHaveCount(0);
+
+  const noteButton = page.getByRole("button", { name: "Notes de l’exercice" });
+  await expect(noteButton).toContainText("Épaule sensible aujourd’hui");
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    const geometry = await page.evaluate(() => {
+      const note = document.querySelector<HTMLElement>(
+        ".exercise-note-trigger",
+      );
+      return {
+        documentWidth: document.documentElement.scrollWidth,
+        viewportWidth: document.documentElement.clientWidth,
+        noteWidth: note?.clientWidth ?? 0,
+        noteScrollWidth: note?.scrollWidth ?? 0,
+      };
+    });
+    expect(geometry.documentWidth).toBeLessThanOrEqual(geometry.viewportWidth);
+    expect(geometry.noteScrollWidth).toBeLessThanOrEqual(geometry.noteWidth);
+  }
+
+  let store = await readPersistedStore(page);
+  const exerciseId = store.templates[0].exercises[0].id;
+  expect(store.templates[0].exercises[0].permanentNote).toBe("Banc position 4");
+  expect(store.sessions[0].snapshot.exercises[0].permanentNote).toBe(
+    "Banc position 4",
+  );
+  expect(store.sessions[0].sessionNotes).toEqual({
+    [exerciseId]: "Épaule sensible aujourd’hui",
+  });
+  expect(store.templates[0].exercises[0]).not.toHaveProperty("sessionNotes");
+
+  await page.getByRole("button", { name: "Retour aux séances" }).click();
+  await expect(
+    page.getByRole("region", { name: "Séance en cours" }),
+  ).toBeVisible();
+  await page.locator(".workout-card-active").click();
+  await page.getByRole("button", { name: "Notes de l’exercice" }).click();
+  const resumedNotes = page.getByRole("dialog", {
+    name: "Notes de l’exercice",
+  });
+  await expect(
+    resumedNotes.getByRole("textbox", { name: "Note permanente" }),
+  ).toHaveValue("Banc position 4");
+  await expect(
+    resumedNotes.getByRole("textbox", { name: "Note de cette séance" }),
+  ).toHaveValue("Épaule sensible aujourd’hui");
+  await resumedNotes
+    .getByRole("textbox", { name: "Note permanente" })
+    .fill("Brouillon à annuler");
+  await page.locator(".sheet-backdrop").click({ position: { x: 4, y: 4 } });
+  await expect(resumedNotes).toHaveCount(0);
+  await page.getByRole("button", { name: "Notes de l’exercice" }).click();
+  const unchangedNotes = page.getByRole("dialog", {
+    name: "Notes de l’exercice",
+  });
+  await expect(
+    unchangedNotes.getByRole("textbox", { name: "Note permanente" }),
+  ).toHaveValue("Banc position 4");
+  await unchangedNotes.getByRole("button", { name: "ENREGISTRER" }).click();
+  await expect(unchangedNotes).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Réorganiser les exercices" }).click();
+  await page
+    .getByRole("dialog", { name: "Organisation de la séance" })
+    .getByRole("button", { name: "Abandonner la séance" })
+    .click();
+  await page
+    .getByRole("alertdialog", { name: "Abandonner la séance ?" })
+    .getByRole("button", { name: "Abandonner la séance" })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Séance en cours" }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
+  await page.locator(".workout-card").click();
+  await page.getByRole("button", { name: "Refaire la séance" }).click();
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  await page.getByRole("button", { name: "Notes de l’exercice" }).click();
+  const nextNotes = page.getByRole("dialog", { name: "Notes de l’exercice" });
+  await expect(
+    nextNotes.getByRole("textbox", { name: "Note permanente" }),
+  ).toHaveValue("Banc position 4");
+  await expect(
+    nextNotes.getByRole("textbox", { name: "Note de cette séance" }),
+  ).toHaveValue("");
+  expect(
+    await nextNotes
+      .getByRole("textbox", { name: "Note de cette séance" })
+      .isDisabled(),
+  ).toBe(false);
+  await nextNotes.getByRole("button", { name: "ENREGISTRER" }).click();
+  await expect(nextNotes).toHaveCount(0);
+  store = await readPersistedStore(page);
+  expect(store.sessions).toHaveLength(2);
+  expect(store.sessions[0].sessionNotes).toEqual({
+    [exerciseId]: "Épaule sensible aujourd’hui",
+  });
+  expect(store.sessions[1].sessionNotes).toEqual({});
 });

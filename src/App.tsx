@@ -47,6 +47,7 @@ type Dialog =
   | "renameExercise"
   | "addMenu"
   | "organizeMenu"
+  | "exerciseNotes"
   | "reorder";
 export default function App() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
@@ -59,6 +60,8 @@ export default function App() {
   const [name, setName] = useState("");
   const [initialSetCount, setInitialSetCount] = useState("1");
   const [rest, setRest] = useState(String(defaultRestSeconds));
+  const [permanentNoteDraft, setPermanentNoteDraft] = useState("");
+  const [sessionNoteDraft, setSessionNoteDraft] = useState("");
   const [clock, setClock] = useState(Date.now);
   const [confirmation, setConfirmation] = useState<ConfirmationRequest | null>(
     null,
@@ -120,6 +123,7 @@ export default function App() {
                     : exercise;
                 }),
                 execution: session.execution,
+                sessionNotes: session.sessionNotes ?? {},
               }
             : template;
         }),
@@ -133,6 +137,12 @@ export default function App() {
   const workout = workouts.find((w) => w.id === workoutId);
   const exercise = workout?.exercises.find((e) => e.id === exerciseId);
   const execution = workout?.execution;
+  const notePreview =
+    (execution && execution.status !== "completed"
+      ? workout?.sessionNotes?.[exercise?.id ?? ""]?.trim()
+      : "") ||
+    exercise?.permanentNote?.trim() ||
+    "";
   const executionExercise = (id: string) =>
     execution?.exercises.find((item) => item.exerciseId === id);
   const executionSet = (id: string): ExecutedSet | undefined =>
@@ -168,9 +178,28 @@ export default function App() {
       )
     )
       return;
-    updateExecution(
-      createWorkoutSession(workout, undefined, initialExerciseId).execution,
+    const session = createWorkoutSession(workout, undefined, initialExerciseId);
+    update(
+      workouts.map((item) =>
+        item.id === workout.id
+          ? {
+              ...item,
+              execution: session.execution,
+              sessionNotes: session.sessionNotes,
+            }
+          : item,
+      ),
     );
+  };
+  const openExerciseNotes = () => {
+    if (!exercise || !workout) return;
+    setPermanentNoteDraft(exercise.permanentNote ?? "");
+    setSessionNoteDraft(
+      execution && execution.status !== "completed"
+        ? (workout.sessionNotes?.[exercise.id] ?? "")
+        : "",
+    );
+    setDialog("exerciseNotes");
   };
   const startRest = (targetExerciseId: string, targetSetId: string) => {
     if (!execution) return;
@@ -349,6 +378,27 @@ export default function App() {
             : w,
         ),
       );
+    if (dialog === "exerciseNotes" && workout && exercise) {
+      const permanentNote = permanentNoteDraft.trim() || undefined;
+      const sessionNote = sessionNoteDraft.trim();
+      update(
+        workouts.map((item) => {
+          if (item.id !== workout.id) return item;
+          const sessionNotes = { ...(item.sessionNotes ?? {}) };
+          if (execution && execution.status !== "completed") {
+            if (sessionNote) sessionNotes[exercise.id] = sessionNote;
+            else delete sessionNotes[exercise.id];
+          }
+          return {
+            ...item,
+            exercises: item.exercises.map((target) =>
+              target.id === exercise.id ? { ...target, permanentNote } : target,
+            ),
+            sessionNotes,
+          };
+        }),
+      );
+    }
     close();
   };
   const removeWorkout = (id: string) => {
@@ -1056,6 +1106,22 @@ export default function App() {
                           {exercise.plannedSets.length} série
                           {exercise.plannedSets.length > 1 ? "s" : ""}
                         </p>
+                        <button
+                          className={
+                            "exercise-note-trigger" +
+                            (notePreview ? " has-note" : "")
+                          }
+                          aria-label={
+                            notePreview
+                              ? "Notes de l’exercice"
+                              : "Ajouter une note"
+                          }
+                          disabled={execution?.status === "completed"}
+                          onClick={openExerciseNotes}
+                        >
+                          <Icon name="file-text" size={14} />
+                          <span>{notePreview || "Ajouter une note"}</span>
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -1435,66 +1501,119 @@ export default function App() {
       {dialog && !isMenu && (
         <BottomSheet
           title={
-            dialog === "exercise" || dialog === "renameExercise"
-              ? "Exercice"
-              : "Séance"
+            dialog === "exerciseNotes"
+              ? "Notes de l’exercice"
+              : dialog === "exercise" || dialog === "renameExercise"
+                ? "Exercice"
+                : "Séance"
           }
           closing={dialogClosing}
           onClose={close}
         >
-          <form className="sheet-form" onSubmit={submit}>
+          <form
+            className={
+              dialog === "exerciseNotes"
+                ? "sheet-form notes-form"
+                : "sheet-form"
+            }
+            onSubmit={submit}
+          >
             <h2>
-              {dialog === "exercise" || dialog === "renameExercise"
-                ? "Exercice"
-                : "Séance"}
+              {dialog === "exerciseNotes"
+                ? "Notes de l’exercice"
+                : dialog === "exercise" || dialog === "renameExercise"
+                  ? "Exercice"
+                  : "Séance"}
             </h2>
-            <label>
-              Nom
-              <input
-                aria-label="Nom"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-              />
-            </label>
-            {dialog === "exercise" && (
-              <div className="compact-form-fields">
-                <SetValuePicker
-                  label="Nombre de séries initiales"
-                  displayLabel="Séries"
-                  value={Number(initialSetCount)}
-                  columns={[
-                    {
-                      label: "Séries",
-                      values: pickerValues.sets,
-                      value: Number(initialSetCount),
-                    },
-                  ]}
-                  formatValue={(value) => String(value ?? 1)}
-                  onSave={(value) => setInitialSetCount(String(value))}
-                />
-                <SetValuePicker
-                  label="Repos par défaut"
-                  displayLabel="Repos"
-                  value={Number(rest)}
-                  columns={[
-                    {
-                      label: "Minutes",
-                      values: pickerValues.minutes,
-                      value: Math.min(6, Math.floor(Number(rest) / 60)),
-                    },
-                    {
-                      label: "Secondes",
-                      values: pickerValues.seconds,
-                      value: Number(rest) % 60,
-                    },
-                  ]}
-                  formatValue={(value) => formatRest(value ?? 0)}
-                  onSave={(value) => setRest(String(value))}
-                />
-              </div>
+            {dialog === "exerciseNotes" ? (
+              <>
+                <label className="exercise-note-field">
+                  NOTE PERMANENTE
+                  <textarea
+                    aria-label="Note permanente"
+                    rows={2}
+                    value={permanentNoteDraft}
+                    disabled={execution?.status === "completed"}
+                    onChange={(event) =>
+                      setPermanentNoteDraft(event.target.value)
+                    }
+                  />
+                  <small>Reprise dans les prochaines séances</small>
+                </label>
+                <label className="exercise-note-field">
+                  NOTE DE CETTE SÉANCE
+                  <textarea
+                    aria-label="Note de cette séance"
+                    rows={2}
+                    value={sessionNoteDraft}
+                    disabled={!execution || execution.status === "completed"}
+                    onChange={(event) =>
+                      setSessionNoteDraft(event.target.value)
+                    }
+                  />
+                  <small>
+                    {execution && execution.status !== "completed"
+                      ? "Uniquement pour cette séance"
+                      : "Disponible pendant une séance"}
+                  </small>
+                </label>
+              </>
+            ) : (
+              <>
+                <label>
+                  Nom
+                  <input
+                    aria-label="Nom"
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    required
+                  />
+                </label>
+                {dialog === "exercise" && (
+                  <div className="compact-form-fields">
+                    <SetValuePicker
+                      label="Nombre de séries initiales"
+                      displayLabel="Séries"
+                      value={Number(initialSetCount)}
+                      columns={[
+                        {
+                          label: "Séries",
+                          values: pickerValues.sets,
+                          value: Number(initialSetCount),
+                        },
+                      ]}
+                      formatValue={(value) => String(value ?? 1)}
+                      onSave={(value) => setInitialSetCount(String(value))}
+                    />
+                    <SetValuePicker
+                      label="Repos par défaut"
+                      displayLabel="Repos"
+                      value={Number(rest)}
+                      columns={[
+                        {
+                          label: "Minutes",
+                          values: pickerValues.minutes,
+                          value: Math.min(6, Math.floor(Number(rest) / 60)),
+                        },
+                        {
+                          label: "Secondes",
+                          values: pickerValues.seconds,
+                          value: Number(rest) % 60,
+                        },
+                      ]}
+                      formatValue={(value) => formatRest(value ?? 0)}
+                      onSave={(value) => setRest(String(value))}
+                    />
+                  </div>
+                )}
+              </>
             )}
-            <button className="primary">Enregistrer</button>
+            <button
+              className="primary"
+              disabled={execution?.status === "completed"}
+            >
+              {dialog === "exerciseNotes" ? "ENREGISTRER" : "Enregistrer"}
+            </button>
           </form>
         </BottomSheet>
       )}

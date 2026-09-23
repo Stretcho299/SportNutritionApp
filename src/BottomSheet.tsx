@@ -70,7 +70,12 @@ export function BottomSheet({
 
       const field = document.activeElement;
       const scroller = scrollArea.current;
-      if (!(field instanceof HTMLInputElement) || !scroller) return;
+      if (
+        (!(field instanceof HTMLInputElement) &&
+          !(field instanceof HTMLTextAreaElement)) ||
+        !scroller
+      )
+        return;
       window.requestAnimationFrame(() => {
         const fieldBounds = field.getBoundingClientRect();
         const scrollBounds = scroller.getBoundingClientRect();
@@ -136,7 +141,7 @@ export function BottomSheet({
           }
           if (event.key !== "Tab") return;
           const fields = dialog.current?.querySelectorAll<HTMLElement>(
-            "button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex='-1'])",
+            "button:not(:disabled), input:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex='-1'])",
           );
           if (!fields?.length) return;
           const first = fields[0];
