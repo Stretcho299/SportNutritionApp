@@ -11,6 +11,7 @@ export type Exercise = {
   position: number;
   plannedSets: PlannedSet[];
   defaultRestSeconds?: number;
+  permanentNote?: string;
 };
 export type WorkoutTemplate = {
   id: string;
@@ -21,6 +22,7 @@ export type WorkoutTemplate = {
 // Compatibility view used by the existing UI while storage is split.
 export type Workout = WorkoutTemplate & {
   execution?: WorkoutExecution;
+  sessionNotes?: Record<string, string>;
 };
 
 export type WorkoutSession = {
@@ -29,7 +31,9 @@ export type WorkoutSession = {
   templateName: string;
   startedAt: number;
   completedAt: number | null;
-  status: WorkoutExecution["status"];
+  status: WorkoutExecution["status"] | "abandoned";
+  abandonedAt?: number;
+  sessionNotes?: Record<string, string>;
   snapshot: WorkoutTemplate;
   execution: WorkoutExecution;
 };
@@ -138,7 +142,12 @@ const migrateStore = (raw: unknown): WorkoutStore => {
   const templates: WorkoutTemplate[] = [];
   const sessions: WorkoutSession[] = [];
   for (const legacy of raw as Workout[]) {
-    const { execution, ...template } = legacy;
+    const template: WorkoutTemplate = {
+      id: legacy.id,
+      name: legacy.name,
+      exercises: legacy.exercises,
+    };
+    const execution = legacy.execution;
     templates.push(template);
     if (execution) {
       const sessionId =
@@ -152,6 +161,7 @@ const migrateStore = (raw: unknown): WorkoutStore => {
         completedAt: execution.completedAt ?? null,
         status: execution.status,
         snapshot: clone(template),
+        sessionNotes: {},
         execution: migratedExecution,
       });
     }
@@ -209,12 +219,19 @@ export async function loadWorkouts(): Promise<Workout[]> {
   const store = await loadWorkoutStore();
   return store.templates.map((template) => {
     const latest = store.sessions
-      .filter((session) => session.templateId === template.id)
+      .filter(
+        (session) =>
+          session.templateId === template.id && session.status !== "abandoned",
+      )
       .sort((a, b) => b.startedAt - a.startedAt)[0];
     if (!latest) return template;
     const execution = { ...latest.execution };
     delete execution.sessionId;
-    return { ...template, execution };
+    return {
+      ...template,
+      execution,
+      sessionNotes: latest.sessionNotes ?? {},
+    };
   });
 }
 
@@ -280,9 +297,16 @@ async function persistWorkouts(workouts: Workout[]) {
   const existing = globalThis.indexedDB
     ? await loadWorkoutStore()
     : migrateStore(JSON.parse(localStorage.getItem(key) ?? "[]"));
-  const templates = workouts.map(({ execution, ...template }) =>
-    execution ? syncTemplateWorkValues(template, execution) : template,
-  );
+  const templates = workouts.map((workout) => {
+    const template: WorkoutTemplate = {
+      id: workout.id,
+      name: workout.name,
+      exercises: workout.exercises,
+    };
+    return workout.execution
+      ? syncTemplateWorkValues(template, workout.execution)
+      : template;
+  });
   const sessions = [...existing.sessions];
   for (const workout of workouts) {
     if (!workout.execution) continue;
@@ -290,6 +314,12 @@ async function persistWorkouts(workouts: Workout[]) {
       workout.execution.sessionId ??
       `compat-${workout.id}-${workout.execution.startedAt}`;
     const index = sessions.findIndex((session) => session.id === sessionId);
+    if (
+      index >= 0 &&
+      (sessions[index].status === "completed" ||
+        sessions[index].status === "abandoned")
+    )
+      continue;
     const session: WorkoutSession = {
       id: sessionId,
       templateId: workout.id,
@@ -306,6 +336,10 @@ async function persistWorkouts(workouts: Workout[]) {
               exercises: workout.exercises,
             }),
       execution: { ...normalizeExecution(workout.execution), sessionId },
+      sessionNotes:
+        workout.sessionNotes ??
+        (index >= 0 ? sessions[index].sessionNotes : undefined) ??
+        {},
     };
     if (index >= 0) sessions[index] = session;
     else sessions.push(session);
@@ -458,6 +492,11 @@ export const createWorkoutSession = (
   initialExerciseId?: string,
 ): WorkoutSession => {
   const sessionId = id();
+  const snapshot: WorkoutTemplate = {
+    id: template.id,
+    name: template.name,
+    exercises: clone(template.exercises),
+  };
   const execution = {
     ...startWorkoutExecution(template, now, initialExerciseId),
     sessionId,
@@ -469,7 +508,8 @@ export const createWorkoutSession = (
     startedAt: now,
     completedAt: null,
     status: execution.status,
-    snapshot: clone(template),
+    snapshot,
+    sessionNotes: {},
     execution,
   };
 };
@@ -479,6 +519,32 @@ export const hasActiveWorkoutSession = (store: WorkoutStore): boolean =>
     (session) =>
       session.status === "inProgress" || session.status === "readyToFinish",
   );
+
+export async function abandonWorkoutSession(
+  sessionId: string,
+  now = Date.now(),
+): Promise<WorkoutSession> {
+  await saveWorkoutsQueue;
+  const store = await loadWorkoutStore();
+  const session = store.sessions.find((item) => item.id === sessionId);
+  if (
+    !session ||
+    (session.status !== "inProgress" && session.status !== "readyToFinish")
+  )
+    throw new Error("Seule une séance active peut être abandonnée");
+  const abandoned: WorkoutSession = {
+    ...session,
+    status: "abandoned",
+    abandonedAt: now,
+  };
+  await saveWorkoutStore({
+    ...store,
+    sessions: store.sessions.map((item) =>
+      item.id === sessionId ? abandoned : item,
+    ),
+  });
+  return abandoned;
+}
 
 export const addExerciseToExecution = (
   execution: WorkoutExecution,

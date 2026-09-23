@@ -2074,3 +2074,88 @@ body,
 .workout-detail {
   height: var(--app-viewport-height);
 }
+
+.exercise-note-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  min-height: 21px;
+  margin-top: 3px;
+  padding: 1px 0;
+  border: 0;
+  background: transparent;
+  color: #92929a;
+  font: inherit;
+  text-align: left;
+}
+
+.exercise-note-trigger svg {
+  flex: 0 0 auto;
+}
+
+.exercise-note-trigger.has-note svg {
+  color: var(--accent-soft);
+}
+
+.exercise-note-trigger span {
+  min-width: 0;
+  overflow: hidden;
+  color: #a5a5ad;
+  font-size: 10px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notes-form {
+  display: grid;
+  gap: 12px;
+}
+
+.notes-form h2 {
+  margin: 0;
+}
+
+.exercise-note-field {
+  display: grid;
+  gap: 6px;
+  color: #a5a5ad;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.exercise-note-field textarea {
+  width: 100%;
+  min-height: 62px;
+  max-height: 140px;
+  resize: vertical;
+  padding: 9px 10px;
+  border: 1px solid #35353d;
+  border-radius: 10px;
+  outline: none;
+  background: #111114;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+
+.exercise-note-field textarea:focus {
+  border-color: #9b573e;
+}
+
+.exercise-note-field textarea:disabled {
+  opacity: 0.55;
+}
+
+.exercise-note-field small {
+  color: #777780;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0;
+}

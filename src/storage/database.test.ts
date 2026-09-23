@@ -1,6 +1,7 @@
 import { IDBFactory } from "fake-indexeddb";
 import {
   activateExecutedExercise,
+  abandonWorkoutSession,
   addExercise,
   addExerciseToExecution,
   addSet,
@@ -664,6 +665,100 @@ it("migrates a legacy workout execution idempotently", async () => {
     first.sessions.map((session) => session.id),
   );
   expect(second.templates[0]).toEqual(template);
+  expect(second.sessions[0].snapshot.exercises[0]).not.toHaveProperty(
+    "permanentNote",
+  );
+  expect(second.sessions[0].sessionNotes).toEqual({});
+});
+
+it("copies permanent notes into new session snapshots and starts with no session notes", () => {
+  const workout = addExercise(createWorkout("Push"), "Bench", 1, 90);
+  workout.exercises[0].permanentNote = "Banc position 4";
+  const session = createWorkoutSession(workout, 1000);
+
+  expect(session.snapshot.exercises[0].permanentNote).toBe("Banc position 4");
+  expect(session.sessionNotes).toEqual({});
+  expect(session.snapshot).not.toHaveProperty("sessionNotes");
+});
+
+it("synchronizes permanent notes but keeps session notes and old snapshots separate", async () => {
+  const workout = addExercise(createWorkout("Push"), "Bench", 1, 90);
+  workout.exercises[0].permanentNote = "Banc position 4";
+  const session = createWorkoutSession(workout, 1000);
+  await saveWorkouts([
+    {
+      ...workout,
+      execution: session.execution,
+      sessionNotes: { [workout.exercises[0].id]: "Épaule sensible" },
+    },
+  ]);
+
+  const updated = {
+    ...workout,
+    exercises: workout.exercises.map((exercise) =>
+      exercise.id === session.snapshot.exercises[0].id
+        ? { ...exercise, permanentNote: "Banc position 5" }
+        : exercise,
+    ),
+  };
+  await saveWorkouts([
+    {
+      ...updated,
+      execution: session.execution,
+      sessionNotes: { [workout.exercises[0].id]: "Épaule sensible" },
+    },
+  ]);
+
+  const activeStore = await loadWorkoutStore();
+  expect(activeStore.templates[0].exercises[0].permanentNote).toBe(
+    "Banc position 5",
+  );
+  expect(activeStore.sessions[0].snapshot.exercises[0].permanentNote).toBe(
+    "Banc position 5",
+  );
+  expect(activeStore.sessions[0].sessionNotes).toEqual({
+    [workout.exercises[0].id]: "Épaule sensible",
+  });
+  expect(activeStore.templates[0].exercises[0]).not.toHaveProperty(
+    "sessionNotes",
+  );
+
+  const nextSession = createWorkoutSession(updated, 2000);
+  expect(nextSession.snapshot.exercises[0].permanentNote).toBe(
+    "Banc position 5",
+  );
+  expect(nextSession.sessionNotes).toEqual({});
+
+  const completed = {
+    ...session.execution,
+    status: "completed" as const,
+    completedAt: 3000,
+  };
+  await saveWorkouts([
+    {
+      ...updated,
+      execution: completed,
+      sessionNotes: {
+        [workout.exercises[0].id]: "Épaule sensible",
+      },
+    },
+  ]);
+  const cleared = {
+    ...updated,
+    exercises: updated.exercises.map((exercise) => ({
+      ...exercise,
+      permanentNote: undefined,
+    })),
+  };
+  await saveWorkouts([cleared]);
+  const historical = await loadWorkoutStore();
+  expect(historical.templates[0].exercises[0].permanentNote).toBeUndefined();
+  expect(historical.sessions[0].snapshot.exercises[0].permanentNote).toBe(
+    "Banc position 5",
+  );
+  expect(historical.sessions[0].sessionNotes).toEqual({
+    [workout.exercises[0].id]: "Épaule sensible",
+  });
 });
 
 it("detects an active session without counting completed history", () => {
@@ -702,6 +797,63 @@ it("rejects a store containing two active sessions", async () => {
       sessions: [sessionA, sessionB],
     }),
   ).rejects.toThrow("Une seule séance");
+});
+
+it("retains abandoned sessions without making them active or changing their template", async () => {
+  const template = addExercise(createWorkout("Push"), "Bench", 2, 90);
+  const session = createWorkoutSession(template, 1000);
+  await saveWorkoutStore({
+    version: 2,
+    templates: [template],
+    sessions: [session],
+  });
+
+  const abandoned = await abandonWorkoutSession(session.id, 2000);
+  expect(abandoned).toMatchObject({
+    id: session.id,
+    templateId: template.id,
+    status: "abandoned",
+    abandonedAt: 2000,
+    snapshot: session.snapshot,
+    execution: session.execution,
+  });
+  const store = await loadWorkoutStore();
+  expect(store.templates).toEqual([template]);
+  expect(store.sessions).toEqual([abandoned]);
+  expect(hasActiveWorkoutSession(store)).toBe(false);
+  expect(await loadWorkouts()).toEqual([template]);
+
+  const restarted = createWorkoutSession(template, 3000);
+  await saveWorkoutStore({
+    ...store,
+    sessions: [...store.sessions, restarted],
+  });
+  const nextStore = await loadWorkoutStore();
+  expect(hasActiveWorkoutSession(nextStore)).toBe(true);
+  expect(nextStore.sessions.map((item) => item.id)).toEqual([
+    session.id,
+    restarted.id,
+  ]);
+});
+
+it("does not allow abandoning a completed historical session", async () => {
+  const template = createWorkout("Push");
+  const session = createWorkoutSession(template, 1000);
+  const completed = {
+    ...session,
+    status: "completed" as const,
+    completedAt: 2000,
+    execution: { ...session.execution, status: "completed" as const },
+  };
+  await saveWorkoutStore({
+    version: 2,
+    templates: [template],
+    sessions: [completed],
+  });
+  await expect(abandonWorkoutSession(session.id, 3000)).rejects.toThrow(
+    "Seule une séance active peut être abandonnée",
+  );
+  expect((await loadWorkoutStore()).sessions).toEqual([completed]);
 });
 
 it("keeps the localStorage fallback versioned", async () => {
