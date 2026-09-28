@@ -70,7 +70,12 @@ export function BottomSheet({
 
       const field = document.activeElement;
       const scroller = scrollArea.current;
-      if (!(field instanceof HTMLInputElement) || !scroller) return;
+      if (
+        (!(field instanceof HTMLInputElement) &&
+          !(field instanceof HTMLTextAreaElement)) ||
+        !scroller
+      )
+        return;
       window.requestAnimationFrame(() => {
         const fieldBounds = field.getBoundingClientRect();
         const scrollBounds = scroller.getBoundingClientRect();
@@ -115,8 +120,8 @@ export function BottomSheet({
       ref={backdrop}
       className={`modal sheet-backdrop${backdropClassName ? ` ${backdropClassName}` : ""}${closing ? " is-closing" : ""}`}
       style={style}
-      onPointerDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
+      onClick={(event) => {
+        if (event.target === event.currentTarget) event.stopPropagation();
       }}
       onWheel={(event) => {
         if (event.target === event.currentTarget) event.preventDefault();
@@ -130,13 +135,9 @@ export function BottomSheet({
         aria-label={title}
         tabIndex={-1}
         onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            event.preventDefault();
-            onClose();
-          }
           if (event.key !== "Tab") return;
           const fields = dialog.current?.querySelectorAll<HTMLElement>(
-            "button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex='-1'])",
+            "button:not(:disabled), input:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex='-1'])",
           );
           if (!fields?.length) return;
           const first = fields[0];

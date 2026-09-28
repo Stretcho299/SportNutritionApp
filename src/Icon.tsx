@@ -21,6 +21,7 @@ type IconName =
   | "performance"
   | "trophy"
   | "edit"
+  | "file-text"
   | "chevron-right";
 
 const paths: Record<IconName, ReactElement> = {
@@ -117,6 +118,12 @@ const paths: Record<IconName, ReactElement> = {
     <>
       <path d="m4 20 4.5-1 10-10-3.5-3.5-10 10L4 20Z" />
       <path d="m13.5 7 3.5 3.5" />
+    </>
+  ),
+  "file-text": (
+    <>
+      <path d="M6 3h8l4 4v14H6z" />
+      <path d="M14 3v5h5M9 12h6M9 16h6" />
     </>
   ),
   "chevron-right": <path d="m9 6 6 6-6 6" />,
