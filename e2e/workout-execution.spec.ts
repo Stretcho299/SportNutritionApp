@@ -141,7 +141,7 @@ async function prepareWorkout(page, setCount = "2") {
   await expect(
     page.getByRole("region", { name: "Aperçu de Séance E2E" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Refaire la séance" }).click();
+  await page.getByRole("button", { name: "DÉMARRER LA SÉANCE" }).click();
   await page.getByRole("button", { name: /Gérer les exercices/i }).click();
   await page
     .getByRole("dialog", { name: /Actions de la séance/i })
@@ -409,7 +409,7 @@ test("persists session kg and reps through exercise changes, reload, and a new s
   await expect(
     page.getByRole("region", { name: "Aperçu de Séance E2E" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Refaire la séance" }).click();
+  await page.getByRole("button", { name: "DÉMARRER LA SÉANCE" }).click();
   await page.getByRole("button", { name: /Démarrer la séance/i }).click();
   const newSessionA = page.getByRole("region", {
     name: "Séries de Exercice A",
@@ -507,7 +507,7 @@ test("edits upcoming and performed sets and carries values into the next session
   await expect(
     page.getByRole("region", { name: "Aperçu de Séance E2E" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Refaire la séance" }).click();
+  await page.getByRole("button", { name: "DÉMARRER LA SÉANCE" }).click();
   await page.getByRole("button", { name: /Démarrer la séance/i }).click();
   await expect(
     page
@@ -576,7 +576,7 @@ test("persists structural session changes in the template and next session", asy
   await expect(
     page.getByRole("region", { name: "Aperçu de Séance E2E" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Refaire la séance" }).click();
+  await page.getByRole("button", { name: "DÉMARRER LA SÉANCE" }).click();
   await page.getByRole("button", { name: /Démarrer la séance/i }).click();
   await page
     .getByRole("list", { name: "Exercices" })
@@ -713,10 +713,16 @@ test("reuses a template and persists independent session snapshots", async ({
   await expect(
     page.getByRole("region", { name: "Aperçu de Séance E2E" }),
   ).toBeVisible();
+  await expect(page.getByText("Première séance")).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Démarrer la séance" }),
-  ).toHaveCount(0);
-  await page.getByRole("button", { name: "Refaire la séance" }).click();
+    page.getByRole("button", {
+      name: "DÉMARRER LA SÉANCE",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "DÉMARRER LA SÉANCE", exact: true })
+    .click();
   await page.getByRole("button", { name: "Démarrer la séance" }).click();
   await expect
     .poll(async () =>
@@ -875,7 +881,17 @@ test("returns to dashboard and resumes the same active session, then abandons it
   await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
   await expect(page.getByText("Séance E2E")).toBeVisible();
   await page.locator(".workout-card").click();
-  await page.getByRole("button", { name: "Refaire la séance" }).click();
+  const abandonedPreview = page.getByRole("region", {
+    name: "Aperçu de Séance E2E",
+  });
+  await expect(abandonedPreview.getByText("Première séance")).toBeVisible();
+  await expect(
+    abandonedPreview.locator(".preview-metric-unavailable"),
+  ).toHaveCount(0);
+  await expect(abandonedPreview.getByText("Pas encore de données")).toHaveCount(
+    0,
+  );
+  await page.getByRole("button", { name: "DÉMARRER LA SÉANCE" }).click();
   await page.getByRole("button", { name: /Démarrer la séance/i }).click();
   await expect
     .poll(async () =>
@@ -897,7 +913,7 @@ test("does not create a second active session while another template is active",
   await page.getByRole("textbox", { name: "Nom" }).fill("Deuxième modèle");
   await saveSheet(page, "Séance", "Deuxième modèle");
   await page.getByText("Deuxième modèle").click();
-  await page.getByRole("button", { name: "Refaire la séance" }).click();
+  await page.getByRole("button", { name: "DÉMARRER LA SÉANCE" }).click();
   await addExercise(page, "Exercice B", "1");
   await page.getByRole("button", { name: /Démarrer la séance/i }).click();
   await expect
@@ -1107,7 +1123,7 @@ test("persists permanent and session exercise notes independently", async ({
   ).toHaveCount(0);
   await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
   await page.locator(".workout-card").click();
-  await page.getByRole("button", { name: "Refaire la séance" }).click();
+  await page.getByRole("button", { name: "DÉMARRER LA SÉANCE" }).click();
   await page.getByRole("button", { name: /Démarrer la séance/i }).click();
   await page.getByRole("button", { name: "Notes de l’exercice" }).click();
   const nextNotes = page.getByRole("dialog", { name: "Notes de l’exercice" });

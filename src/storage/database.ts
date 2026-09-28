@@ -43,7 +43,9 @@ export type WorkoutStore = {
   templates: WorkoutTemplate[];
   sessions: WorkoutSession[];
 };
-export const defaultRestSeconds = 90;
+export const defaultInitialSetCount = 3;
+export const defaultRestSeconds = 150;
+export const legacyDefaultRestSeconds = 90;
 const key = "sport-nutrition-workouts";
 const id = () =>
   globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
@@ -64,7 +66,7 @@ const blankSet = (position: number, restSeconds: number): PlannedSet => ({
 export const addExercise = (
   w: Workout,
   name: string,
-  initialSetCount = 1,
+  initialSetCount = defaultInitialSetCount,
   restSeconds = defaultRestSeconds,
 ): Workout => {
   if (!Number.isSafeInteger(initialSetCount) || initialSetCount <= 0)
@@ -97,10 +99,47 @@ export const addSet = (e: Exercise): Exercise => ({
       e.plannedSets.length,
       sort(e.plannedSets).at(-1)?.restSeconds ??
         e.defaultRestSeconds ??
-        defaultRestSeconds,
+        legacyDefaultRestSeconds,
     ),
   ],
 });
+export const hasCompletedWorkoutSession = (
+  sessions: WorkoutSession[],
+  templateId: string,
+): boolean =>
+  sessions.some(
+    (session) =>
+      session.templateId === templateId && session.status === "completed",
+  );
+
+export const setIdsFromSelection = (
+  plannedSets: PlannedSet[],
+  selectedSetId: string,
+  applyToFollowing: boolean,
+): string[] => {
+  const ordered = sort(plannedSets);
+  const selectedIndex = ordered.findIndex((set) => set.id === selectedSetId);
+  if (selectedIndex < 0) return [];
+  return ordered
+    .slice(selectedIndex, applyToFollowing ? undefined : selectedIndex + 1)
+    .map((set) => set.id);
+};
+
+export const updatePlannedSetValues = (
+  exercise: Exercise,
+  setIds: string[],
+  field: "repetitions" | "weightKg" | "restSeconds",
+  value: number | null,
+): Exercise => {
+  const affectedSetIds = new Set(setIds);
+  return {
+    ...exercise,
+    plannedSets: exercise.plannedSets.map((set) =>
+      affectedSetIds.has(set.id) ? { ...set, [field]: value } : set,
+    ),
+  };
+};
+
 export const reorder = <T extends { position: number }>(
   items: T[],
   from: number,
@@ -572,14 +611,15 @@ export const addExerciseToExecution = (
   });
 };
 
-export const updateExecutedSet = (
+export const updateExecutedSets = (
   execution: WorkoutExecution,
   exerciseId: string,
-  setId: string,
+  setIds: string[],
   field: "repetitions" | "weightKg" | "restSeconds",
   value: number | null,
 ): WorkoutExecution => {
   if (execution.status === "completed") return execution;
+  const affectedSetIds = new Set(setIds);
   return {
     ...execution,
     exercises: execution.exercises.map((exercise) =>
@@ -588,12 +628,21 @@ export const updateExecutedSet = (
         : {
             ...exercise,
             sets: exercise.sets.map((set) =>
-              set.setId !== setId ? set : { ...set, [field]: value },
+              !affectedSetIds.has(set.setId) ? set : { ...set, [field]: value },
             ),
           },
     ),
   };
 };
+
+export const updateExecutedSet = (
+  execution: WorkoutExecution,
+  exerciseId: string,
+  setId: string,
+  field: "repetitions" | "weightKg" | "restSeconds",
+  value: number | null,
+): WorkoutExecution =>
+  updateExecutedSets(execution, exerciseId, [setId], field, value);
 
 export const addSetToExecution = (
   execution: WorkoutExecution,

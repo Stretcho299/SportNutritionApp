@@ -1,15 +1,20 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 
-async function addExercise(page: Page, name: string, count = "2", rest = "90") {
+async function addExercise(
+  page: Page,
+  name: string,
+  count = "3",
+  rest = "150",
+) {
   await page.getByRole("button", { name: "Gérer les exercices" }).click();
   await page
     .getByRole("dialog", { name: "Actions de la séance" })
     .getByRole("button", { name: "Ajouter un exercice", exact: true })
     .click();
   await page.getByRole("textbox", { name: "Nom" }).fill(name);
-  if (count !== "1")
+  if (count !== "3")
     await choosePickerValue(page, "Nombre de séries initiales", Number(count));
-  if (rest !== "90")
+  if (rest !== "150")
     await choosePickerValue(page, "Repos par défaut", Number(rest));
   const form = page.getByRole("dialog", { name: "Exercice" });
   await form.getByRole("button", { name: "Enregistrer" }).click();
@@ -172,7 +177,7 @@ async function createWorkoutAndOpenPreparation(page: Page, name: string) {
   await workoutForm.getByRole("button", { name: "Enregistrer" }).click();
   await expect(workoutForm).toHaveCount(0);
   await page.locator(".workout-card").click();
-  await page.getByRole("button", { name: "Refaire la séance" }).click();
+  await page.getByRole("button", { name: "DÉMARRER LA SÉANCE" }).click();
 }
 
 for (const width of [390, 320]) {
@@ -345,11 +350,14 @@ for (const width of [390, 320]) {
     await expect(
       page.getByRole("region", { name: "Aperçu de Force · Haut du corps" }),
     ).toBeVisible();
+    await expect(page.getByText("Première séance")).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "Démarrer la séance" }),
-    ).toHaveCount(0);
-    await expect(page.getByText("Pas encore de données")).toHaveCount(2);
-    await page.getByRole("button", { name: "Refaire la séance" }).click();
+      page.getByRole("button", { name: "DÉMARRER LA SÉANCE" }),
+    ).toBeVisible();
+    await expect(page.locator(".preview-metric-unavailable")).toHaveCount(0);
+    await expect(page.getByText("Pas encore de données")).toHaveCount(0);
+    await expect(page.locator(".preview-metrics > div")).toHaveCount(2);
+    await page.getByRole("button", { name: "DÉMARRER LA SÉANCE" }).click();
     await addExercise(page, "Développé couché", "12");
     await page.getByRole("button", { name: "Retour aux séances" }).click();
     const populatedPreview = page.getByRole("region", {
@@ -672,7 +680,7 @@ for (const width of [390, 320]) {
     await page.reload();
     await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
     await page.locator(".workout-card").click();
-    await page.getByRole("button", { name: "Refaire la séance" }).click();
+    await page.getByRole("button", { name: "DÉMARRER LA SÉANCE" }).click();
     await expect(
       page.getByRole("button", { name: "Démarrer la séance" }),
     ).toBeVisible();
@@ -750,7 +758,7 @@ test("finishing the rest marks the set performed and advances progress", async (
   await page.getByRole("textbox", { name: "Nom" }).fill("Tempo");
   await page.getByRole("button", { name: "Enregistrer" }).click();
   await page.locator(".workout-card").click();
-  await page.getByRole("button", { name: "Refaire la séance" }).click();
+  await page.getByRole("button", { name: "DÉMARRER LA SÉANCE" }).click();
   await addExercise(page, "Squat", "2", "1");
   await page.getByRole("button", { name: "Démarrer la séance" }).click();
   const firstSet = page
@@ -774,7 +782,7 @@ test("manually scrolls an overflowing timeline before locking reorder", async ({
   await page.getByRole("textbox", { name: "Nom" }).fill("Overflow");
   await page.getByRole("button", { name: "Enregistrer" }).click();
   await page.locator(".workout-card").click();
-  await page.getByRole("button", { name: "Refaire la séance" }).click();
+  await page.getByRole("button", { name: "DÉMARRER LA SÉANCE" }).click();
   for (let index = 0; index < 8; index += 1)
     await addExercise(page, "Exercice " + (index + 1), "1");
 
@@ -837,7 +845,7 @@ test("exercise navigation animates according to workout order without changing e
   await page.getByRole("textbox", { name: "Nom" }).fill("Direction");
   await page.getByRole("button", { name: "Enregistrer" }).click();
   await page.locator(".workout-card").click();
-  await page.getByRole("button", { name: "Refaire la séance" }).click();
+  await page.getByRole("button", { name: "DÉMARRER LA SÉANCE" }).click();
   await addExercise(page, "Premier", "1");
   await addExercise(page, "Deuxième", "1");
   await addExercise(page, "Troisième", "1");
