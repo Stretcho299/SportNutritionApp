@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { BottomSheet, bottomSheetCloseDuration } from "./BottomSheet";
 
@@ -111,6 +111,7 @@ export function SetValuePicker({
   formatValue,
   followingSeriesLabel,
   onSave,
+  onOverlayChange,
 }: {
   label: string;
   displayLabel?: string;
@@ -121,6 +122,7 @@ export function SetValuePicker({
   formatValue: (value: number | null) => string;
   followingSeriesLabel?: string;
   onSave: (value: number, applyToFollowing: boolean) => void;
+  onOverlayChange?: (isOpen: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -128,7 +130,16 @@ export function SetValuePicker({
   const [selection, setSelection] = useState<number[]>([]);
   const [applyToFollowing, setApplyToFollowing] = useState(false);
   const closeTimeout = useRef<number | undefined>(undefined);
+  const overlayOpen = useRef(false);
   const content = useRef<HTMLDivElement>(null);
+  const setOverlayOpen = useCallback(
+    (next: boolean) => {
+      if (overlayOpen.current === next) return;
+      overlayOpen.current = next;
+      onOverlayChange?.(next);
+    },
+    [onOverlayChange],
+  );
 
   const closePicker = () => {
     if (closing) return;
@@ -137,6 +148,7 @@ export function SetValuePicker({
     closeTimeout.current = window.setTimeout(() => {
       setMounted(false);
       setClosing(false);
+      setOverlayOpen(false);
     }, bottomSheetCloseDuration);
   };
 
@@ -147,6 +159,7 @@ export function SetValuePicker({
     setApplyToFollowing(false);
     setMounted(true);
     setOpen(true);
+    setOverlayOpen(true);
   };
 
   const save = () => {
@@ -156,7 +169,13 @@ export function SetValuePicker({
     closePicker();
   };
 
-  useEffect(() => () => window.clearTimeout(closeTimeout.current), []);
+  useEffect(
+    () => () => {
+      window.clearTimeout(closeTimeout.current);
+      setOverlayOpen(false);
+    },
+    [setOverlayOpen],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -245,7 +264,7 @@ export function SetValuePicker({
                   </div>
                 )}
                 <button type="button" className="picker-save" onClick={save}>
-                  Valider
+                  ENREGISTRER
                 </button>
               </footer>
             </div>

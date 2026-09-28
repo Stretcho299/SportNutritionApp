@@ -65,6 +65,7 @@ export default function App() {
   const [exerciseId, setExerciseId] = useState("");
   const [dialog, setDialog] = useState<Dialog>(null);
   const [dialogClosing, setDialogClosing] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [reorderDraftIds, setReorderDraftIds] = useState<string[] | null>(null);
   const [name, setName] = useState("");
   const [initialSetCount, setInitialSetCount] = useState(
@@ -1219,6 +1220,7 @@ export default function App() {
                       {!execution && <p className="set-status">À venir</p>}
                       <div className="set-metrics">
                         <SetValuePicker
+                          onOverlayChange={setPickerOpen}
                           label="Répétitions"
                           displayLabel="Répétitions"
                           value={
@@ -1259,6 +1261,7 @@ export default function App() {
                           }
                         />
                         <SetValuePicker
+                          onOverlayChange={setPickerOpen}
                           label="Charge (kg)"
                           displayLabel="Charge"
                           value={executionSet(s.id)?.weightKg ?? s.weightKg}
@@ -1297,6 +1300,7 @@ export default function App() {
                           }
                         />
                         <SetValuePicker
+                          onOverlayChange={setPickerOpen}
                           label="Repos"
                           value={
                             executionSet(s.id)?.restSeconds ?? s.restSeconds
@@ -1598,6 +1602,7 @@ export default function App() {
                 {dialog === "exercise" && (
                   <div className="compact-form-fields">
                     <SetValuePicker
+                      onOverlayChange={setPickerOpen}
                       label="Nombre de séries initiales"
                       displayLabel="Séries"
                       value={Number(initialSetCount)}
@@ -1612,6 +1617,7 @@ export default function App() {
                       onSave={(value) => setInitialSetCount(String(value))}
                     />
                     <SetValuePicker
+                      onOverlayChange={setPickerOpen}
                       label="Repos par défaut"
                       displayLabel="Repos"
                       value={Number(rest)}
@@ -1643,7 +1649,10 @@ export default function App() {
           </form>
         </BottomSheet>
       )}
-      <BottomNavigation onWorkouts={() => setScreen("list")} />
+      <BottomNavigation
+        onWorkouts={() => setScreen("list")}
+        isModalOpen={!!dialog || !!confirmation || pickerOpen}
+      />
       <OrientationGuard />
     </main>
   );

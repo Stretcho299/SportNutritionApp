@@ -67,7 +67,9 @@ async function choosePickerValue(page: Page, label: string, value: number) {
       .getByRole("option", { name: String(value), exact: true })
       .click();
   }
-  await picker.getByRole("button", { name: "Valider" }).click();
+  await picker
+    .getByRole("button", { name: "ENREGISTRER", exact: true })
+    .click();
 }
 
 async function flickWheel(
@@ -191,7 +193,9 @@ for (const width of [390, 320]) {
       name: "Musculation",
     });
     await expect(muscleNavigation).toHaveAttribute("aria-current", "page");
-    expect((await muscleNavigation.textContent())?.trim()).toBe("");
+    await expect(
+      muscleNavigation.locator(".bottom-navigation-label"),
+    ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Nutrition" }),
     ).toHaveAttribute("aria-disabled", "true");
@@ -209,6 +213,10 @@ for (const width of [390, 320]) {
       .getByRole("navigation")
       .evaluate((navigation) => {
         const bounds = navigation.getBoundingClientRect();
+        const surface = navigation.querySelector<HTMLElement>(
+          ".bottom-navigation-surface",
+        )!;
+        const surfaceBounds = surface.getBoundingClientRect();
         const buttonBounds = navigation
           .querySelector("button")!
           .getBoundingClientRect();
@@ -223,6 +231,12 @@ for (const width of [390, 320]) {
         return {
           bottom: bounds.bottom,
           height: bounds.height,
+          surfaceLeft: surfaceBounds.left,
+          surfaceRight: surfaceBounds.right,
+          surfaceWidth: surfaceBounds.width,
+          surfaceCenter: surfaceBounds.left + surfaceBounds.width / 2,
+          surfaceBottomGap: viewportBottom - surfaceBounds.bottom,
+          surfaceRadius: getComputedStyle(surface).borderRadius,
           buttonHeight: buttonBounds.height,
           buttonBottomGap: viewportBottom - buttonBounds.bottom,
           iconBottomGap: viewportBottom - iconBounds.bottom,
@@ -230,9 +244,6 @@ for (const width of [390, 320]) {
           visualOffset: Number.parseFloat(
             rootStyles.getPropertyValue("--bottom-nav-visual-offset"),
           ),
-          activeRadius: getComputedStyle(
-            navigation.querySelector("button.active")!,
-          ).borderRadius,
           viewportBottom,
         };
       });
@@ -246,17 +257,20 @@ for (const width of [390, 320]) {
       navigationGeometry.viewportBottom * 0.08,
     );
     expect(navigationGeometry.buttonHeight).toBeGreaterThanOrEqual(44);
-    expect(navigationGeometry.activeRadius).toBe("12px");
-    expect(navigationGeometry.buttonBottomGap).toBeCloseTo(
-      navigationGeometry.paddingBottom - navigationGeometry.visualOffset,
+    expect(navigationGeometry.surfaceRadius).toBe("999px");
+    expect(navigationGeometry.surfaceCenter).toBeCloseTo(width / 2, 0);
+    expect(navigationGeometry.surfaceLeft).toBeGreaterThanOrEqual(12);
+    expect(navigationGeometry.surfaceRight).toBeLessThanOrEqual(width - 12);
+    expect(navigationGeometry.surfaceWidth).toBeLessThan(width - 24);
+    expect(navigationGeometry.surfaceBottomGap).toBeCloseTo(
+      simulatedSafeInset + 10,
       0,
     );
-    expect(navigationGeometry.buttonBottomGap).toBeGreaterThanOrEqual(
-      simulatedSafeInset * 0.4 - navigationGeometry.visualOffset,
+    expect(navigationGeometry.buttonBottomGap).toBeCloseTo(
+      navigationGeometry.surfaceBottomGap,
+      0,
     );
-    expect(navigationGeometry.buttonBottomGap).toBeLessThan(
-      simulatedSafeInset * 0.6 - navigationGeometry.visualOffset,
-    );
+    expect(navigationGeometry.visualOffset).toBe(14);
     expect(navigationGeometry.iconBottomGap).toBeGreaterThan(
       navigationGeometry.buttonBottomGap + 8,
     );
@@ -324,11 +338,39 @@ for (const width of [390, 320]) {
     expect(await page.evaluate(() => document.body.style.position)).toBe(
       "fixed",
     );
+    const navigationDuringSheet = await page
+      .locator(".bottom-navigation-surface")
+      .boundingBox();
+    expect(navigationDuringSheet).not.toBeNull();
+    expect(navigationDuringSheet!.x).toBeCloseTo(
+      navigationGeometry.surfaceLeft,
+      0,
+    );
+    expect(navigationDuringSheet!.y).toBeCloseTo(
+      navigationGeometry.viewportBottom -
+        navigationGeometry.buttonBottomGap -
+        navigationGeometry.buttonHeight,
+      0,
+    );
+    await expect(page.locator(".bottom-navigation")).toHaveAttribute(
+      "data-modal-open",
+      "true",
+    );
     await screenshot(page, info, "workout-sheet");
     await workoutName.fill("Force · Haut du corps");
     await workoutForm.getByRole("button", { name: "Enregistrer" }).click();
     await expect(workoutForm).toHaveCount(0);
     expect(await page.evaluate(() => document.body.style.position)).toBe("");
+    await expect(page.locator(".bottom-navigation")).not.toHaveAttribute(
+      "data-modal-open",
+    );
+    const navigationAfterSheet = await page
+      .locator(".bottom-navigation-surface")
+      .boundingBox();
+    expect(navigationAfterSheet!.x).toBeCloseTo(
+      navigationGeometry.surfaceLeft,
+      0,
+    );
     await screenshot(page, info, "library");
     await page.getByRole("button", { name: "Retour aux séances" }).click();
     await expect(page.getByRole("region", { name: "Entraînement" })).toHaveCSS(

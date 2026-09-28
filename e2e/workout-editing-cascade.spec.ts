@@ -67,7 +67,9 @@ async function choosePickerValue(page: Page, label: string, value: number) {
       .getByRole("option", { name: String(value), exact: true })
       .click();
   }
-  await picker.getByRole("button", { name: "Valider" }).click();
+  await picker
+    .getByRole("button", { name: "ENREGISTRER", exact: true })
+    .click();
   await expect(picker).toHaveCount(0);
 }
 
@@ -119,7 +121,9 @@ async function editSetValue(
   } else {
     await expect(toggle).toHaveCount(0);
   }
-  await picker.getByRole("button", { name: "Valider" }).click();
+  await picker
+    .getByRole("button", { name: "ENREGISTRER", exact: true })
+    .click();
   await expect(picker).toHaveCount(0);
 }
 
