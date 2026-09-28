@@ -482,6 +482,14 @@ html {
   letter-spacing: 0.05em;
 }
 
+.session-duration {
+  color: #c4c4cb;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
 .progress-track {
   height: 5px;
   margin-top: 6px;

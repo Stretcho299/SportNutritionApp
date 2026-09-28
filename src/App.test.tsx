@@ -55,7 +55,6 @@ async function openEmptyWorkout() {
   expect(storedWorkouts()[0].name).toBe("Push");
   await waitForMotion();
   fireEvent.click(screen.getByText("Push").closest("button")!);
-  fireEvent.click(screen.getByRole("button", { name: "DÉMARRER LA SÉANCE" }));
   return view;
 }
 
@@ -236,39 +235,30 @@ it("uses layout bounds without a keyboard and visualViewport with one", async ()
   expect(backdrop).toHaveAttribute("data-keyboard-open", "false");
 });
 
-it("opens a prepared workout preview with only persisted program data", async () => {
+it("opens first-time workouts directly in preparation without starting a session", async () => {
   const view = await openEmptyWorkout();
+  expect(screen.queryByRole("region", { name: "Aperçu de Push" })).toBeNull();
+  expect(screen.getByText("Aucun exercice")).toBeInTheDocument();
+  expect(storedWorkouts()[0].execution).toBeUndefined();
   await createExercise("Squat", 3, 90);
   await createExercise("Row", 2, 60);
   fireEvent.click(screen.getByLabelText("Retour aux séances"));
-  fireEvent.click(screen.getByLabelText("Retour aux séances"));
+  expect(
+    screen.getByRole("region", { name: "Mes séances" }),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Aperçu de Push" })).toBeNull();
   fireEvent.click(screen.getByText("Push").closest("button")!);
-  const preview = screen.getByRole("region", { name: "Aperçu de Push" });
+  expect(screen.getByRole("heading", { name: "Squat" })).toBeInTheDocument();
   expect(
-    Array.from(preview.querySelectorAll(".preview-metrics strong")).map(
-      (metric) => metric.textContent,
-    ),
-  ).toEqual(["2", "5"]);
-  expect(preview.querySelectorAll(".preview-metric-unavailable")).toHaveLength(
-    0,
-  );
-  expect(preview.querySelectorAll(".preview-metrics > div")).toHaveLength(2);
-  expect(within(preview).getByText("Squat")).toBeInTheDocument();
-  expect(within(preview).getByText("3 séries")).toBeInTheDocument();
-  expect(within(preview).getByText("Row")).toBeInTheDocument();
-  expect(within(preview).getByText("2 séries")).toBeInTheDocument();
-  expect(within(preview).getByText("Première séance")).toBeInTheDocument();
-  expect(
-    within(preview).getByRole("button", { name: "DÉMARRER LA SÉANCE" }),
-  ).toBeEnabled();
-  expect(within(preview).queryByText("Pas encore de données")).toBeNull();
-  fireEvent.click(
-    within(preview).getByRole("button", { name: "DÉMARRER LA SÉANCE" }),
-  );
+    screen.getByRole("button", { name: "Row · À venir" }),
+  ).toBeInTheDocument();
   expect(storedWorkouts()[0].execution).toBeUndefined();
   expect(
     screen.getByRole("button", { name: "Démarrer la séance" }),
   ).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Démarrer la séance" }));
+  expect(storedWorkouts()[0].execution?.startedAt).toEqual(expect.any(Number));
+  expect(storedWorkouts()[0].execution?.sessionId).toBeDefined();
   view.unmount();
 });
 
@@ -460,7 +450,6 @@ it("selects bounded picker values and persists repetitions, half-kilograms and s
   view.unmount();
   render(<App />);
   await openPreparedWorkout();
-  fireEvent.click(screen.getByRole("button", { name: "DÉMARRER LA SÉANCE" }));
   expect(screen.getByLabelText("Répétitions")).toHaveAttribute(
     "data-value",
     "24",
@@ -509,7 +498,6 @@ it("reorders exercises in a dedicated sheet and retains selection and persisted 
   view.unmount();
   render(<App />);
   await openPreparedWorkout();
-  fireEvent.click(screen.getByRole("button", { name: "DÉMARRER LA SÉANCE" }));
   expect(
     within(screen.getByRole("list", { name: "Exercices" })).getAllByRole(
       "button",
@@ -616,7 +604,6 @@ it("creates N blank sets with the requested rest and preserves blanks after relo
   view.unmount();
   render(<App />);
   await openPreparedWorkout();
-  fireEvent.click(screen.getByRole("button", { name: "DÉMARRER LA SÉANCE" }));
   expect(screen.getAllByLabelText("Charge (kg)")).toHaveLength(4);
   for (const field of screen.getAllByLabelText("Charge (kg)"))
     expect(field).toHaveAttribute("data-value", "");
@@ -733,7 +720,6 @@ it("keeps fixed exercise zones outside a long series list", async () => {
 
   const view = render(<App />);
   await openPreparedWorkout("Layout fixture");
-  fireEvent.click(screen.getByRole("button", { name: "DÉMARRER LA SÉANCE" }));
 
   const preparation = view.container.querySelector<HTMLDivElement>(
     ".workout-preparation",
@@ -951,16 +937,38 @@ it("keeps a completed workout final after returning home and reloading", async (
   expect(
     screen.getByRole("region", { name: "Aperçu de Push" }),
   ).toBeInTheDocument();
+  const preview = screen.getByRole("region", { name: "Aperçu de Push" });
+  expect(within(preview).getByText("Durée moyenne")).toBeInTheDocument();
+  expect(within(preview).getByText("Calories moyennes")).toBeInTheDocument();
+  expect(within(preview).getAllByText("Pas encore de données")).toHaveLength(2);
   fireEvent.click(screen.getByLabelText("Retour aux séances"));
   fireEvent.click(screen.getByText("Push"));
-  fireEvent.click(screen.getByRole("button", { name: "DÉMARRER LA SÉANCE" }));
+  expect(
+    screen.getByRole("button", { name: "PRÉPARER LA SÉANCE" }),
+  ).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: "PRÉPARER LA SÉANCE" }));
   expect(screen.getByText("Démarrer la séance")).toBeInTheDocument();
   view.unmount();
   render(<App />);
   await openPreparedWorkout();
-  fireEvent.click(screen.getByRole("button", { name: "DÉMARRER LA SÉANCE" }));
+  fireEvent.click(screen.getByRole("button", { name: "PRÉPARER LA SÉANCE" }));
   expect(screen.getByText("Démarrer la séance")).toBeInTheDocument();
   expect(storedWorkouts()[0].execution?.status).toBe("completed");
+});
+
+it("derives the global workout clock from startedAt and syncs on foreground", async () => {
+  const view = await openEmptyWorkout();
+  await createExercise("Squat", 1, 30);
+  const now = vi.spyOn(Date, "now").mockReturnValue(100_000);
+  fireEvent.click(screen.getByRole("button", { name: "Démarrer la séance" }));
+  const timer = screen.getByRole("timer", { name: "Durée de la séance" });
+  expect(timer).toHaveTextContent("◷ 00:00");
+  expect(timer).toHaveAttribute("data-started-at", "100000");
+  now.mockReturnValue(225_000);
+  fireEvent(window, new Event("focus"));
+  expect(timer).toHaveTextContent("◷ 02:05");
+  expect(storedWorkouts()[0].execution?.startedAt).toBe(100_000);
+  view.unmount();
 });
 
 it("keeps future exercise states unchanged while browsing and starts them explicitly", async () => {

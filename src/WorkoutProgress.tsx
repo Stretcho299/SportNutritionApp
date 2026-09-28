@@ -1,4 +1,5 @@
 import { ActiveRestTimer } from "./ActiveRestTimer";
+import { formatSessionDuration } from "./formatSessionDuration";
 import type { WorkoutExecution, Workout } from "./storage/database";
 
 export function WorkoutProgress({
@@ -40,6 +41,14 @@ export function WorkoutProgress({
     (exercise) => exercise.id === currentExercise?.exerciseId,
   )?.name;
   const ratio = sets.length > 0 ? settled / sets.length : 0;
+  const sessionClock =
+    execution.status === "completed" && execution.completedAt != null
+      ? execution.completedAt
+      : clock;
+  const elapsedSeconds = Math.max(
+    0,
+    Math.floor((sessionClock - execution.startedAt) / 1000),
+  );
   return (
     <section
       className={`workout-progress${resting && onFinishRest ? " has-rest" : ""}`}
@@ -49,6 +58,15 @@ export function WorkoutProgress({
         <div className="progress-label">
           <span>
             {execution.status === "completed" ? "Terminée" : "Progression"}
+          </span>
+          <span
+            className="session-duration"
+            role="timer"
+            aria-label="Durée de la séance"
+            data-started-at={execution.startedAt}
+            data-completed-at={execution.completedAt ?? ""}
+          >
+            ◷ {formatSessionDuration(elapsedSeconds)}
           </span>
           <strong>
             {settled} / {sets.length}

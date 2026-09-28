@@ -8,7 +8,7 @@ it("renders the compact frozen-duration timer and keeps its finish action", () =
     <ActiveRestTimer remaining={25} total={30} onFinish={onFinish} />,
   );
 
-  const timer = screen.getByRole("timer");
+  const timer = screen.getByRole("timer", { name: "Temps de repos restant" });
   expect(timer).toHaveTextContent("0:25");
   expect(timer).toHaveAttribute("data-reference-seconds", "30");
   expect(timer.querySelector(".countdown-value")).toHaveAttribute(
@@ -19,9 +19,8 @@ it("renders the compact frozen-duration timer and keeps its finish action", () =
   expect(onFinish).toHaveBeenCalledOnce();
 
   rerender(<ActiveRestTimer remaining={24} total={30} onFinish={onFinish} />);
-  expect(screen.getByRole("timer")).toHaveAttribute(
-    "data-reference-seconds",
-    "30",
-  );
+  expect(
+    screen.getByRole("timer", { name: "Temps de repos restant" }),
+  ).toHaveAttribute("data-reference-seconds", "30");
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });

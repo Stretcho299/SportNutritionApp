@@ -19,7 +19,7 @@ async function createWorkoutPreparation(page: Page, name: string) {
   await workoutForm.getByRole("button", { name: "Enregistrer" }).click();
   await expect(workoutForm).toHaveCount(0);
   await page.locator(".workout-card").click();
-  await page.getByRole("button", { name: "DÉMARRER LA SÉANCE" }).click();
+  await expect(page.locator(".workout-preparation, .empty")).toBeVisible();
 }
 
 async function addExercise(page: Page, name: string) {
