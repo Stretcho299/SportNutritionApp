@@ -9,7 +9,11 @@ import {
   completeWorkoutExecution,
   createWorkout,
   createWorkoutSession,
+  defaultInitialSetCount,
+  defaultRestSeconds,
   hasActiveWorkoutSession,
+  hasCompletedWorkoutSession,
+  legacyDefaultRestSeconds,
   finishExecutedRest,
   loadWorkouts,
   loadWorkoutStore,
@@ -22,8 +26,11 @@ import {
   skipExecutedExercise,
   startExecutedSetRest,
   startWorkoutExecution,
+  setIdsFromSelection,
   type Workout,
   updateExecutedSet,
+  updateExecutedSets,
+  updatePlannedSetValues,
 } from "./database";
 
 beforeEach(() => vi.stubGlobal("indexedDB", new IDBFactory()));
@@ -43,6 +50,223 @@ it("round-trips blank and subsequently edited sets through IndexedDB", async () 
     repetitions: null,
     restSeconds: 120,
   });
+});
+
+it("creates new exercises with three sets and 150 seconds of rest by default", () => {
+  const workout = addExercise(createWorkout("Push"), "Bench");
+  const exercise = workout.exercises[0];
+  expect(defaultInitialSetCount).toBe(3);
+  expect(defaultRestSeconds).toBe(150);
+  expect(legacyDefaultRestSeconds).toBe(90);
+  expect(
+    addSet({ ...exercise, plannedSets: [] }).plannedSets[0].restSeconds,
+  ).toBe(150);
+  expect(exercise.plannedSets).toHaveLength(3);
+  expect(exercise.plannedSets.map((set) => set.restSeconds)).toEqual([
+    150, 150, 150,
+  ]);
+
+  const execution = startWorkoutExecution(workout, 1000);
+  const updatedExecution = addExerciseToExecution(
+    execution,
+    addExercise(createWorkout("Unused"), "Row").exercises[0],
+  );
+  expect(updatedExecution.exercises[1].sets).toHaveLength(3);
+  expect(
+    updatedExecution.exercises[1].sets.map((set) => set.restSeconds),
+  ).toEqual([150, 150, 150]);
+});
+
+it("shows first-session state until a completed session exists for the template", () => {
+  const workout = addExercise(createWorkout("Push"), "Bench");
+  const session = createWorkoutSession(workout, 1000);
+  expect(hasCompletedWorkoutSession([], workout.id)).toBe(false);
+  expect(
+    hasCompletedWorkoutSession(
+      [{ ...session, status: "abandoned", abandonedAt: 2000 }],
+      workout.id,
+    ),
+  ).toBe(false);
+  expect(
+    hasCompletedWorkoutSession(
+      [{ ...session, status: "completed", completedAt: 3000 }],
+      workout.id,
+    ),
+  ).toBe(true);
+  expect(
+    hasCompletedWorkoutSession(
+      [{ ...session, templateId: "another-template", status: "completed" }],
+      workout.id,
+    ),
+  ).toBe(false);
+});
+
+it("selects current and following planned sets in displayed order and preserves IDs", () => {
+  let workout = addExercise(createWorkout("Push"), "Bench", 4, 30);
+  workout = addExercise(workout, "Row", 2, 60);
+  const [bench, row] = workout.exercises;
+  const originalIds = bench.plannedSets.map((set) => set.id);
+  const selectedId = originalIds[1];
+  const cascadeIds = setIdsFromSelection(bench.plannedSets, selectedId, true);
+  const updated = updatePlannedSetValues(bench, cascadeIds, "weightKg", 80);
+  expect(updated.plannedSets.map((set) => set.weightKg)).toEqual([
+    null,
+    80,
+    80,
+    80,
+  ]);
+  expect(updated.plannedSets.map((set) => set.repetitions)).toEqual([
+    null,
+    null,
+    null,
+    null,
+  ]);
+  expect(updated.plannedSets.map((set) => set.restSeconds)).toEqual([
+    30, 30, 30, 30,
+  ]);
+  expect(updated.plannedSets.map((set) => set.id)).toEqual(originalIds);
+  expect(updated.plannedSets.map((set) => set.position)).toEqual([0, 1, 2, 3]);
+  expect(row.plannedSets.map((set) => set.weightKg)).toEqual([null, null]);
+  const execution = startWorkoutExecution(workout, 1000);
+  const executionAfterCascade = updateExecutedSets(
+    execution,
+    bench.id,
+    cascadeIds,
+    "weightKg",
+    80,
+  );
+  expect(
+    executionAfterCascade.exercises[1].sets.map((set) => set.weightKg),
+  ).toEqual([null, null]);
+  expect(addSet(updated).plannedSets.at(-1)).toMatchObject({
+    weightKg: null,
+    repetitions: null,
+  });
+  expect(setIdsFromSelection(bench.plannedSets, "missing", true)).toEqual([]);
+  const reordered = bench.plannedSets.map((set, index) => ({
+    ...set,
+    position: [3, 0, 2, 1][index],
+  }));
+  expect(setIdsFromSelection(reordered, originalIds[2], true)).toEqual([
+    originalIds[2],
+    originalIds[0],
+  ]);
+});
+
+it("keeps a picker edit local when apply-to-following is off", () => {
+  const exercise = addExercise(createWorkout("Push"), "Bench", 4, 30)
+    .exercises[0];
+  const setIds = setIdsFromSelection(
+    exercise.plannedSets,
+    exercise.plannedSets[1].id,
+    false,
+  );
+  const updated = updatePlannedSetValues(exercise, setIds, "weightKg", 80);
+  expect(updated.plannedSets.map((set) => set.weightKg)).toEqual([
+    null,
+    80,
+    null,
+    null,
+  ]);
+});
+
+it("propagates repetitions and rest without changing a running rest clock or performed status", () => {
+  const workout = addExercise(createWorkout("Push"), "Bench", 4, 30);
+  const exercise = workout.exercises[0];
+  const ids = setIdsFromSelection(
+    exercise.plannedSets,
+    exercise.plannedSets[1].id,
+    true,
+  );
+  const repetitions = updatePlannedSetValues(exercise, ids, "repetitions", 10);
+  const rest = updatePlannedSetValues(exercise, ids, "restSeconds", 75);
+  expect(repetitions.plannedSets.map((set) => set.repetitions)).toEqual([
+    null,
+    10,
+    10,
+    10,
+  ]);
+  expect(rest.plannedSets.map((set) => set.restSeconds)).toEqual([
+    30, 75, 75, 75,
+  ]);
+  expect(repetitions.plannedSets.map((set) => set.weightKg)).toEqual([
+    null,
+    null,
+    null,
+    null,
+  ]);
+  expect(repetitions.plannedSets.map((set) => set.restSeconds)).toEqual([
+    30, 30, 30, 30,
+  ]);
+  expect(rest.plannedSets.map((set) => set.weightKg)).toEqual([
+    null,
+    null,
+    null,
+    null,
+  ]);
+  expect(rest.plannedSets.map((set) => set.repetitions)).toEqual([
+    null,
+    null,
+    null,
+    null,
+  ]);
+
+  let execution = startWorkoutExecution(workout, 1000);
+  execution = startExecutedSetRest(
+    execution,
+    exercise.id,
+    exercise.plannedSets[0].id,
+    1000,
+  );
+  const active = execution.exercises[0].sets[0];
+  expect(active).toMatchObject({
+    status: "resting",
+    restEndsAt: 31000,
+    restDurationSeconds: 30,
+  });
+  const performedExecution = {
+    ...execution,
+    exercises: execution.exercises.map((item) => ({
+      ...item,
+      sets: item.sets.map((set, index) =>
+        index === 2 ? { ...set, status: "performed" as const } : set,
+      ),
+    })),
+  };
+  const propagated = updateExecutedSets(
+    performedExecution,
+    exercise.id,
+    setIdsFromSelection(exercise.plannedSets, exercise.plannedSets[0].id, true),
+    "restSeconds",
+    90,
+  );
+  expect(propagated.exercises[0].sets.map((set) => set.restSeconds)).toEqual([
+    90, 90, 90, 90,
+  ]);
+  expect(propagated.exercises[0].sets[0]).toMatchObject({
+    status: "resting",
+    restEndsAt: 31000,
+    restDurationSeconds: 30,
+  });
+  expect(propagated.exercises[0].sets[2].status).toBe("performed");
+});
+
+it("does not modify a finalized execution through set-value propagation", () => {
+  const workout = addExercise(createWorkout("Push"), "Bench", 2, 30);
+  const execution = {
+    ...startWorkoutExecution(workout, 1000),
+    status: "completed" as const,
+    completedAt: 2000,
+  };
+  expect(
+    updateExecutedSets(
+      execution,
+      workout.exercises[0].id,
+      workout.exercises[0].plannedSets.map((set) => set.id),
+      "weightKg",
+      100,
+    ),
+  ).toBe(execution);
 });
 
 it("keeps legacy numeric values, IDs and positions when adding and saving a blank set", async () => {
@@ -83,7 +307,7 @@ it("keeps legacy numeric values, IDs and positions when adding and saving a blan
   });
 });
 
-it("uses the exercise default after deleting all sets, or 90 for a legacy empty exercise", () => {
+it("uses an exercise rest default after deleting all sets, or preserves 90 seconds for a legacy empty exercise", () => {
   const exercise = addExercise(createWorkout("Push"), "Bench", 1, 120)
     .exercises[0];
   expect(
@@ -376,6 +600,53 @@ it("synchronizes session work values to the template", async () => {
     weightKg: 80,
     repetitions: 8,
   });
+});
+
+it("synchronizes propagated active-session values into the matching template IDs", async () => {
+  const workout = addExercise(createWorkout("Push"), "Bench", 4, 30);
+  const exercise = workout.exercises[0];
+  const execution = startWorkoutExecution(workout, 1000);
+  const setIds = setIdsFromSelection(
+    exercise.plannedSets,
+    exercise.plannedSets[1].id,
+    true,
+  );
+  const next = {
+    ...workout,
+    exercises: [updatePlannedSetValues(exercise, setIds, "weightKg", 80)],
+    execution: updateExecutedSets(
+      execution,
+      exercise.id,
+      setIds,
+      "weightKg",
+      80,
+    ),
+  };
+  await saveWorkouts([next]);
+  const store = await loadWorkoutStore();
+  const templateExercise = store.templates[0].exercises[0];
+  const sessionExercise = store.sessions[0].execution.exercises[0];
+  expect(templateExercise.plannedSets.map((set) => set.weightKg)).toEqual([
+    null,
+    80,
+    80,
+    80,
+  ]);
+  expect(sessionExercise.sets.map((set) => set.weightKg)).toEqual([
+    null,
+    80,
+    80,
+    80,
+  ]);
+  expect(templateExercise.plannedSets.map((set) => set.id)).toEqual(
+    exercise.plannedSets.map((set) => set.id),
+  );
+  expect(sessionExercise.sets.map((set) => set.setId)).toEqual(
+    exercise.plannedSets.map((set) => set.id),
+  );
+  expect(store.sessions[0].snapshot.exercises[0].plannedSets[1].weightKg).toBe(
+    80,
+  );
 });
 
 it("edits upcoming and performed values without changing execution state", () => {

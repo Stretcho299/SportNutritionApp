@@ -1203,6 +1203,18 @@ body {
   font-size: clamp(30px, 9vw, 42px);
   line-height: 0.95;
 }
+.preview-first-session {
+  display: inline-flex;
+  margin-top: 8px;
+  padding: 4px 7px;
+  border: 1px solid #ffffff12;
+  border-radius: 999px;
+  background: #ffffff06;
+  color: #9a9aa2;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
 
 .preview-metrics {
   display: grid;

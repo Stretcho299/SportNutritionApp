@@ -51,7 +51,7 @@ async function openEmptyWorkout() {
   expect(storedWorkouts()[0].name).toBe("Push");
   await waitForMotion();
   fireEvent.click(screen.getByText("Push").closest("button")!);
-  fireEvent.click(screen.getByRole("button", { name: "Refaire la séance" }));
+  fireEvent.click(screen.getByRole("button", { name: "DÉMARRER LA SÉANCE" }));
   return view;
 }
 
@@ -230,20 +230,22 @@ it("opens a prepared workout preview with only persisted program data", async ()
     Array.from(preview.querySelectorAll(".preview-metrics strong")).map(
       (metric) => metric.textContent,
     ),
-  ).toEqual(["2", "5", "—", "—"]);
+  ).toEqual(["2", "5"]);
+  expect(preview.querySelectorAll(".preview-metric-unavailable")).toHaveLength(
+    0,
+  );
+  expect(preview.querySelectorAll(".preview-metrics > div")).toHaveLength(2);
   expect(within(preview).getByText("Squat")).toBeInTheDocument();
   expect(within(preview).getByText("3 séries")).toBeInTheDocument();
   expect(within(preview).getByText("Row")).toBeInTheDocument();
   expect(within(preview).getByText("2 séries")).toBeInTheDocument();
+  expect(within(preview).getByText("Première séance")).toBeInTheDocument();
   expect(
-    within(preview).queryByRole("button", { name: "Démarrer la séance" }),
-  ).not.toBeInTheDocument();
-  expect(
-    within(preview).getByRole("button", { name: "Refaire la séance" }),
+    within(preview).getByRole("button", { name: "DÉMARRER LA SÉANCE" }),
   ).toBeEnabled();
-  expect(within(preview).getAllByText("Pas encore de données")).toHaveLength(2);
+  expect(within(preview).queryByText("Pas encore de données")).toBeNull();
   fireEvent.click(
-    within(preview).getByRole("button", { name: "Refaire la séance" }),
+    within(preview).getByRole("button", { name: "DÉMARRER LA SÉANCE" }),
   );
   expect(storedWorkouts()[0].execution).toBeUndefined();
   expect(
@@ -440,7 +442,7 @@ it("selects bounded picker values and persists repetitions, half-kilograms and s
   view.unmount();
   render(<App />);
   await openPreparedWorkout();
-  fireEvent.click(screen.getByRole("button", { name: "Refaire la séance" }));
+  fireEvent.click(screen.getByRole("button", { name: "DÉMARRER LA SÉANCE" }));
   expect(screen.getByLabelText("Répétitions")).toHaveAttribute(
     "data-value",
     "24",
@@ -489,7 +491,7 @@ it("reorders exercises in a dedicated sheet and retains selection and persisted 
   view.unmount();
   render(<App />);
   await openPreparedWorkout();
-  fireEvent.click(screen.getByRole("button", { name: "Refaire la séance" }));
+  fireEvent.click(screen.getByRole("button", { name: "DÉMARRER LA SÉANCE" }));
   expect(
     within(screen.getByRole("list", { name: "Exercices" })).getAllByRole(
       "button",
@@ -596,7 +598,7 @@ it("creates N blank sets with the requested rest and preserves blanks after relo
   view.unmount();
   render(<App />);
   await openPreparedWorkout();
-  fireEvent.click(screen.getByRole("button", { name: "Refaire la séance" }));
+  fireEvent.click(screen.getByRole("button", { name: "DÉMARRER LA SÉANCE" }));
   expect(screen.getAllByLabelText("Charge (kg)")).toHaveLength(4);
   for (const field of screen.getAllByLabelText("Charge (kg)"))
     expect(field).toHaveAttribute("data-value", "");
@@ -908,12 +910,12 @@ it("keeps a completed workout final after returning home and reloading", async (
   ).toBeInTheDocument();
   fireEvent.click(screen.getByLabelText("Retour aux séances"));
   fireEvent.click(screen.getByText("Push"));
-  fireEvent.click(screen.getByRole("button", { name: "Refaire la séance" }));
+  fireEvent.click(screen.getByRole("button", { name: "DÉMARRER LA SÉANCE" }));
   expect(screen.getByText("Démarrer la séance")).toBeInTheDocument();
   view.unmount();
   render(<App />);
   await openPreparedWorkout();
-  fireEvent.click(screen.getByRole("button", { name: "Refaire la séance" }));
+  fireEvent.click(screen.getByRole("button", { name: "DÉMARRER LA SÉANCE" }));
   expect(screen.getByText("Démarrer la séance")).toBeInTheDocument();
   expect(storedWorkouts()[0].execution?.status).toBe("completed");
 });

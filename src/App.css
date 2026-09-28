@@ -1041,6 +1041,63 @@ nav button.active {
   font-size: 13px;
   font-weight: 800;
 }
+.picker-following-control {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 2px;
+}
+.picker-following-toggle {
+  display: inline-flex;
+  min-height: 34px !important;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid #393940;
+  border-radius: 999px !important;
+  background: #202025;
+  color: #c1c1c8;
+  font-size: 11px !important;
+  font-weight: 700;
+}
+.picker-following-toggle.is-enabled {
+  border-color: #ed784b88;
+  background: #ed784b1c;
+  color: #ffad8c;
+}
+.picker-following-indicator {
+  position: relative;
+  width: 24px;
+  height: 14px;
+  flex: 0 0 24px;
+  border-radius: 999px;
+  background: #55555e;
+  transition: background-color 160ms ease;
+}
+.picker-following-indicator::after {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #eeeef0;
+  content: "";
+  transition: transform 160ms ease;
+}
+.picker-following-toggle.is-enabled .picker-following-indicator {
+  background: #e9784d;
+}
+.picker-following-toggle.is-enabled .picker-following-indicator::after {
+  transform: translateX(10px);
+}
+.picker-following-control small {
+  color: #85858e;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
 .picker-save {
   border: 1px solid transparent;
   background: var(--accent);

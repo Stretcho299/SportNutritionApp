@@ -22,7 +22,10 @@ import {
   addSet,
   completeWorkoutExecution,
   createWorkout,
+  defaultInitialSetCount,
   defaultRestSeconds,
+  hasCompletedWorkoutSession,
+  legacyDefaultRestSeconds,
   finishExecutedRest,
   loadWorkoutStore,
   type WorkoutStore,
@@ -34,7 +37,9 @@ import {
   sort,
   startExecutedSetRest,
   createWorkoutSession,
-  updateExecutedSet,
+  setIdsFromSelection,
+  updateExecutedSets,
+  updatePlannedSetValues,
   type ExecutedSet,
   type WorkoutExecution,
   type Workout,
@@ -52,6 +57,9 @@ type Dialog =
   | "reorder";
 export default function App() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [completedTemplateIds, setCompletedTemplateIds] = useState<string[]>(
+    [],
+  );
   const [screen, setScreen] = useState<Screen>("list");
   const [workoutId, setWorkoutId] = useState("");
   const [exerciseId, setExerciseId] = useState("");
@@ -59,7 +67,9 @@ export default function App() {
   const [dialogClosing, setDialogClosing] = useState(false);
   const [reorderDraftIds, setReorderDraftIds] = useState<string[] | null>(null);
   const [name, setName] = useState("");
-  const [initialSetCount, setInitialSetCount] = useState("1");
+  const [initialSetCount, setInitialSetCount] = useState(
+    String(defaultInitialSetCount),
+  );
   const [rest, setRest] = useState(String(defaultRestSeconds));
   const [permanentNoteDraft, setPermanentNoteDraft] = useState("");
   const [sessionNoteDraft, setSessionNoteDraft] = useState("");
@@ -85,6 +95,13 @@ export default function App() {
   };
   useEffect(() => {
     void loadWorkoutStore().then((store: WorkoutStore) => {
+      setCompletedTemplateIds(
+        store.templates
+          .filter((template) =>
+            hasCompletedWorkoutSession(store.sessions, template.id),
+          )
+          .map((template) => template.id),
+      );
       const active = store.sessions
         .filter(
           (session) =>
@@ -265,6 +282,9 @@ export default function App() {
         confirmLabel: "Terminer",
         onConfirm: () => {
           updateExecution(completeWorkoutExecution(execution));
+          setCompletedTemplateIds((current) =>
+            current.includes(workoutId) ? current : [...current, workoutId],
+          );
           setWorkouts((current) =>
             current.map((item) =>
               item.id === workoutId ? { ...item, execution: undefined } : item,
@@ -326,7 +346,7 @@ export default function App() {
       setDialogClosing(false);
       setReorderDraftIds(null);
       setName("");
-      setInitialSetCount("1");
+      setInitialSetCount(String(defaultInitialSetCount));
       setRest(String(defaultRestSeconds));
     }, bottomSheetCloseDuration);
   };
@@ -428,7 +448,7 @@ export default function App() {
           set.repetitions !== null ||
           set.weightKg !== null ||
           set.restSeconds !==
-            (exercise.defaultRestSeconds ?? defaultRestSeconds),
+            (exercise.defaultRestSeconds ?? legacyDefaultRestSeconds),
       ) ||
       (progress?.status !== undefined && progress.status !== "upcoming");
     const remove = () => {
@@ -462,71 +482,34 @@ export default function App() {
       });
     else remove();
   };
-  const editSet = (
-    id: string,
-    field: "repetitions" | "weightKg" | "restSeconds",
-    value: number | null,
-  ) => {
-    if (!workout || !exercise || (field === "restSeconds" && value === null))
-      return;
-    update(
-      workouts.map((w) =>
-        w.id === workout.id
-          ? {
-              ...w,
-              exercises: w.exercises.map((x) =>
-                x.id === exercise.id
-                  ? {
-                      ...x,
-                      plannedSets: x.plannedSets.map((s) =>
-                        s.id === id ? { ...s, [field]: value } : s,
-                      ),
-                    }
-                  : x,
-              ),
-            }
-          : w,
-      ),
-    );
-  };
   const saveSetValue = (
     id: string,
     field: "repetitions" | "weightKg" | "restSeconds",
     value: number,
+    applyToFollowing = false,
   ) => {
-    if (!workout || !exercise) return;
-    if (!execution) {
-      editSet(id, field, value);
-      return;
-    }
-    const nextExecution = updateExecutedSet(
-      execution,
-      exercise.id,
+    if (!workout || !exercise || execution?.status === "completed") return;
+    const setIds = setIdsFromSelection(
+      exercise.plannedSets,
       id,
-      field,
-      value,
+      applyToFollowing,
     );
+    if (setIds.length === 0) return;
+    const nextExercise = updatePlannedSetValues(exercise, setIds, field, value);
+    const nextExecution = execution
+      ? updateExecutedSets(execution, exercise.id, setIds, field, value)
+      : undefined;
     update(
-      workouts.map((w) =>
-        w.id !== workout.id
-          ? w
+      workouts.map((item) =>
+        item.id !== workout.id
+          ? item
           : {
-              ...w,
-              exercises:
-                field === "weightKg" ||
-                field === "repetitions" ||
-                field === "restSeconds"
-                  ? w.exercises.map((item) =>
-                      item.id !== exercise.id
-                        ? item
-                        : {
-                            ...item,
-                            plannedSets: item.plannedSets.map((set) =>
-                              set.id === id ? { ...set, [field]: value } : set,
-                            ),
-                          },
-                    )
-                  : w.exercises,
+              ...item,
+              exercises: item.exercises.map((currentExercise) =>
+                currentExercise.id === exercise.id
+                  ? nextExercise
+                  : currentExercise,
+              ),
               execution: nextExecution,
             },
       ),
@@ -601,7 +584,8 @@ export default function App() {
     const hasData =
       set.repetitions !== null ||
       set.weightKg !== null ||
-      set.restSeconds !== (exercise.defaultRestSeconds ?? defaultRestSeconds);
+      set.restSeconds !==
+        (exercise.defaultRestSeconds ?? legacyDefaultRestSeconds);
     const remove = () => {
       if (exercise.plannedSets.length === 1) {
         removeExerciseAfterLastSet();
@@ -987,6 +971,9 @@ export default function App() {
             <div>
               <span>Prêt pour votre séance ?</span>
               <h2>{workout.name}</h2>
+              {!completedTemplateIds.includes(workout.id) && (
+                <small className="preview-first-session">Première séance</small>
+              )}
             </div>
           </div>
           <div className="preview-metrics">
@@ -998,16 +985,20 @@ export default function App() {
               <strong>{totalPlannedSets}</strong>
               <span>Séries prévues</span>
             </div>
-            <div className="preview-metric-unavailable">
-              <strong>—</strong>
-              <span>Durée moyenne</span>
-              <small>Pas encore de données</small>
-            </div>
-            <div className="preview-metric-unavailable">
-              <strong>—</strong>
-              <span>Calories moyennes</span>
-              <small>Pas encore de données</small>
-            </div>
+            {completedTemplateIds.includes(workout.id) && (
+              <>
+                <div className="preview-metric-unavailable">
+                  <strong>—</strong>
+                  <span>Durée moyenne</span>
+                  <small>Pas encore de données</small>
+                </div>
+                <div className="preview-metric-unavailable">
+                  <strong>—</strong>
+                  <span>Calories moyennes</span>
+                  <small>Pas encore de données</small>
+                </div>
+              </>
+            )}
           </div>
           <section
             className="preview-exercises"
@@ -1043,7 +1034,7 @@ export default function App() {
                 navigate("detail", "forward");
               }}
             >
-              <Icon name="edit" size={16} /> Refaire la séance
+              <Icon name="edit" size={16} /> DÉMARRER LA SÉANCE
             </button>
           </div>
         </section>
@@ -1253,8 +1244,18 @@ export default function App() {
                           }
                           valueSuffix="reps"
                           disabled={execution?.status === "completed"}
-                          onSave={(value) =>
-                            saveSetValue(s.id, "repetitions", value)
+                          followingSeriesLabel={
+                            i < displayedSets.length - 1
+                              ? `Séries ${i + 1} → ${displayedSets.length}`
+                              : undefined
+                          }
+                          onSave={(value, applyToFollowing) =>
+                            saveSetValue(
+                              s.id,
+                              "repetitions",
+                              value,
+                              applyToFollowing,
+                            )
                           }
                         />
                         <SetValuePicker
@@ -1281,8 +1282,18 @@ export default function App() {
                           }
                           valueSuffix="kg"
                           disabled={execution?.status === "completed"}
-                          onSave={(value) =>
-                            saveSetValue(s.id, "weightKg", value)
+                          followingSeriesLabel={
+                            i < displayedSets.length - 1
+                              ? `Séries ${i + 1} → ${displayedSets.length}`
+                              : undefined
+                          }
+                          onSave={(value, applyToFollowing) =>
+                            saveSetValue(
+                              s.id,
+                              "weightKg",
+                              value,
+                              applyToFollowing,
+                            )
                           }
                         />
                         <SetValuePicker
@@ -1314,8 +1325,18 @@ export default function App() {
                             value === null ? "—" : formatRest(value)
                           }
                           disabled={execution?.status === "completed"}
-                          onSave={(value) =>
-                            saveSetValue(s.id, "restSeconds", value)
+                          followingSeriesLabel={
+                            i < displayedSets.length - 1
+                              ? `Séries ${i + 1} → ${displayedSets.length}`
+                              : undefined
+                          }
+                          onSave={(value, applyToFollowing) =>
+                            saveSetValue(
+                              s.id,
+                              "restSeconds",
+                              value,
+                              applyToFollowing,
+                            )
                           }
                         />
                       </div>

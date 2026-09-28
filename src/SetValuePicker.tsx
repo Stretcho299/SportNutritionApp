@@ -109,6 +109,7 @@ export function SetValuePicker({
   disabled,
   valueSuffix,
   formatValue,
+  followingSeriesLabel,
   onSave,
 }: {
   label: string;
@@ -118,12 +119,14 @@ export function SetValuePicker({
   disabled?: boolean;
   valueSuffix?: string;
   formatValue: (value: number | null) => string;
-  onSave: (value: number) => void;
+  followingSeriesLabel?: string;
+  onSave: (value: number, applyToFollowing: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [closing, setClosing] = useState(false);
   const [selection, setSelection] = useState<number[]>([]);
+  const [applyToFollowing, setApplyToFollowing] = useState(false);
   const closeTimeout = useRef<number | undefined>(undefined);
   const content = useRef<HTMLDivElement>(null);
 
@@ -141,6 +144,7 @@ export function SetValuePicker({
     window.clearTimeout(closeTimeout.current);
     setClosing(false);
     setSelection(columns.map((column) => column.value));
+    setApplyToFollowing(false);
     setMounted(true);
     setOpen(true);
   };
@@ -148,7 +152,7 @@ export function SetValuePicker({
   const save = () => {
     const value =
       columns.length === 2 ? selection[0] * 60 + selection[1] : selection[0];
-    onSave(value);
+    onSave(value, applyToFollowing);
     closePicker();
   };
 
@@ -222,6 +226,24 @@ export function SetValuePicker({
                 ))}
               </div>
               <footer className="picker-actions">
+                {followingSeriesLabel && (
+                  <div className="picker-following-control">
+                    <button
+                      type="button"
+                      className={`picker-following-toggle${applyToFollowing ? " is-enabled" : ""}`}
+                      aria-label="Appliquer aux séries suivantes"
+                      aria-pressed={applyToFollowing}
+                      onClick={() => setApplyToFollowing((enabled) => !enabled)}
+                    >
+                      <span
+                        className="picker-following-indicator"
+                        aria-hidden="true"
+                      />
+                      <span>Appliquer aux séries suivantes</span>
+                    </button>
+                    <small>{followingSeriesLabel}</small>
+                  </div>
+                )}
                 <button type="button" className="picker-save" onClick={save}>
                   Valider
                 </button>
