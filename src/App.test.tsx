@@ -18,9 +18,12 @@ async function clickAndWaitForMotion(element: HTMLElement) {
   await waitForMotion();
 }
 async function dismissSheetAndWait() {
-  const backdrop = document.querySelector<HTMLElement>(".sheet-backdrop");
-  if (!backdrop) throw new Error("sheet backdrop not found");
-  fireEvent.pointerDown(backdrop);
+  const handle = document.querySelector<HTMLElement>(".sheet-handle-zone");
+  if (!handle) throw new Error("sheet handle not found");
+  handle.setPointerCapture = vi.fn();
+  fireEvent.pointerDown(handle, { pointerId: 1, clientY: 10 });
+  fireEvent.pointerMove(handle, { pointerId: 1, clientY: 120 });
+  fireEvent.pointerUp(handle, { pointerId: 1, clientY: 120 });
   await waitForMotion();
 }
 
@@ -163,6 +166,10 @@ it("opens forms without input autofocus and locks the background", async () => {
   expect(document.body).toHaveStyle({ position: "fixed", overflow: "hidden" });
   await act(() => new Promise((resolve) => window.setTimeout(resolve, 20)));
   expect(dialog).toHaveFocus();
+  const backdrop = document.querySelector<HTMLElement>(".sheet-backdrop")!;
+  fireEvent.click(backdrop);
+  expect(dialog).toBeInTheDocument();
+  expect(document.body).toHaveStyle({ position: "fixed", overflow: "hidden" });
   await dismissSheetAndWait();
   expect(
     screen.queryByRole("dialog", { name: "Séance" }),
@@ -268,7 +275,8 @@ it("exposes exactly the requested actions in each header sheet", async () => {
       .filter(Boolean),
   ).toEqual(["Réordonner les exercices", "Renommer la séance"]);
   fireEvent.keyDown(menu, { key: "Escape" });
-  await waitForMotion();
+  expect(menu).toBeInTheDocument();
+  await dismissSheetAndWait();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
 
@@ -394,6 +402,8 @@ it("selects bounded picker values and persists repetitions, half-kilograms and s
   fireEvent.click(screen.getByLabelText("Répétitions"));
   const repDialog = screen.getByRole("dialog", { name: "Choisir Répétitions" });
   expect(within(repDialog).getAllByRole("option")).toHaveLength(25);
+  fireEvent.click(document.querySelector<HTMLElement>(".sheet-backdrop")!);
+  expect(repDialog).toBeInTheDocument();
   expect(
     within(repDialog).getByRole("option", { name: /^24$/ }),
   ).toHaveAttribute("aria-selected", "true");
@@ -403,6 +413,8 @@ it("selects bounded picker values and persists repetitions, half-kilograms and s
     name: "Choisir Charge (kg)",
   });
   expect(within(weightDialog).getAllByRole("option")).toHaveLength(601);
+  fireEvent.click(document.querySelector<HTMLElement>(".sheet-backdrop")!);
+  expect(weightDialog).toBeInTheDocument();
   expect(
     within(weightDialog).getByRole("option", { name: /^82\.5$/ }),
   ).toHaveAttribute("aria-selected", "true");
@@ -412,6 +424,8 @@ it("selects bounded picker values and persists repetitions, half-kilograms and s
     name: "Choisir Repos",
   });
   expect(within(restDialog).getAllByRole("listbox")).toHaveLength(2);
+  fireEvent.click(document.querySelector<HTMLElement>(".sheet-backdrop")!);
+  expect(restDialog).toBeInTheDocument();
   expect(
     within(
       within(restDialog).getByRole("listbox", { name: "Minutes" }),

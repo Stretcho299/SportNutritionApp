@@ -5,6 +5,7 @@ type PersistedStore = {
     id: string;
     execution?: unknown;
     exercises: Array<{
+      permanentNote?: string;
       plannedSets: Array<{
         repetitions: number | null;
         weightKg: number | null;
@@ -15,6 +16,7 @@ type PersistedStore = {
   sessions: Array<{
     id: string;
     status: string;
+    sessionNotes?: Record<string, string>;
     templateId: string;
     snapshot: PersistedStore["templates"][number];
     execution: {
@@ -38,6 +40,19 @@ async function saveSheet(page: Page, title: string, expectedName: string) {
   );
   await sheet.getByRole("button", { name: "Enregistrer", exact: true }).click();
   await expect(sheet).toHaveCount(0);
+}
+
+async function dragDismissSheet(page: Page) {
+  const handle = page.getByRole("button", { name: "Fermer le panneau" });
+  await handle.scrollIntoViewIfNeeded();
+  const bounds = await handle.boundingBox();
+  if (!bounds) throw new Error("sheet handle has no bounding box");
+  const x = bounds.x + bounds.width / 2;
+  const y = bounds.y + bounds.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x, y + 120, { steps: 8 });
+  await page.mouse.up();
 }
 
 async function addExercise(page: Page, name: string, count = "1") {
@@ -796,4 +811,375 @@ test("reuses a template and persists independent session snapshots", async ({
     expect.arrayContaining([sessionA!.id, sessionB!.id]),
   );
   expect(afterReload.sessions).toHaveLength(2);
+});
+
+test("returns to dashboard and resumes the same active session, then abandons it explicitly", async ({
+  page,
+}) => {
+  await prepareWorkout(page, "1");
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  const original = await readPersistedStore(page);
+  const sessionId = original.sessions[0].id;
+  await page.getByRole("button", { name: "Retour aux séances" }).click();
+  await expect(
+    page.getByRole("region", { name: "Séance en cours" }),
+  ).toBeVisible();
+  await expect(page.getByText("Reprendre")).toBeVisible();
+
+  await page.reload();
+  await expect(
+    page.getByRole("region", { name: "Séance en cours" }),
+  ).toBeVisible();
+  await page.locator(".workout-card-active").click();
+  expect(
+    (await readPersistedStore(page)).sessions.map((item) => item.id),
+  ).toEqual([sessionId]);
+  await expect(
+    page.getByRole("region", { name: "Séries de Exercice A" }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Réorganiser les exercices" }).click();
+  await page
+    .getByRole("dialog", { name: "Organisation de la séance" })
+    .getByRole("button", { name: "Abandonner la séance" })
+    .click();
+  const confirmation = page.getByRole("alertdialog", {
+    name: "Abandonner la séance ?",
+  });
+  await confirmation.getByRole("button", { name: "Annuler" }).click();
+  expect((await readPersistedStore(page)).sessions[0].status).toBe(
+    "inProgress",
+  );
+
+  await page
+    .getByRole("dialog", { name: "Organisation de la séance" })
+    .getByRole("button", { name: "Abandonner la séance" })
+    .click();
+  await page
+    .getByRole("alertdialog", { name: "Abandonner la séance ?" })
+    .getByRole("button", { name: "Abandonner la séance" })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Séance en cours" }),
+  ).toHaveCount(0);
+  await expect
+    .poll(async () => (await readPersistedStore(page)).sessions[0].status)
+    .toBe("abandoned");
+  const abandoned = await readPersistedStore(page);
+  expect(abandoned.sessions).toHaveLength(1);
+  expect(abandoned.sessions[0]).toMatchObject({
+    id: sessionId,
+    status: "abandoned",
+  });
+  expect(abandoned.templates).toHaveLength(1);
+  await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
+  await expect(page.getByText("Séance E2E")).toBeVisible();
+  await page.locator(".workout-card").click();
+  await page.getByRole("button", { name: "Refaire la séance" }).click();
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  await expect
+    .poll(async () =>
+      (await readPersistedStore(page)).sessions.map((item) => item.status),
+    )
+    .toEqual(["abandoned", "inProgress"]);
+  expect((await readPersistedStore(page)).sessions[0].id).toBe(sessionId);
+  expect((await readPersistedStore(page)).sessions[1].id).not.toBe(sessionId);
+});
+
+test("does not create a second active session while another template is active", async ({
+  page,
+}) => {
+  await prepareWorkout(page, "1");
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  await page.getByRole("button", { name: "Retour aux séances" }).click();
+  await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
+  await page.getByRole("button", { name: "Créer une séance" }).click();
+  await page.getByRole("textbox", { name: "Nom" }).fill("Deuxième modèle");
+  await saveSheet(page, "Séance", "Deuxième modèle");
+  await page.getByText("Deuxième modèle").click();
+  await page.getByRole("button", { name: "Refaire la séance" }).click();
+  await addExercise(page, "Exercice B", "1");
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  await expect
+    .poll(async () => {
+      const store = await readPersistedStore(page);
+      return store.sessions.filter(
+        (item) =>
+          item.status === "inProgress" || item.status === "readyToFinish",
+      ).length;
+    })
+    .toBe(1);
+  const store = await readPersistedStore(page);
+  expect(store.sessions).toHaveLength(1);
+  expect(store.templates.map((item) => item.name)).toEqual([
+    "Séance E2E",
+    "Deuxième modèle",
+  ]);
+});
+
+test("persists permanent and session exercise notes independently", async ({
+  page,
+}) => {
+  await prepareWorkout(page, "1");
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  await page.getByRole("button", { name: "Ajouter une note" }).click();
+  const notes = page.getByRole("dialog", { name: "Notes de l’exercice" });
+  const permanentNote = notes.getByRole("textbox", { name: "Note permanente" });
+  await permanentNote.tap();
+  await expect(permanentNote).toBeFocused();
+  await page.keyboard.insertText("Banc position 4");
+  await expect(permanentNote).toHaveValue("Banc position 4");
+  const sessionNote = notes.getByRole("textbox", {
+    name: "Note de cette séance",
+  });
+  await expect(sessionNote).toBeEnabled();
+  await sessionNote.tap();
+  await expect(sessionNote).toBeFocused();
+  await page.keyboard.insertText("Épaule sensible aujourd’hui");
+  await expect(sessionNote).toHaveValue("Épaule sensible aujourd’hui");
+  await expect(sessionNote).toBeEnabled();
+  const noteDomAudit = await Promise.all(
+    [permanentNote, sessionNote].map((field) =>
+      field.evaluate((element) => {
+        const style = getComputedStyle(element);
+        const backdrop = element.closest(".sheet-backdrop");
+        const bounds = element.getBoundingClientRect();
+        return {
+          tagName: element.tagName,
+          id: element.id,
+          name: element.getAttribute("name"),
+          disabled: (element as HTMLTextAreaElement).disabled,
+          readOnly: (element as HTMLTextAreaElement).readOnly,
+          pointerEvents: style.pointerEvents,
+          zIndex: style.zIndex,
+          position: style.position,
+          fontSize: style.fontSize,
+          touchAction: style.touchAction,
+          backdropTouchAction: backdrop
+            ? getComputedStyle(backdrop).touchAction
+            : "missing",
+          parentClass: element.parentElement?.className,
+          scrollContainer: element.closest(".sheet-scroll")?.className,
+          receivesHit:
+            document.elementFromPoint(
+              bounds.x + bounds.width / 2,
+              bounds.y + bounds.height / 2,
+            ) === element,
+        };
+      }),
+    ),
+  );
+  expect(noteDomAudit.map((field) => field.tagName)).toEqual([
+    "TEXTAREA",
+    "TEXTAREA",
+  ]);
+  expect(noteDomAudit.map((field) => field.id)).toEqual([
+    "exercise-permanent-note",
+    "exercise-session-note",
+  ]);
+  expect(noteDomAudit.map((field) => field.name)).toEqual([null, null]);
+  expect(noteDomAudit[0].parentClass).toBe(noteDomAudit[1].parentClass);
+  expect(noteDomAudit.map((field) => field.position)).toEqual([
+    "static",
+    "static",
+  ]);
+  expect(noteDomAudit.map((field) => field.zIndex)).toEqual(["auto", "auto"]);
+  expect(noteDomAudit.map((field) => field.touchAction)).toEqual([
+    "auto",
+    "auto",
+  ]);
+  expect(noteDomAudit.map((field) => field.disabled)).toEqual([false, false]);
+  expect(noteDomAudit.map((field) => field.readOnly)).toEqual([false, false]);
+  expect(noteDomAudit.map((field) => field.pointerEvents)).toEqual([
+    "auto",
+    "auto",
+  ]);
+  expect(noteDomAudit.map((field) => field.backdropTouchAction)).toEqual([
+    "auto",
+    "auto",
+  ]);
+  expect(noteDomAudit.map((field) => field.fontSize)).toEqual(["16px", "16px"]);
+  expect(noteDomAudit.map((field) => field.receivesHit)).toEqual([true, true]);
+  expect(noteDomAudit[0].scrollContainer).toBe(noteDomAudit[1].scrollContainer);
+  await notes.getByRole("button", { name: "ENREGISTRER" }).click();
+  await expect(notes).toHaveCount(0);
+
+  const noteButton = page.getByRole("button", { name: "Notes de l’exercice" });
+  await expect(noteButton).toContainText("Épaule sensible aujourd’hui");
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    const geometry = await page.evaluate(() => {
+      const note = document.querySelector<HTMLElement>(
+        ".exercise-note-trigger",
+      );
+      return {
+        documentWidth: document.documentElement.scrollWidth,
+        viewportWidth: document.documentElement.clientWidth,
+        noteWidth: note?.clientWidth ?? 0,
+        noteScrollWidth: note?.scrollWidth ?? 0,
+      };
+    });
+    expect(geometry.documentWidth).toBeLessThanOrEqual(geometry.viewportWidth);
+    expect(geometry.noteScrollWidth).toBeLessThanOrEqual(geometry.noteWidth);
+  }
+  await page.setViewportSize({ width: 844, height: 390 });
+  const orientationGuard = page.getByRole("alertdialog");
+  await expect(
+    orientationGuard.getByText("Tournez votre téléphone en portrait"),
+  ).toBeVisible();
+  await expect(page.locator("#root")).toHaveJSProperty("inert", true);
+  const overlayHit = await page.evaluate(() => {
+    const target = document.elementFromPoint(
+      window.innerWidth / 2,
+      window.innerHeight / 2,
+    );
+    return Boolean(target?.closest(".orientation-guard"));
+  });
+  expect(overlayHit).toBe(true);
+  await page.mouse.click(30, 30);
+  await expect(orientationGuard).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect(page.locator("#root")).toHaveJSProperty("inert", false);
+
+  let store = await readPersistedStore(page);
+  const exerciseId = store.templates[0].exercises[0].id;
+  expect(store.templates[0].exercises[0].permanentNote).toBe("Banc position 4");
+  expect(store.sessions[0].snapshot.exercises[0].permanentNote).toBe(
+    "Banc position 4",
+  );
+  expect(store.sessions[0].sessionNotes).toEqual({
+    [exerciseId]: "Épaule sensible aujourd’hui",
+  });
+  expect(store.templates[0].exercises[0]).not.toHaveProperty("sessionNotes");
+
+  await page.getByRole("button", { name: "Retour aux séances" }).click();
+  await expect(
+    page.getByRole("region", { name: "Séance en cours" }),
+  ).toBeVisible();
+  await page.locator(".workout-card-active").click();
+  await page.getByRole("button", { name: "Notes de l’exercice" }).click();
+  const resumedNotes = page.getByRole("dialog", {
+    name: "Notes de l’exercice",
+  });
+  await expect(
+    resumedNotes.getByRole("textbox", { name: "Note permanente" }),
+  ).toHaveValue("Banc position 4");
+  await expect(
+    resumedNotes.getByRole("textbox", { name: "Note de cette séance" }),
+  ).toHaveValue("Épaule sensible aujourd’hui");
+  const permanentDraft = resumedNotes.getByRole("textbox", {
+    name: "Note permanente",
+  });
+  await permanentDraft.fill("Brouillon à annuler");
+  await page.locator(".sheet-backdrop").click({ position: { x: 4, y: 4 } });
+  await expect(resumedNotes).toBeVisible();
+  await expect(permanentDraft).toHaveValue("Brouillon à annuler");
+  await expect(
+    resumedNotes.getByRole("textbox", { name: "Note de cette séance" }),
+  ).toHaveValue("Épaule sensible aujourd’hui");
+  await dragDismissSheet(page);
+  await expect(resumedNotes).toHaveCount(0);
+  await page.getByRole("button", { name: "Notes de l’exercice" }).click();
+  const unchangedNotes = page.getByRole("dialog", {
+    name: "Notes de l’exercice",
+  });
+  await expect(
+    unchangedNotes.getByRole("textbox", { name: "Note permanente" }),
+  ).toHaveValue("Banc position 4");
+  await expect(
+    unchangedNotes.getByRole("textbox", { name: "Note de cette séance" }),
+  ).toHaveValue("Épaule sensible aujourd’hui");
+  await unchangedNotes.getByRole("button", { name: "ENREGISTRER" }).click();
+  await expect(unchangedNotes).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Réorganiser les exercices" }).click();
+  await page
+    .getByRole("dialog", { name: "Organisation de la séance" })
+    .getByRole("button", { name: "Abandonner la séance" })
+    .click();
+  await page
+    .getByRole("alertdialog", { name: "Abandonner la séance ?" })
+    .getByRole("button", { name: "Abandonner la séance" })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Séance en cours" }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
+  await page.locator(".workout-card").click();
+  await page.getByRole("button", { name: "Refaire la séance" }).click();
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  await page.getByRole("button", { name: "Notes de l’exercice" }).click();
+  const nextNotes = page.getByRole("dialog", { name: "Notes de l’exercice" });
+  await expect(
+    nextNotes.getByRole("textbox", { name: "Note permanente" }),
+  ).toHaveValue("Banc position 4");
+  await expect(
+    nextNotes.getByRole("textbox", { name: "Note de cette séance" }),
+  ).toHaveValue("");
+  expect(
+    await nextNotes
+      .getByRole("textbox", { name: "Note de cette séance" })
+      .isDisabled(),
+  ).toBe(false);
+  await nextNotes.getByRole("button", { name: "ENREGISTRER" }).click();
+  await expect(nextNotes).toHaveCount(0);
+  store = await readPersistedStore(page);
+  expect(store.sessions).toHaveLength(2);
+  expect(store.sessions[0].sessionNotes).toEqual({
+    [exerciseId]: "Épaule sensible aujourd’hui",
+  });
+  expect(store.sessions[1].sessionNotes).toEqual({});
+});
+
+test("keeps picker sheets open on backdrop taps and blocks the app behind them", async ({
+  page,
+}) => {
+  await prepareWorkout(page, "1");
+  const backgroundAction = page.getByRole("button", {
+    name: "Gérer les exercices",
+  });
+  const actionBounds = await backgroundAction.boundingBox();
+  if (!actionBounds) throw new Error("background action has no bounding box");
+
+  await page.getByRole("button", { name: "Charge (kg)" }).click();
+  const picker = page.getByRole("dialog", { name: "Choisir Charge (kg)" });
+  await expect(picker).toBeVisible();
+  const backdropHit = await page.evaluate(
+    ({ x, y }) => {
+      const target = document.elementFromPoint(x, y);
+      return Boolean(target?.closest(".sheet-backdrop"));
+    },
+    {
+      x: actionBounds.x + actionBounds.width / 2,
+      y: actionBounds.y + actionBounds.height / 2,
+    },
+  );
+  expect(backdropHit).toBe(true);
+  await page.mouse.click(
+    actionBounds.x + actionBounds.width / 2,
+    actionBounds.y + actionBounds.height / 2,
+  );
+  await expect(picker).toBeVisible();
+  await expect(
+    page.getByRole("dialog", { name: "Actions de la séance" }),
+  ).toHaveCount(0);
+  await page.locator(".sheet-backdrop").click({ position: { x: 4, y: 4 } });
+  await expect(picker).toBeVisible();
+  await picker.getByRole("button", { name: "Valider" }).click();
+  await expect(picker).toHaveCount(0);
+
+  const viewport = await page
+    .locator('meta[name="viewport"]')
+    .getAttribute("content");
+  expect(viewport).toContain("maximum-scale=1");
+  expect(viewport).toContain("user-scalable=no");
+  expect(viewport).toContain("viewport-fit=cover");
+  const manifest = await page.evaluate(
+    async () =>
+      (await fetch("/manifest.webmanifest")).json() as Promise<{
+        orientation: string;
+      }>,
+  );
+  expect(manifest.orientation).toBe("portrait");
 });

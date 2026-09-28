@@ -396,14 +396,18 @@ for (const width of [390, 320]) {
     );
     await screenshot(page, info, "picker-weight");
     await flickWheel(page, weightWheel);
-    await page.locator(".picker-backdrop").dispatchEvent("pointerdown");
+    await page.locator(".picker-backdrop").click({ position: { x: 4, y: 4 } });
+    await expect(weightPicker).toBeVisible();
+    await dragHandle(page, weightPicker, 120);
     await expect(weightPicker).toHaveCount(0);
     await choosePickerValue(page, "Charge (kg)", 62.5);
     await page.getByRole("button", { name: "Répétitions" }).first().click();
     const repetitionsPicker = page.getByRole("dialog", {
       name: "Choisir Répétitions",
     });
-    await page.locator(".picker-backdrop").dispatchEvent("pointerdown");
+    await page.locator(".picker-backdrop").click({ position: { x: 4, y: 4 } });
+    await expect(repetitionsPicker).toBeVisible();
+    await dragHandle(page, repetitionsPicker, 120);
     await expect(repetitionsPicker).toHaveCount(0);
     await choosePickerValue(page, "Répétitions", 10);
     await page.getByRole("button", { name: "Repos" }).first().click();

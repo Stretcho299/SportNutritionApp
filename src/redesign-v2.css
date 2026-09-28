@@ -1312,7 +1312,7 @@ body {
   bottom: auto;
   height: var(--visual-viewport-height, 100dvh);
   overscroll-behavior: none;
-  touch-action: none;
+  touch-action: auto;
   transition: none;
 }
 
@@ -2073,4 +2073,132 @@ body,
 
 .workout-detail {
   height: var(--app-viewport-height);
+}
+
+.exercise-note-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  min-height: 21px;
+  margin-top: 3px;
+  padding: 1px 0;
+  border: 0;
+  background: transparent;
+  color: #92929a;
+  font: inherit;
+  text-align: left;
+}
+
+.exercise-note-trigger svg {
+  flex: 0 0 auto;
+}
+
+.exercise-note-trigger.has-note svg {
+  color: var(--accent-soft);
+}
+
+.exercise-note-trigger span {
+  min-width: 0;
+  overflow: hidden;
+  color: #a5a5ad;
+  font-size: 10px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notes-form {
+  display: grid;
+  gap: 12px;
+}
+
+.notes-form h2 {
+  margin: 0;
+}
+
+.exercise-note-field {
+  display: grid;
+  gap: 6px;
+  color: #a5a5ad;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.exercise-note-field > label {
+  margin: 0;
+  color: inherit;
+  font: inherit;
+}
+
+.exercise-note-field textarea {
+  width: 100%;
+  min-height: 62px;
+  max-height: 140px;
+  resize: vertical;
+  padding: 9px 10px;
+  border: 1px solid #35353d;
+  border-radius: 10px;
+  outline: none;
+  background: #111114;
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+
+.exercise-note-field textarea:focus {
+  border-color: #9b573e;
+}
+
+.exercise-note-field textarea:disabled {
+  opacity: 0.55;
+}
+
+.exercise-note-field small {
+  color: #777780;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+/* Prevent iOS Safari's automatic focus zoom in every sheet form. */
+.modal input,
+.modal textarea,
+.modal select,
+.sheet-form input,
+.sheet-form textarea,
+.sheet-form select {
+  font-size: 16px;
+}
+
+.orientation-guard {
+  position: fixed;
+  z-index: 10000;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 18px;
+  padding: max(24px, env(safe-area-inset-top))
+    max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom))
+    max(24px, env(safe-area-inset-left));
+  background: #101012;
+  color: #f5f1ef;
+  text-align: center;
+}
+
+.orientation-guard svg {
+  width: 58px;
+  height: 58px;
+  color: var(--accent-soft);
+}
+
+.orientation-guard p {
+  font-size: 16px;
+  font-weight: 700;
 }
