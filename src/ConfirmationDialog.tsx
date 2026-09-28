@@ -1,3 +1,6 @@
+import { useEffect, useRef, useState } from "react";
+import { useBodyScrollLock } from "./useBodyScrollLock";
+
 export type ConfirmationRequest = {
   title: string;
   description: string;
@@ -13,11 +16,29 @@ export function ConfirmationDialog({
   request: ConfirmationRequest;
   onCancel: () => void;
 }) {
+  const [closing, setClosing] = useState(false);
+  const closeTimeout = useRef<number | undefined>(undefined);
+  useBodyScrollLock(true);
+
+  useEffect(
+    () => () => {
+      if (closeTimeout.current !== undefined)
+        window.clearTimeout(closeTimeout.current);
+    },
+    [],
+  );
+
+  const finish = (action: () => void) => {
+    if (closing) return;
+    setClosing(true);
+    closeTimeout.current = window.setTimeout(action, 180);
+  };
+
   return (
     <div
-      className="modal confirmation-backdrop"
+      className={`modal confirmation-backdrop${closing ? " is-closing" : ""}`}
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onCancel();
+        if (event.target === event.currentTarget) finish(onCancel);
       }}
     >
       <section
@@ -29,7 +50,7 @@ export function ConfirmationDialog({
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.preventDefault();
-            onCancel();
+            finish(onCancel);
           }
           if (event.key === "Tab") {
             const buttons = event.currentTarget.querySelectorAll("button");
@@ -51,10 +72,17 @@ export function ConfirmationDialog({
         <h2 id="confirmation-title">{request.title}</h2>
         <p id="confirmation-description">{request.description}</p>
         <div className="confirmation-actions">
-          <button autoFocus className="confirmation-cancel" onClick={onCancel}>
+          <button
+            autoFocus
+            className="confirmation-cancel"
+            onClick={() => finish(onCancel)}
+          >
             {request.cancelLabel ?? "Annuler"}
           </button>
-          <button className="confirmation-submit" onClick={request.onConfirm}>
+          <button
+            className="confirmation-submit"
+            onClick={() => finish(request.onConfirm)}
+          >
             {request.confirmLabel}
           </button>
         </div>

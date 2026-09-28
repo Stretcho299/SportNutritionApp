@@ -31,6 +31,15 @@ type PersistedStore = {
   }>;
 };
 
+async function saveSheet(page: Page, title: string, expectedName: string) {
+  const sheet = page.getByRole("dialog", { name: title });
+  await expect(sheet.getByRole("textbox", { name: "Nom" })).toHaveValue(
+    expectedName,
+  );
+  await sheet.getByRole("button", { name: "Enregistrer", exact: true }).click();
+  await expect(sheet).toHaveCount(0);
+}
+
 async function addExercise(page: Page, name: string, count = "1") {
   await page.getByRole("button", { name: /Gérer les exercices/i }).click();
   await page
@@ -38,17 +47,15 @@ async function addExercise(page: Page, name: string, count = "1") {
     .getByRole("button", { name: /Ajouter un exercice/i })
     .click();
   await page.getByRole("textbox", { name: "Nom" }).fill(name);
-  await page.getByLabel(/Nombre de séries initiales/i).fill(count);
-  await page
-    .getByRole("spinbutton", { name: "Repos par défaut (secondes)" })
-    .fill("30");
-  await page.getByRole("button", { name: /Enregistrer/i }).click();
+  await chooseValue(page, "Nombre de séries initiales", Number(count));
+  await chooseValue(page, "Repos par défaut", 30);
+  await saveSheet(page, "Exercice", name);
 }
 
 async function chooseValue(page: Page, label: string, value: number) {
   await page.getByRole("button", { name: label, exact: true }).first().click();
   const dialog = page.getByRole("dialog", { name: `Choisir ${label}` });
-  if (label === "Repos (secondes)") {
+  if (label.startsWith("Repos")) {
     await dialog
       .getByRole("listbox", { name: "Minutes" })
       .getByRole("option", {
@@ -61,13 +68,19 @@ async function chooseValue(page: Page, label: string, value: number) {
       .getByRole("option", { name: String(value % 60), exact: true })
       .click();
   } else {
-    const listbox = label === "Charge (kg)" ? "Kilogrammes" : "Répétitions";
+    const listbox =
+      label === "Charge (kg)"
+        ? "Kilogrammes"
+        : label === "Nombre de séries initiales"
+          ? "Séries"
+          : "Répétitions";
     await dialog
       .getByRole("listbox", { name: listbox })
       .getByRole("option", { name: String(value), exact: true })
       .click();
   }
   await dialog.getByRole("button", { name: "Valider" }).click();
+  await expect(dialog).toHaveCount(0);
 }
 
 async function finishRest(
@@ -105,21 +118,24 @@ async function prepareWorkout(page, setCount = "2") {
   await page.goto("/");
   await page.evaluate(() => localStorage.clear());
   await page.reload();
-  await page.getByRole("button", { name: /Créer une séance/i }).click();
+  await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
+  await page.getByRole("button", { name: "Créer une séance" }).click();
   await page.getByRole("textbox", { name: "Nom" }).fill("Séance E2E");
-  await page.getByRole("button", { name: /Enregistrer/i }).click();
+  await saveSheet(page, "Séance", "Séance E2E");
   await page.locator(".workout-card").click();
+  await expect(
+    page.getByRole("region", { name: "Aperçu de Séance E2E" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Refaire la séance" }).click();
   await page.getByRole("button", { name: /Gérer les exercices/i }).click();
   await page
     .getByRole("dialog", { name: /Actions de la séance/i })
     .getByRole("button", { name: /Ajouter un exercice/i })
     .click();
   await page.getByRole("textbox", { name: "Nom" }).fill("Exercice A");
-  await page.getByLabel(/Nombre de séries initiales/i).fill(setCount);
-  await page
-    .getByRole("spinbutton", { name: "Repos par défaut (secondes)" })
-    .fill("90");
-  await page.getByRole("button", { name: /Enregistrer/i }).click();
+  await chooseValue(page, "Nombre de séries initiales", Number(setCount));
+  await chooseValue(page, "Repos par défaut", 90);
+  await saveSheet(page, "Exercice", "Exercice A");
 }
 
 test("adds a third set after starting a workout", async ({ page }) => {
@@ -157,11 +173,9 @@ test("does not activate the next exercise when deleting an upcoming set", async 
     .getByRole("button", { name: /Ajouter un exercice/i })
     .click();
   await page.getByRole("textbox", { name: "Nom" }).fill("Exercice B");
-  await page.getByLabel(/Nombre de séries initiales/i).fill("1");
-  await page
-    .getByRole("spinbutton", { name: "Repos par défaut (secondes)" })
-    .fill("90");
-  await page.getByRole("button", { name: /Enregistrer/i }).click();
+  await chooseValue(page, "Nombre de séries initiales", 1);
+  await chooseValue(page, "Repos par défaut", 90);
+  await saveSheet(page, "Exercice", "Exercice B");
   await page.getByRole("button", { name: /Démarrer la séance/i }).click();
   const aRegion = page.getByRole("region", { name: "Séries de Exercice A" });
   await aRegion
@@ -193,11 +207,9 @@ test("starts from the selected exercise and keeps other tabs upcoming", async ({
       .getByRole("button", { name: /Ajouter un exercice/i })
       .click();
     await page.getByRole("textbox", { name: "Nom" }).fill(name);
-    await page.getByLabel(/Nombre de séries initiales/i).fill("2");
-    await page
-      .getByRole("spinbutton", { name: "Repos par défaut (secondes)" })
-      .fill("90");
-    await page.getByRole("button", { name: /Enregistrer/i }).click();
+    await chooseValue(page, "Nombre de séries initiales", 2);
+    await chooseValue(page, "Repos par défaut", 90);
+    await saveSheet(page, "Exercice", name);
   }
 
   const tabs = page.getByRole("list", { name: "Exercices" }).locator("li");
@@ -272,9 +284,8 @@ test("removing an untouched four-set exercise removes its work from progress", a
     .getByRole("dialog", { name: /Actions de la séance/i })
     .getByRole("button", { name: /Supprimer l’exercice/i })
     .click();
-  await expect(
-    page.getByRole("region", { name: "Progression de la séance" }),
-  ).toContainText("0/1");
+  await expect(page.getByRole("progressbar")).toHaveAttribute("value", "0");
+  await expect(page.getByRole("progressbar")).toHaveAttribute("max", "1");
 });
 
 test("removing an exercise keeps performed sets in session progress", async ({
@@ -295,9 +306,8 @@ test("removing an exercise keeps performed sets in session progress", async ({
     .getByRole("alertdialog", { name: "Supprimer cet exercice ?" })
     .getByRole("button", { name: "Supprimer" })
     .click();
-  await expect(
-    page.getByRole("region", { name: "Progression de la séance" }),
-  ).toContainText("2/3");
+  await expect(page.getByRole("progressbar")).toHaveAttribute("value", "2");
+  await expect(page.getByRole("progressbar")).toHaveAttribute("max", "3");
 });
 
 test("adding work after all exercises are done hides the finish-session action", async ({
@@ -381,7 +391,10 @@ test("persists session kg and reps through exercise changes, reload, and a new s
     .getByRole("button", { name: "Terminer" })
     .click();
   await page.getByRole("button", { name: "Retour aux séances" }).click();
-  await page.locator(".workout-card").click();
+  await expect(
+    page.getByRole("region", { name: "Aperçu de Séance E2E" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Refaire la séance" }).click();
   await page.getByRole("button", { name: /Démarrer la séance/i }).click();
   const newSessionA = page.getByRole("region", {
     name: "Séries de Exercice A",
@@ -476,7 +489,10 @@ test("edits upcoming and performed sets and carries values into the next session
     .getByRole("button", { name: "Terminer" })
     .click();
   await page.getByRole("button", { name: "Retour aux séances" }).click();
-  await page.locator(".workout-card").click();
+  await expect(
+    page.getByRole("region", { name: "Aperçu de Séance E2E" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Refaire la séance" }).click();
   await page.getByRole("button", { name: /Démarrer la séance/i }).click();
   await expect(
     page
@@ -542,7 +558,10 @@ test("persists structural session changes in the template and next session", asy
     .getByRole("button", { name: "Terminer" })
     .click();
   await page.getByRole("button", { name: "Retour aux séances" }).click();
-  await page.locator(".workout-card").click();
+  await expect(
+    page.getByRole("region", { name: "Aperçu de Séance E2E" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Refaire la séance" }).click();
   await page.getByRole("button", { name: /Démarrer la séance/i }).click();
   await page
     .getByRole("list", { name: "Exercices" })
@@ -560,7 +579,7 @@ test("syncs planned rest without changing an active chrono", async ({
 }) => {
   await prepareWorkout(page, "1");
   await addExercise(page, "Exercice B", "1");
-  await chooseValue(page, "Repos (secondes)", 30);
+  await chooseValue(page, "Repos", 30);
   await page.getByRole("button", { name: /Démarrer la séance/i }).click();
   const a = page.getByRole("region", { name: "Séries de Exercice A" });
   await a.getByRole("button", { name: "Lancer le repos" }).click();
@@ -573,7 +592,13 @@ test("syncs planned rest without changing an active chrono", async ({
   const before = await readPersistedStore(page);
   const restEndsAt =
     before.sessions[0].execution.exercises[0].sets[0].restEndsAt;
-  await chooseValue(page, "Repos (secondes)", 60);
+  const timer = page.getByRole("timer");
+  await expect(timer).toHaveAttribute("data-reference-seconds", "30");
+  const beforeProgress = await timer
+    .locator(".countdown-value")
+    .getAttribute("stroke-dashoffset")
+    .then(Number);
+  await chooseValue(page, "Repos", 60);
   await expect
     .poll(async () => {
       const store = await readPersistedStore(page);
@@ -585,10 +610,21 @@ test("syncs planned rest without changing an active chrono", async ({
       ];
     })
     .toEqual([60, 60, restEndsAt, 30]);
-  await expect(page.getByRole("timer")).toBeVisible();
+  await expect(timer).toBeVisible();
+  await expect(timer).toHaveAttribute("data-reference-seconds", "30");
+  const afterProgress = await timer
+    .locator(".countdown-value")
+    .getAttribute("stroke-dashoffset")
+    .then(Number);
+  expect(afterProgress).toBeGreaterThanOrEqual(beforeProgress);
+  expect(afterProgress).toBeLessThan(50);
   await page.reload();
   await page.locator(".workout-card").click();
   await expect(page.getByRole("timer")).toBeVisible();
+  await expect(page.getByRole("timer")).toHaveAttribute(
+    "data-reference-seconds",
+    "30",
+  );
   await expect
     .poll(async () => {
       const store = await readPersistedStore(page);
@@ -601,7 +637,7 @@ test("syncs planned rest without changing an active chrono", async ({
     .getByRole("alertdialog", { name: "Mettre fin au repos ?" })
     .getByRole("button", { name: "Mettre fin" })
     .click();
-  await chooseValue(page, "Repos (secondes)", 180);
+  await chooseValue(page, "Repos", 180);
   await expect(a.locator(".set-block").first()).toHaveClass(/status-performed/);
   await expect(page.getByRole("progressbar")).toHaveAttribute("value", "1");
   await page
@@ -609,7 +645,7 @@ test("syncs planned rest without changing an active chrono", async ({
     .getByRole("button")
     .nth(1)
     .click();
-  await chooseValue(page, "Repos (secondes)", 90);
+  await chooseValue(page, "Repos", 90);
   await expect
     .poll(async () => {
       const store = await readPersistedStore(page);
@@ -659,10 +695,13 @@ test("reuses a template and persists independent session snapshots", async ({
     .getByRole("button", { name: "Terminer" })
     .click();
   await page.getByRole("button", { name: "Retour aux séances" }).click();
-  await page.locator(".workout-card").click();
+  await expect(
+    page.getByRole("region", { name: "Aperçu de Séance E2E" }),
+  ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Démarrer la séance" }),
-  ).toBeVisible();
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Refaire la séance" }).click();
   await page.getByRole("button", { name: "Démarrer la séance" }).click();
   await expect
     .poll(async () =>

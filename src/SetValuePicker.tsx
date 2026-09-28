@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { BottomSheet, bottomSheetCloseDuration } from "./BottomSheet";
 
 const ROW_HEIGHT = 44;
 
@@ -101,25 +103,45 @@ type PickerColumn = {
 
 export function SetValuePicker({
   label,
+  displayLabel,
   value,
   columns,
   disabled,
+  valueSuffix,
   formatValue,
   onSave,
 }: {
   label: string;
+  displayLabel?: string;
   value: number | null;
   columns: PickerColumn[];
   disabled?: boolean;
+  valueSuffix?: string;
   formatValue: (value: number | null) => string;
   onSave: (value: number) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [closing, setClosing] = useState(false);
   const [selection, setSelection] = useState<number[]>([]);
-  const dialog = useRef<HTMLElement>(null);
+  const closeTimeout = useRef<number | undefined>(undefined);
+  const content = useRef<HTMLDivElement>(null);
+
+  const closePicker = () => {
+    if (closing) return;
+    setOpen(false);
+    setClosing(true);
+    closeTimeout.current = window.setTimeout(() => {
+      setMounted(false);
+      setClosing(false);
+    }, bottomSheetCloseDuration);
+  };
 
   const showPicker = () => {
+    window.clearTimeout(closeTimeout.current);
+    setClosing(false);
     setSelection(columns.map((column) => column.value));
+    setMounted(true);
     setOpen(true);
   };
 
@@ -127,13 +149,15 @@ export function SetValuePicker({
     const value =
       columns.length === 2 ? selection[0] * 60 + selection[1] : selection[0];
     onSave(value);
-    setOpen(false);
+    closePicker();
   };
+
+  useEffect(() => () => window.clearTimeout(closeTimeout.current), []);
 
   useEffect(() => {
     if (!open) return;
     const frame = window.requestAnimationFrame(() =>
-      dialog.current
+      content.current
         ?.querySelector<HTMLElement>("[role=listbox]")
         ?.focus({ preventScroll: true }),
     );
@@ -141,105 +165,71 @@ export function SetValuePicker({
   }, [open]);
 
   return (
-    <div className="set-field">
-      <span>{label}</span>
-      <button
-        type="button"
-        className="set-picker-trigger"
-        aria-label={label}
-        data-value={value ?? ""}
-        disabled={disabled}
-        onClick={showPicker}
-      >
-        <span>{formatValue(value)}</span>
-        <span className="picker-trigger-chevron" aria-hidden="true">
-          ⌃
-        </span>
-      </button>
-      {open && (
-        <div
-          className="modal picker-backdrop"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setOpen(false);
-          }}
+    <>
+      <div className="set-field">
+        <span>{displayLabel ?? label}</span>
+        <button
+          type="button"
+          className="set-picker-trigger"
+          aria-label={label}
+          data-value={value ?? ""}
+          disabled={disabled}
+          onClick={showPicker}
         >
-          <section
-            ref={dialog}
+          <span className="picker-trigger-value">
+            <strong>{formatValue(value)}</strong>
+            {valueSuffix && <small>{valueSuffix}</small>}
+          </span>
+          <span className="picker-trigger-chevron" aria-hidden="true">
+            ⌃
+          </span>
+        </button>
+      </div>
+      {mounted &&
+        createPortal(
+          <BottomSheet
+            title={`Choisir ${label}`}
             className="picker-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-label={`Choisir ${label}`}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.preventDefault();
-                setOpen(false);
-              }
-              if (event.key === "Tab") {
-                const focusable = Array.from(
-                  event.currentTarget.querySelectorAll<HTMLElement>(
-                    "[role=listbox], button",
-                  ),
-                );
-                const first = focusable[0];
-                const last = focusable[focusable.length - 1];
-                if (event.shiftKey && document.activeElement === first) {
-                  event.preventDefault();
-                  last.focus();
-                } else if (!event.shiftKey && document.activeElement === last) {
-                  event.preventDefault();
-                  first.focus();
-                }
-              }
-            }}
+            backdropClassName="picker-backdrop"
+            closing={closing}
+            onClose={closePicker}
           >
-            <header className="picker-header">
-              <div>
-                <span>PARAMÈTRE DE SÉRIE</span>
-                <h2>{label}</h2>
+            <div ref={content} className="picker-content">
+              <header className="picker-header">
+                <div>
+                  <span>PARAMÈTRE DE SÉRIE</span>
+                  <h2>{label}</h2>
+                </div>
+              </header>
+              <div
+                className={`picker-wheels${columns.length > 1 ? " picker-wheels-pair" : ""}`}
+              >
+                {columns.map((column, index) => (
+                  <WheelPicker
+                    key={column.label}
+                    label={column.label}
+                    values={column.values}
+                    value={selection[index] ?? column.value}
+                    format={column.format ?? String}
+                    onChange={(next) =>
+                      setSelection((previous) =>
+                        previous.map((current, i) =>
+                          i === index ? next : current,
+                        ),
+                      )
+                    }
+                  />
+                ))}
               </div>
-              <button
-                type="button"
-                aria-label="Fermer"
-                onClick={() => setOpen(false)}
-              >
-                ×
-              </button>
-            </header>
-            <div
-              className={`picker-wheels${columns.length > 1 ? " picker-wheels-pair" : ""}`}
-            >
-              {columns.map((column, index) => (
-                <WheelPicker
-                  key={column.label}
-                  label={column.label}
-                  values={column.values}
-                  value={selection[index] ?? column.value}
-                  format={column.format ?? String}
-                  onChange={(next) =>
-                    setSelection((previous) =>
-                      previous.map((current, i) =>
-                        i === index ? next : current,
-                      ),
-                    )
-                  }
-                />
-              ))}
+              <footer className="picker-actions">
+                <button type="button" className="picker-save" onClick={save}>
+                  Valider
+                </button>
+              </footer>
             </div>
-            <footer className="picker-actions">
-              <button
-                type="button"
-                className="picker-cancel"
-                onClick={() => setOpen(false)}
-              >
-                Annuler
-              </button>
-              <button type="button" className="picker-save" onClick={save}>
-                Valider
-              </button>
-            </footer>
-          </section>
-        </div>
-      )}
-    </div>
+          </BottomSheet>,
+          document.body,
+        )}
+    </>
   );
 }

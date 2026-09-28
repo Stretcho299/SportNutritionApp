@@ -3,8 +3,11 @@
   "short_name": "SportNutri",
   "description": "Suivi personnel des séances et de la nutrition.",
   "lang": "fr",
+  "id": "/",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "background_color": "#060608",
   "theme_color": "#0F0F14",
   "icons": [
