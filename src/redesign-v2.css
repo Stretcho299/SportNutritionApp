@@ -19,6 +19,22 @@
   );
   --bottom-navigation-action-height: 44px;
   --bottom-nav-visual-offset: 14px;
+  /* Lift only the capsule above iOS's home gesture zone; the fixed host anchor stays unchanged. */
+  --bottom-navigation-floating-lift: max(
+    10px,
+    calc(
+      var(--bottom-navigation-safe-inset) -
+        var(--bottom-navigation-system-clearance) +
+        var(--bottom-nav-visual-offset) + 10px
+    )
+  );
+  /* Preserve a 12px gap after the last content item when it scrolls above the capsule. */
+  --bottom-navigation-scroll-reserve: calc(
+    var(--bottom-navigation-action-height) +
+      var(--bottom-navigation-system-clearance) +
+      var(--bottom-navigation-floating-lift) - var(--bottom-nav-visual-offset) +
+      12px
+  );
 }
 
 body {
@@ -35,10 +51,11 @@ body {
 }
 
 .app-shell:not(.workout-detail) {
-  padding-bottom: calc(
-    var(--bottom-navigation-action-height) +
-      var(--bottom-navigation-system-clearance)
-  );
+  padding-bottom: var(--bottom-navigation-scroll-reserve);
+}
+
+html {
+  scroll-padding-bottom: var(--bottom-navigation-scroll-reserve);
 }
 
 .home-header {
@@ -578,6 +595,8 @@ body {
 
 .planned-sets {
   padding-top: 4px;
+  padding-bottom: var(--bottom-navigation-scroll-reserve);
+  scroll-padding-bottom: var(--bottom-navigation-scroll-reserve);
 }
 
 .set-exercise-name {
@@ -761,37 +780,224 @@ body {
   text-transform: uppercase;
 }
 
-.bottom-navigation {
-  border-top-color: #29292f;
-  background: #0f0f12f2;
-}
-
-.bottom-navigation button {
+.bottom-navigation-surface {
   position: relative;
-  border-radius: 12px;
-  color: #66666f;
+  bottom: var(--bottom-navigation-floating-lift);
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: stretch;
+  width: min(320px, calc(100vw - 32px));
+  height: var(--bottom-navigation-action-height);
+  padding: 0 4px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(19 19 23 / 96%);
+  box-shadow:
+    0 8px 26px #0007,
+    inset 0 0 0 1px #ffffff24,
+    inset 0 1px #ffffff15,
+    inset 0 -1px #0005;
+  color: var(--text);
+  pointer-events: auto;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+  touch-action: none;
+  transition:
+    width 220ms ease,
+    transform 140ms ease,
+    box-shadow 180ms ease;
 }
 
-.bottom-navigation button.active {
-  background: #ff5a1f0c;
-  color: #ff8b5d;
+.bottom-navigation-surface::before {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(112deg, #ffffff0d, transparent 45%, #ff9a6c08);
+  content: "";
+  pointer-events: none;
+}
+
+@supports (backdrop-filter: blur(1px)) {
+  .bottom-navigation-surface {
+    background: rgb(25 25 30 / 26%);
+    backdrop-filter: blur(12px) saturate(200%);
+  }
+}
+
+@supports (-webkit-backdrop-filter: blur(1px)) {
+  .bottom-navigation-surface {
+    background: rgb(25 25 30 / 26%);
+    -webkit-backdrop-filter: blur(12px) saturate(200%);
+  }
+}
+
+.bottom-navigation-lens {
+  position: absolute;
+  z-index: 0;
+  top: 3px;
+  bottom: 3px;
+  left: 4px;
+  width: calc((100% - 8px) / 2);
+  border: 1px solid #ffffff17;
+  border-radius: 999px;
+  background:
+    linear-gradient(135deg, #ffffff12, #ffffff04 56%),
+    linear-gradient(120deg, #ff8b5d0d, #17171b2b 62%);
+  box-shadow:
+    inset 0 1px #ffffff12,
+    0 1px 9px #ff5a1f0c;
+  pointer-events: none;
+  transform: translate3d(0, 0, 0) scaleX(1);
+  transition:
+    transform 240ms cubic-bezier(0.2, 0.75, 0.25, 1),
+    filter 180ms ease;
+}
+
+.bottom-navigation-surface[data-active-tab="nutrition"]
+  .bottom-navigation-lens {
+  transform: translate3d(100%, 0, 0) scaleX(1);
+}
+
+.bottom-navigation-surface[data-lens-dragging="true"] .bottom-navigation-lens {
+  transform: translate3d(var(--bottom-navigation-lens-x, 0px), 0, 0)
+    scaleX(var(--bottom-navigation-lens-stretch, 1));
+}
+
+.bottom-navigation-surface.is-interacting {
+  transform: scale(0.985);
+  box-shadow:
+    0 6px 19px #0007,
+    inset 0 1px #ffffff15,
+    inset 0 -1px #0005;
+}
+
+.bottom-navigation-surface.is-interacting .bottom-navigation-lens {
+  transition: none;
+  filter: brightness(1.14);
+}
+
+.bottom-navigation-tab {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: var(--bottom-navigation-action-height);
+  height: var(--bottom-navigation-action-height);
+  padding: 0 5px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+  color: #a5a5ae;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1;
+  text-align: center;
+  text-transform: none;
+  white-space: nowrap;
+  -webkit-user-drag: none;
+  touch-action: none;
+  transition: color 150ms ease;
+}
+
+.bottom-navigation-tab.active {
+  background: transparent;
+  box-shadow: none;
+  color: #ffae8a;
+}
+
+.bottom-navigation-tab[aria-disabled="true"] {
+  color: #92929b;
+}
+
+.bottom-navigation-tab[data-pressed="true"] {
+  color: #ffd0bd;
+}
+
+.bottom-navigation-tab:focus-visible {
+  z-index: 2;
+  outline-offset: -3px;
+}
+
+.bottom-navigation-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bottom-navigation-surface.is-minimized {
+  width: 120px;
+}
+
+.bottom-navigation-surface.is-minimized .bottom-navigation-tab {
+  padding: 0;
+}
+
+.bottom-navigation-surface.is-minimized .bottom-navigation-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.app-shell[data-modal-open="true"] {
+  overscroll-behavior: none;
+}
+
+/* Keep only the app layer behind a sheet anchored when iOS pans its visual viewport. */
+.app-shell[data-modal-open="true"][data-viewport-panned="true"]
+  > :not(.modal):not(.bottom-navigation) {
+  translate: 0 var(--modal-background-viewport-offset, 0px);
+}
+
+.app-shell[data-modal-open="true"] .planned-sets {
+  overflow-y: hidden;
+  overscroll-behavior-y: none;
+}
+
+.bottom-navigation[data-modal-open="true"] {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.bottom-navigation[data-modal-open="true"] .bottom-navigation-surface {
+  transition: none;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.bottom-navigation[data-modal-open="true"] .bottom-navigation-lens {
+  transition: none;
+  border-color: transparent;
   box-shadow: none;
 }
 
-.bottom-navigation button.active::before {
-  content: "";
-  position: absolute;
-  top: -9px;
-  left: 26%;
-  right: 26%;
-  height: 2px;
-  border-radius: 2px;
-  background: #ff5a1f;
-  box-shadow: 0 0 10px #ff5a1f;
-}
+@media (prefers-reduced-motion: reduce) {
+  .bottom-navigation-surface,
+  .bottom-navigation-lens,
+  .bottom-navigation-tab {
+    transition: none !important;
+  }
 
-.bottom-navigation button[aria-disabled="true"] {
-  color: #55735f;
+  .bottom-navigation-surface.is-interacting {
+    transform: none;
+  }
 }
 
 /* Mobile dashboard and compact navigation. */
@@ -1320,9 +1526,9 @@ body {
 
 /* Bottom sheets: keyboard-aware viewport, isolated scroll and draggable handle. */
 .sheet-backdrop {
-  top: var(--visual-viewport-top, 0px);
+  top: var(--sheet-viewport-top, 0px);
   bottom: auto;
-  height: var(--visual-viewport-height, 100dvh);
+  height: var(--sheet-viewport-height, var(--app-viewport-height, 100dvh));
   overscroll-behavior: none;
   touch-action: auto;
   transition: none;
@@ -1331,7 +1537,12 @@ body {
 .modal > .bottom-sheet {
   display: flex;
   flex-direction: column;
-  max-height: min(calc(var(--visual-viewport-height, 100dvh) - 12px), 680px);
+  max-height: min(
+    calc(
+      var(--sheet-viewport-height, var(--app-viewport-height, 100dvh)) - 12px
+    ),
+    680px
+  );
   overflow: hidden;
   padding: 0;
   transform: translateY(var(--sheet-drag-y, 0px));
@@ -1395,8 +1606,8 @@ body {
 
 .sheet-scroll {
   overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 0 16px calc(16px + env(safe-area-inset-bottom));
+  overscroll-behavior-y: contain;
+  padding: 0 16px calc(22px + env(safe-area-inset-bottom));
   -webkit-overflow-scrolling: touch;
 }
 
@@ -1597,47 +1808,32 @@ button:active,
 }
 
 .workout-detail {
-  padding-bottom: calc(
-    var(--bottom-navigation-action-height) +
-      var(--bottom-navigation-system-clearance)
-  );
-}
-
-.workout-detail .bottom-navigation {
-  position: fixed;
-  top: auto;
-  right: auto;
-  bottom: calc(-1 * var(--bottom-nav-visual-offset));
-  left: 50%;
-  width: min(100%, 680px);
-  margin: 0;
-  transform: translateX(-50%);
+  padding-bottom: 0;
 }
 
 .bottom-navigation {
+  position: fixed;
+  z-index: 2;
   top: auto;
+  right: auto;
+  left: 50%;
+  width: min(100%, 680px);
+  margin: 0;
   bottom: calc(-1 * var(--bottom-nav-visual-offset));
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 0;
   min-height: 0;
   padding: 0 12px var(--bottom-navigation-system-clearance);
+  border: 0;
+  background: transparent;
+  background-image: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  pointer-events: none;
   transform: translateX(-50%);
-}
-
-.bottom-navigation button {
-  display: grid;
-  place-items: center;
-  height: var(--bottom-navigation-action-height);
-  min-height: var(--bottom-navigation-action-height);
-  padding: 0;
-}
-
-.bottom-navigation button.active::before {
-  left: 36%;
-  right: 36%;
-}
-
-.bottom-navigation button[aria-disabled="true"] {
-  color: #4f6d57;
 }
 
 .reorder-save {
@@ -1710,6 +1906,16 @@ button:active,
 .picker-selection {
   border-color: #ff7a4566;
   background: #ff5a1f0c;
+}
+
+.modal .picker-save {
+  width: 100%;
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .picker-fade-top {
@@ -2161,6 +2367,8 @@ body,
   font-weight: 500;
   letter-spacing: 0;
   line-height: 1.4;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .exercise-note-field textarea:focus {

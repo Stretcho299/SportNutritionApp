@@ -1,7 +1,11 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import App from "./App";
-import { __storageKey, type Workout } from "./storage/database";
+import {
+  __storageKey,
+  type Workout,
+  type WorkoutStore,
+} from "./storage/database";
 
 beforeEach(() => localStorage.clear());
 afterEach(() => {
@@ -108,7 +112,7 @@ async function chooseValue(label: string, value: number, index = 0) {
       ).getByRole("option", { name: new RegExp(`^${value}$`) }),
     );
   }
-  fireEvent.click(within(dialog).getByRole("button", { name: "Valider" }));
+  fireEvent.click(within(dialog).getByRole("button", { name: "ENREGISTRER" }));
   await waitForMotion();
 }
 async function fillSet(weight: string, index = 0) {
@@ -164,6 +168,10 @@ it("opens forms without input autofocus and locks the background", async () => {
   const dialog = screen.getByRole("dialog", { name: "Séance" });
   expect(screen.getByLabelText("Nom")).not.toHaveFocus();
   expect(document.body).toHaveStyle({ position: "fixed", overflow: "hidden" });
+  expect(document.querySelector(".app-shell")).toHaveAttribute(
+    "data-modal-open",
+    "true",
+  );
   await act(() => new Promise((resolve) => window.setTimeout(resolve, 20)));
   expect(dialog).toHaveFocus();
   const backdrop = document.querySelector<HTMLElement>(".sheet-backdrop")!;
@@ -176,12 +184,16 @@ it("opens forms without input autofocus and locks the background", async () => {
   ).not.toBeInTheDocument();
   expect(document.body.style.position).toBe("");
   expect(document.body.style.overflow).toBe("");
+  expect(document.querySelector(".app-shell")).not.toHaveAttribute(
+    "data-modal-open",
+  );
 });
 
-it("tracks visualViewport keyboard changes without scrolling the document", async () => {
+it("uses layout bounds without a keyboard and visualViewport with one", async () => {
+  vi.stubGlobal("innerHeight", 844);
   const visualViewport = new EventTarget() as VisualViewport;
   Object.defineProperties(visualViewport, {
-    height: { configurable: true, value: 844 },
+    height: { configurable: true, value: 810 },
     offsetTop: { configurable: true, value: 0 },
   });
   vi.stubGlobal("visualViewport", visualViewport);
@@ -195,26 +207,32 @@ it("tracks visualViewport keyboard changes without scrolling the document", asyn
   fireEvent.focus(name);
   const backdrop = document.querySelector<HTMLElement>(".sheet-backdrop")!;
 
+  expect(backdrop).toHaveAttribute("data-keyboard-open", "false");
+  expect(backdrop.style.getPropertyValue("--sheet-viewport-height")).toBe(
+    "var(--app-viewport-height, 100dvh)",
+  );
+  expect(backdrop.style.getPropertyValue("--sheet-viewport-top")).toBe("0px");
+
   Object.defineProperties(visualViewport, {
     height: { configurable: true, value: 430 },
     offsetTop: { configurable: true, value: 96 },
   });
   act(() => visualViewport.dispatchEvent(new Event("resize")));
-  expect(backdrop.style.getPropertyValue("--visual-viewport-height")).toBe(
+  expect(backdrop.style.getPropertyValue("--sheet-viewport-height")).toBe(
     "430px",
   );
-  expect(backdrop.style.getPropertyValue("--visual-viewport-top")).toBe("96px");
+  expect(backdrop.style.getPropertyValue("--sheet-viewport-top")).toBe("96px");
   expect(backdrop).toHaveAttribute("data-keyboard-open", "true");
 
   Object.defineProperties(visualViewport, {
-    height: { configurable: true, value: 844 },
+    height: { configurable: true, value: 810 },
     offsetTop: { configurable: true, value: 0 },
   });
   act(() => visualViewport.dispatchEvent(new Event("resize")));
-  expect(backdrop.style.getPropertyValue("--visual-viewport-height")).toBe(
-    "844px",
+  expect(backdrop.style.getPropertyValue("--sheet-viewport-height")).toBe(
+    "var(--app-viewport-height, 100dvh)",
   );
-  expect(backdrop.style.getPropertyValue("--visual-viewport-top")).toBe("0px");
+  expect(backdrop.style.getPropertyValue("--sheet-viewport-top")).toBe("0px");
   expect(backdrop).toHaveAttribute("data-keyboard-open", "false");
 });
 
@@ -685,16 +703,41 @@ it("stores zero reps and zero kilograms as real selected values", async () => {
 });
 
 it("keeps fixed exercise zones outside a long series list", async () => {
-  const view = await openEmptyWorkout();
-  await createExercise("Squat", 12);
+  vi.stubGlobal("indexedDB", undefined);
+  const exercises = [
+    { id: "layout-squat", name: "Squat", count: 12 },
+    { id: "layout-row", name: "Row", count: 3 },
+    { id: "layout-curl", name: "Curl", count: 3 },
+    { id: "layout-press", name: "Press", count: 3 },
+    { id: "layout-lunge", name: "Lunge", count: 3 },
+    { id: "layout-plank", name: "Plank", count: 3 },
+  ].map(({ id, name, count }, position) => ({
+    id,
+    name,
+    position,
+    defaultRestSeconds: 150,
+    plannedSets: Array.from({ length: count }, (_, setPosition) => ({
+      id: id + "-set-" + (setPosition + 1),
+      position: setPosition,
+      weightKg: null,
+      repetitions: null,
+      restSeconds: 150,
+    })),
+  }));
+  const store: WorkoutStore = {
+    version: 2,
+    templates: [{ id: "layout-workout", name: "Layout fixture", exercises }],
+    sessions: [],
+  };
+  localStorage.setItem(__storageKey, JSON.stringify(store));
+
+  const view = render(<App />);
+  await openPreparedWorkout("Layout fixture");
+  fireEvent.click(screen.getByRole("button", { name: "DÉMARRER LA SÉANCE" }));
+
   const preparation = view.container.querySelector<HTMLDivElement>(
     ".workout-preparation",
   );
-  await createExercise("Row");
-  await createExercise("Curl");
-  await createExercise("Press");
-  await createExercise("Lunge");
-  await createExercise("Plank");
   const fixedZones = view.container.querySelector<HTMLDivElement>(
     ".workout-fixed-zones",
   );

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 type PersistedStore = {
   templates: Array<{
@@ -67,6 +67,40 @@ async function addExercise(page: Page, name: string, count = "1") {
   await saveSheet(page, "Exercice", name);
 }
 
+async function expectPickerSave(picker: Locator) {
+  const save = picker.getByRole("button", {
+    name: "ENREGISTRER",
+    exact: true,
+  });
+  await expect(save).toBeVisible();
+  const colors = await picker.evaluate((element) => {
+    const button = element.querySelector<HTMLElement>(".picker-save")!;
+    const style = getComputedStyle(button);
+    const probe = document.createElement("span");
+    probe.style.backgroundColor = "var(--accent)";
+    probe.style.color = "var(--accent-ink)";
+    document.body.append(probe);
+    const expected = getComputedStyle(probe);
+    const result = {
+      background: style.backgroundColor,
+      color: style.color,
+      expectedBackground: expected.backgroundColor,
+      expectedColor: expected.color,
+    };
+    probe.remove();
+    return result;
+  });
+  expect(colors.background).toBe(colors.expectedBackground);
+  expect(colors.background).toMatch(/rgb\(255,\s*\d+,\s*\d+\)/);
+  expect(colors.color).toBe(colors.expectedColor);
+  const bounds = await save.boundingBox();
+  const footerBounds = await picker.locator(".picker-actions").boundingBox();
+  expect(bounds).not.toBeNull();
+  expect(footerBounds).not.toBeNull();
+  expect(Math.abs(bounds!.width - footerBounds!.width)).toBeLessThanOrEqual(1);
+  return save;
+}
+
 async function chooseValue(page: Page, label: string, value: number) {
   await page.getByRole("button", { name: label, exact: true }).first().click();
   const dialog = page.getByRole("dialog", { name: `Choisir ${label}` });
@@ -94,7 +128,7 @@ async function chooseValue(page: Page, label: string, value: number) {
       .getByRole("option", { name: String(value), exact: true })
       .click();
   }
-  await dialog.getByRole("button", { name: "Valider" }).click();
+  await (await expectPickerSave(dialog)).click();
   await expect(dialog).toHaveCount(0);
 }
 
@@ -126,6 +160,47 @@ async function readPersistedStore(page: Page): Promise<PersistedStore> {
         };
         request.onerror = () => reject(request.error);
       }),
+  );
+}
+
+async function scrollInElement(page: Page, target: Locator, deltaY: number) {
+  if (page.context().browser()?.browserType().name() === "webkit") {
+    await target.evaluate((element, delta) => {
+      const limit = Math.max(0, element.scrollHeight - element.clientHeight);
+      element.scrollTop = Math.min(
+        limit,
+        Math.max(0, element.scrollTop + delta),
+      );
+      element.dispatchEvent(new Event("scroll", { bubbles: true }));
+    }, deltaY);
+    return;
+  }
+  const bounds = await target.boundingBox();
+  if (!bounds) throw new Error("scroll target has no bounding box");
+  await page.mouse.move(
+    bounds.x + bounds.width / 2,
+    bounds.y + bounds.height / 2,
+  );
+  await page.mouse.wheel(0, deltaY);
+}
+
+async function setVisualViewport(
+  page: Page,
+  height: number,
+  offsetTop: number,
+) {
+  await page.evaluate(
+    ({ height, offsetTop }) => {
+      const viewport = window.visualViewport;
+      if (!viewport) throw new Error("visualViewport is unavailable");
+      Object.defineProperties(viewport, {
+        height: { configurable: true, value: height },
+        offsetTop: { configurable: true, value: offsetTop },
+      });
+      viewport.dispatchEvent(new Event("resize"));
+      viewport.dispatchEvent(new Event("scroll"));
+    },
+    { height, offsetTop },
   );
 }
 
@@ -691,7 +766,7 @@ test("reuses a template and persists independent session snapshots", async ({
     .click();
   await page
     .getByRole("dialog", { name: /Choisir Répétitions/i })
-    .getByRole("button", { name: "Valider" })
+    .getByRole("button", { name: "ENREGISTRER", exact: true })
     .click();
   await region.getByRole("button", { name: "Lancer le repos" }).click();
   await region.getByRole("button", { name: "Mettre fin au repos" }).click();
@@ -1182,7 +1257,9 @@ test("keeps picker sheets open on backdrop taps and blocks the app behind them",
   ).toHaveCount(0);
   await page.locator(".sheet-backdrop").click({ position: { x: 4, y: 4 } });
   await expect(picker).toBeVisible();
-  await picker.getByRole("button", { name: "Valider" }).click();
+  await picker
+    .getByRole("button", { name: "ENREGISTRER", exact: true })
+    .click();
   await expect(picker).toHaveCount(0);
 
   const viewport = await page
@@ -1198,4 +1275,329 @@ test("keeps picker sheets open on backdrop taps and blocks the app behind them",
       }>,
   );
   expect(manifest.orientation).toBe("portrait");
+});
+
+test("uses the orange ENREGISTRER action for every set-value picker", async ({
+  page,
+}) => {
+  await prepareWorkout(page, "3");
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+
+  for (const label of ["Charge (kg)", "Répétitions", "Repos"]) {
+    await page
+      .locator(".set-block")
+      .first()
+      .getByRole("button", { name: label, exact: true })
+      .click();
+    const picker = page.getByRole("dialog", { name: `Choisir ${label}` });
+    await (await expectPickerSave(picker)).click();
+    await expect(picker).toHaveCount(0);
+  }
+});
+
+for (const width of [390, 320]) {
+  test(`locks background scrolling through Notes and pickers at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await prepareWorkout(page, "12");
+    await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+
+    const appShell = page.locator(".app-shell");
+    const plannedSets = page.locator(".planned-sets");
+    await plannedSets.evaluate((element) => {
+      element.scrollTop = 120;
+      element.dispatchEvent(new Event("scroll"));
+    });
+    const notesBackgroundPosition = await plannedSets.evaluate(
+      (element) => element.scrollTop,
+    );
+    expect(notesBackgroundPosition).toBeGreaterThan(0);
+
+    await page.locator(".exercise-note-trigger").click();
+    const notes = page.getByRole("dialog", { name: "Notes de l’exercice" });
+    const backdrop = page.locator(".sheet-backdrop");
+    await expect(notes).toBeVisible();
+    await expect(appShell).toHaveAttribute("data-modal-open", "true");
+    await expect
+      .poll(() =>
+        plannedSets.evaluate((element) => getComputedStyle(element).overflowY),
+      )
+      .toBe("hidden");
+    expect(await plannedSets.evaluate((element) => element.scrollTop)).toBe(
+      notesBackgroundPosition,
+    );
+
+    const sessionNote = notes.getByRole("textbox", {
+      name: "Note de cette séance",
+    });
+    const behindSet = page.locator(".set-block").first();
+    const backgroundWindowScroll = await page.evaluate(() => window.scrollY);
+    const backgroundAnchorTop = await behindSet.evaluate(
+      (element) => element.getBoundingClientRect().top,
+    );
+    const backgroundLayer = page.locator(".workout-preparation");
+    const originalBackgroundTransform = await backgroundLayer.evaluate(
+      (element) => (element as HTMLElement).style.transform,
+    );
+    const expectBackgroundAnchored = async () => {
+      const state = await page.evaluate(() => ({
+        scrollY: window.scrollY,
+        plannedSetsTop:
+          document.querySelector<HTMLElement>(".planned-sets")!.scrollTop,
+        anchorTop: document
+          .querySelector<HTMLElement>(".set-block")!
+          .getBoundingClientRect().top,
+      }));
+      expect(state.scrollY).toBe(backgroundWindowScroll);
+      expect(state.plannedSetsTop).toBe(notesBackgroundPosition);
+      expect(Math.abs(state.anchorTop - backgroundAnchorTop)).toBeLessThan(1);
+    };
+    await sessionNote.focus();
+    // Recreate the native iOS visual viewport pan in the background layer.
+    // The modal itself is not transformed and must keep following the keyboard.
+    await backgroundLayer.evaluate((element) => {
+      (element as HTMLElement).style.transform = "translateY(-96px)";
+    });
+    await setVisualViewport(page, 430, 96);
+    await expect(backdrop).toHaveAttribute("data-keyboard-open", "true");
+    await expect(sessionNote).toBeVisible();
+    await expect
+      .poll(() =>
+        page
+          .locator(".app-shell")
+          .evaluate((element) =>
+            getComputedStyle(element).getPropertyValue(
+              "--modal-background-viewport-offset",
+            ),
+          ),
+      )
+      .toBe("96px");
+    await expectBackgroundAnchored();
+    await sessionNote.fill(
+      Array.from({ length: 28 }, (_, index) => `note longue ${index}`).join(
+        "\n",
+      ),
+    );
+    const textareaScroll = await sessionNote.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+      return element.scrollTop;
+    });
+    expect(textareaScroll).toBeGreaterThan(0);
+    await expectBackgroundAnchored();
+
+    const sheetScroll = page.locator(".sheet-scroll");
+    await sheetScroll.evaluate((element) => {
+      element.style.maxHeight = "140px";
+      element.scrollTop = element.scrollHeight;
+      element.dispatchEvent(new Event("scroll"));
+    });
+    const sheetScrollTop = await sheetScroll.evaluate(
+      (element) => element.scrollTop,
+    );
+    expect(sheetScrollTop).toBeGreaterThan(0);
+    const sheetBounds = await sheetScroll.boundingBox();
+    expect(sheetBounds).not.toBeNull();
+    await scrollInElement(page, sheetScroll, -640);
+    await scrollInElement(page, sheetScroll, 640);
+    await sheetScroll.evaluate((element) => {
+      element.scrollTop = 0;
+      element.dispatchEvent(new Event("scroll"));
+    });
+    await expectBackgroundAnchored();
+
+    await setVisualViewport(page, 844, 0);
+    await backgroundLayer.evaluate((element, transform) => {
+      (element as HTMLElement).style.transform = transform;
+    }, originalBackgroundTransform);
+    await expectBackgroundAnchored();
+    await expect(backdrop).toHaveAttribute("data-keyboard-open", "false");
+    await dragDismissSheet(page);
+    await expect(notes).toHaveCount(0);
+    await expect(appShell).not.toHaveAttribute("data-modal-open");
+    await expectBackgroundAnchored();
+    await expect
+      .poll(() =>
+        plannedSets.evaluate((element) => getComputedStyle(element).overflowY),
+      )
+      .toBe("auto");
+
+    const plannedBounds = await plannedSets.boundingBox();
+    expect(plannedBounds).not.toBeNull();
+    await scrollInElement(page, plannedSets, 240);
+    await expect
+      .poll(() => plannedSets.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(notesBackgroundPosition);
+
+    const pickerSet = page.locator(".set-block").nth(5);
+    await pickerSet.scrollIntoViewIfNeeded();
+    const pickerBackgroundPosition = await plannedSets.evaluate(
+      (element) => element.scrollTop,
+    );
+    await pickerSet.getByRole("button", { name: "Charge (kg)" }).click();
+    const picker = page.getByRole("dialog", { name: "Choisir Charge (kg)" });
+    await expect(picker).toBeVisible();
+    await expect(appShell).toHaveAttribute("data-modal-open", "true");
+    expect(await plannedSets.evaluate((element) => element.scrollTop)).toBe(
+      pickerBackgroundPosition,
+    );
+    const wheel = picker.getByRole("listbox", { name: "Kilogrammes" });
+    const wheelPosition = await wheel.evaluate((element) => {
+      const limit = Math.max(0, element.scrollHeight - element.clientHeight);
+      element.scrollTop = Math.min(limit, element.scrollTop + 120);
+      element.dispatchEvent(new Event("scroll", { bubbles: true }));
+      return element.scrollTop;
+    });
+    expect(wheelPosition).toBeGreaterThan(0);
+    expect(await plannedSets.evaluate((element) => element.scrollTop)).toBe(
+      pickerBackgroundPosition,
+    );
+    await (await expectPickerSave(picker)).click();
+    await expect(picker).toHaveCount(0);
+    await expect(appShell).not.toHaveAttribute("data-modal-open");
+    expect(await plannedSets.evaluate((element) => element.scrollTop)).toBe(
+      pickerBackgroundPosition,
+    );
+  });
+}
+
+test("keeps Notes above the iOS keyboard when innerHeight shrinks on the first event", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await prepareWorkout(page, "3");
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  const navigation = page.locator(".bottom-navigation-surface");
+  const navBefore = await navigation.boundingBox();
+  await page.evaluate(() => {
+    Object.defineProperty(window, "innerHeight", {
+      configurable: true,
+      value: 797,
+    });
+    Object.defineProperty(document.documentElement, "clientHeight", {
+      configurable: true,
+      value: 797,
+    });
+  });
+  await setVisualViewport(page, 797, 0);
+  await page.locator(".exercise-note-trigger").click();
+  const notes = page.getByRole("dialog", { name: "Notes de l’exercice" });
+  const backdrop = page.locator(".sheet-backdrop");
+  const field = notes.getByRole("textbox", { name: "Note de cette séance" });
+  await expect(backdrop).toHaveAttribute("data-keyboard-open", "false");
+  const before = await notes.boundingBox();
+  expect(before!.y + before!.height).toBeCloseTo(844, 0);
+  await field.focus();
+  await page.evaluate(() => {
+    Object.defineProperty(window, "innerHeight", {
+      configurable: true,
+      value: 441,
+    });
+  });
+  // No second resize after innerHeight recovers: the first event must suffice.
+  await setVisualViewport(page, 441, 0);
+  await expect(backdrop).toHaveAttribute("data-keyboard-open", "true");
+  await expect(backdrop).toHaveCSS("height", "441px");
+  await expect(backdrop).toHaveCSS("top", "0px");
+  await expect
+    .poll(async () => {
+      const bounds = await notes.boundingBox();
+      return bounds!.y + bounds!.height;
+    })
+    .toBeCloseTo(441, 0);
+  await expect
+    .poll(() =>
+      field.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        const scroll = element.closest(".sheet-scroll")!;
+        const scrollBounds = scroll.getBoundingClientRect();
+        return (
+          bounds.top >= scrollBounds.top &&
+          bounds.bottom <= Math.min(scrollBounds.bottom, 441)
+        );
+      }),
+    )
+    .toBe(true);
+  // Force overflow within this existing Notes sheet to verify focus uses its
+  // internal scroller, including focus changes without any viewport event.
+  await notes.locator(".sheet-scroll").evaluate((element) => {
+    element.style.maxHeight = "240px";
+    element.scrollTop = 0;
+  });
+  await notes.getByRole("textbox", { name: "Note permanente" }).focus();
+  await field.focus();
+  await expect
+    .poll(() =>
+      field.evaluate((element) => {
+        const scroller = element.closest(".sheet-scroll")!;
+        const bounds = element.getBoundingClientRect();
+        const scrollBounds = scroller.getBoundingClientRect();
+        return (
+          scroller.scrollTop > 0 &&
+          bounds.top >= scrollBounds.top &&
+          bounds.bottom <= scrollBounds.bottom
+        );
+      }),
+    )
+    .toBe(true);
+  await field.fill("Brouillon clavier");
+  await expect(field).toBeFocused();
+  await expect(field).toHaveValue("Brouillon clavier");
+  await page.locator(".sheet-backdrop").click({ position: { x: 4, y: 4 } });
+  await expect(notes).toBeVisible();
+  await expect(page.locator(".bottom-navigation")).toHaveCSS(
+    "visibility",
+    "hidden",
+  );
+
+  for (const top of [96, -24, 0]) {
+    await setVisualViewport(page, 441, top);
+    await expect(backdrop).toHaveCSS("top", `${top}px`);
+    await expect
+      .poll(async () => {
+        const bounds = await notes.boundingBox();
+        return bounds!.y + bounds!.height;
+      })
+      .toBeCloseTo(top + 441, 0);
+  }
+  await notes
+    .locator(".sheet-scroll")
+    .evaluate((element) => element.style.removeProperty("max-height"));
+  await page.evaluate(() => {
+    Object.defineProperty(window, "innerHeight", {
+      configurable: true,
+      value: 797,
+    });
+  });
+  await setVisualViewport(page, 797, 0);
+  await expect(backdrop).toHaveAttribute("data-keyboard-open", "false");
+  await expect
+    .poll(async () => {
+      const bounds = await notes.boundingBox();
+      return bounds!.y + bounds!.height;
+    })
+    .toBeCloseTo(844, 0);
+  await dragDismissSheet(page);
+  await expect(notes).toHaveCount(0);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  await expect(page.locator(".bottom-navigation")).toHaveCSS(
+    "visibility",
+    "visible",
+  );
+  expect(await navigation.boundingBox()).toEqual(navBefore);
+
+  // Dismiss directly with the keyboard still open; the draft is cancelled.
+  await page.locator(".exercise-note-trigger").click();
+  await expect(field).toHaveValue("");
+  await field.focus();
+  await setVisualViewport(page, 441, 0);
+  await expect(backdrop).toHaveAttribute("data-keyboard-open", "true");
+  await dragDismissSheet(page);
+  await expect(notes).toHaveCount(0);
+  await setVisualViewport(page, 797, 0);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  expect(await navigation.boundingBox()).toEqual(navBefore);
+  await expect(page.locator(".app-shell")).not.toHaveAttribute(
+    "data-viewport-panned",
+  );
 });
