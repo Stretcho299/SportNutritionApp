@@ -1207,7 +1207,6 @@ export default function App() {
                     execution={execution}
                     workout={workout}
                     clock={clock}
-                    onFinishRest={finishCurrentRest}
                     selectedExerciseId={exercise.id}
                   />
                 )}

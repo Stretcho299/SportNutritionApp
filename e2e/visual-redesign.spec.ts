@@ -574,6 +574,37 @@ for (const width of [390, 320]) {
     await choosePickerValue(page, "Charge (kg)", 62.5);
     await choosePickerValue(page, "Répétitions", 10);
     await page.getByRole("button", { name: "Démarrer la séance" }).click();
+    const sessionTimer = page.getByRole("timer", {
+      name: "Durée de la séance",
+    });
+    await expect(sessionTimer).toHaveCSS("font-size", "12px");
+    const startedAt = Number(
+      await sessionTimer.getAttribute("data-started-at"),
+    );
+    await page.evaluate((timestamp) => {
+      const nativeNow = Date.now.bind(Date);
+      Date.now = () => timestamp + 3_723_000;
+      window.dispatchEvent(new Event("pageshow"));
+      Date.now = nativeNow;
+    }, startedAt);
+    await expect(sessionTimer).toHaveText("◷ 1:02:03");
+    const compactProgress = await page
+      .getByRole("region", { name: "Progression de la séance" })
+      .locator(".progress-label")
+      .evaluate((label) => {
+        const items = Array.from(label.children).map((item) =>
+          item.getBoundingClientRect(),
+        );
+        return {
+          overflows: label.scrollWidth > label.clientWidth + 1,
+          overlaps: items.some(
+            (item, index) =>
+              index > 0 && item.left < items[index - 1].right - 1,
+          ),
+        };
+      });
+    expect(compactProgress).toEqual({ overflows: false, overlaps: false });
+    await page.evaluate(() => window.dispatchEvent(new Event("pageshow")));
     const finishExercise = page.getByRole("button", {
       name: "Terminer l’exercice",
     });
@@ -626,6 +657,16 @@ for (const width of [390, 320]) {
     await expect(
       page.locator(".set-block").nth(1).locator(".order"),
     ).toHaveCount(1);
+    const tabSizes = await rail.getByRole("button").evaluateAll((buttons) =>
+      buttons.map((button) => {
+        const bounds = button.getBoundingClientRect();
+        return [bounds.width, bounds.height];
+      }),
+    );
+    expect(tabSizes).toEqual([
+      [42, 42],
+      [42, 42],
+    ]);
     await first.getByRole("button", { name: "Lancer le repos" }).click();
     const timer = page.getByRole("timer", { name: "Temps de repos restant" });
     await expect(timer).toBeVisible();
@@ -703,6 +744,11 @@ for (const width of [390, 320]) {
         .getByRole("button", { name: "Mettre fin" })
         .click();
     }
+    await expect(rail.locator("li").first()).toHaveClass(/execution-completed/);
+    await expect(rail.getByRole("button").first()).toHaveCSS(
+      "border-color",
+      "rgb(49, 91, 62)",
+    );
     await page
       .getByRole("button", { name: "Terminer la séance", exact: true })
       .click();
@@ -952,6 +998,9 @@ test("exercise navigation animates according to workout order without changing e
   await page.mouse.move(firstBox!.x - 12, thirdBox!.y + thirdBox!.height / 2, {
     steps: 6,
   });
+  const clone = page.locator(".exercise-tab-drag-clone");
+  await expect(clone).toBeVisible();
+  await expect(clone).toHaveCSS("border-radius", "13px");
   await page.mouse.up();
   await expect(rail.getByRole("button").first()).toHaveAccessibleName(
     /Troisième/,

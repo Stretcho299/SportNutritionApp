@@ -23,11 +23,9 @@ function RestRing({ remaining, total }: { remaining: number; total: number }) {
 export function ActiveRestTimer({
   remaining,
   total,
-  onFinish,
 }: {
   remaining: number;
   total: number;
-  onFinish: () => void;
 }) {
   return (
     <aside
@@ -40,9 +38,6 @@ export function ActiveRestTimer({
         <RestRing remaining={remaining} total={total} />
         <strong>{formatTime(remaining)}</strong>
       </div>
-      <button type="button" className="mini-timer-finish" onClick={onFinish}>
-        Fin de repos
-      </button>
     </aside>
   );
 }

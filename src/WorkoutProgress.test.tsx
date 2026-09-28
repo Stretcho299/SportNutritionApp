@@ -31,10 +31,12 @@ it("counts only treated sets and keeps the real rest visible when another exerci
       workout={workout}
       execution={execution}
       clock={31000}
-      onFinishRest={() => undefined}
       selectedExerciseId={workout.exercises[1].id}
     />,
   );
+  expect(
+    screen.getByRole("region", { name: "Progression de la séance" }),
+  ).toHaveClass("has-rest");
   expect(screen.getByRole("progressbar")).toHaveAttribute("value", "2");
   expect(screen.getByRole("progressbar")).toHaveAttribute("max", "5");
   expect(screen.getByText("Squat · Série 3")).toBeInTheDocument();
@@ -49,6 +51,7 @@ it("counts only treated sets and keeps the real rest visible when another exerci
       .getByRole("timer", { name: "Temps de repos restant" })
       .querySelector(".countdown-value"),
   ).toHaveAttribute("stroke-dashoffset", String(100 * (1 - 60 / 90)));
+  expect(screen.queryByRole("button", { name: "Fin de repos" })).toBeNull();
   expect(execution).toEqual(before);
 });
 
@@ -95,9 +98,7 @@ it("freezes completed session duration at completedAt", () => {
 });
 
 it("renders a finite empty ring for a zero-second rest", () => {
-  const { container } = render(
-    <ActiveRestTimer remaining={0} total={0} onFinish={() => undefined} />,
-  );
+  const { container } = render(<ActiveRestTimer remaining={0} total={0} />);
   expect(
     screen.getByRole("timer", { name: "Temps de repos restant" }),
   ).toHaveTextContent("0:00");

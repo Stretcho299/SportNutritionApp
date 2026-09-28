@@ -6,13 +6,11 @@ export function WorkoutProgress({
   execution,
   workout,
   clock,
-  onFinishRest,
   selectedExerciseId,
 }: {
   execution: WorkoutExecution;
   workout: Workout;
   clock: number;
-  onFinishRest?: () => void;
   selectedExerciseId: string;
 }) {
   const sets = [
@@ -51,7 +49,7 @@ export function WorkoutProgress({
   );
   return (
     <section
-      className={`workout-progress${resting && onFinishRest ? " has-rest" : ""}`}
+      className={`workout-progress${resting ? " has-rest" : ""}`}
       aria-label="Progression de la séance"
     >
       <div className="progress-copy">
@@ -89,14 +87,13 @@ export function WorkoutProgress({
             : "Séries effectuées ou skippées"}
         </small>
       </div>
-      {resting && onFinishRest && (
+      {resting && (
         <ActiveRestTimer
           remaining={Math.max(
             0,
             Math.ceil(((resting.restEndsAt ?? clock) - clock) / 1000),
           )}
           total={resting.restDurationSeconds ?? resting.restSeconds}
-          onFinish={onFinishRest}
         />
       )}
     </section>

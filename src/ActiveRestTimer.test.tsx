@@ -1,11 +1,10 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { ActiveRestTimer } from "./ActiveRestTimer";
 
-it("renders the compact frozen-duration timer and keeps its finish action", () => {
-  const onFinish = vi.fn();
-  const { rerender } = render(
-    <ActiveRestTimer remaining={25} total={30} onFinish={onFinish} />,
+it("renders the compact informative rest timer without a finish action", () => {
+  const { rerender, container } = render(
+    <ActiveRestTimer remaining={25} total={30} />,
   );
 
   const timer = screen.getByRole("timer", { name: "Temps de repos restant" });
@@ -15,10 +14,11 @@ it("renders the compact frozen-duration timer and keeps its finish action", () =
     "stroke-dashoffset",
     String(100 * (1 - 25 / 30)),
   );
-  fireEvent.click(within(timer).getByRole("button", { name: "Fin de repos" }));
-  expect(onFinish).toHaveBeenCalledOnce();
+  expect(timer.querySelector(".rest-ring")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Fin de repos" })).toBeNull();
+  expect(container.querySelector(".mini-timer-finish")).toBeNull();
 
-  rerender(<ActiveRestTimer remaining={24} total={30} onFinish={onFinish} />);
+  rerender(<ActiveRestTimer remaining={24} total={30} />);
   expect(
     screen.getByRole("timer", { name: "Temps de repos restant" }),
   ).toHaveAttribute("data-reference-seconds", "30");
