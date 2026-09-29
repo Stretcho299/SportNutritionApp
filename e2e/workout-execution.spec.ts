@@ -234,7 +234,7 @@ test("keeps exercise options distinct and reachable beside finish at phone width
 }) => {
   await page.setViewportSize({ width: 320, height: 844 });
   await prepareWorkout(page);
-  await page.getByRole("button", { name: "Actions de l’exercice" }).click();
+  await page.getByRole("button", { name: "Modifier l’exercice" }).click();
   const renameSheet = page.getByRole("dialog", { name: "Exercice" });
   await renameSheet
     .getByRole("textbox", { name: "Nom" })
@@ -249,14 +249,14 @@ test("keeps exercise options distinct and reachable beside finish at phone width
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 844 });
     const options = page.getByRole("button", {
-      name: "Actions de l’exercice",
+      name: "Modifier l’exercice",
     });
     const finish = page.getByRole("button", { name: "Terminer l’exercice" });
     await expect(options).toBeVisible();
     await expect(finish).toBeVisible();
     const geometry = await page.evaluate(() => {
       const options = document.querySelector<HTMLElement>(
-        '.exercise-menu > button[aria-label="Actions de l’exercice"]',
+        ".exercise-menu > button:first-child",
       );
       const finish = document.querySelector<HTMLElement>(
         ".exercise-menu button:last-child",
@@ -284,7 +284,7 @@ test("keeps exercise options distinct and reachable beside finish at phone width
     expect(geometry.overlap).toBe(false);
   }
 
-  await page.getByRole("button", { name: "Actions de l’exercice" }).click();
+  await page.getByRole("button", { name: "Modifier l’exercice" }).click();
   await expect(page.getByRole("dialog", { name: "Exercice" })).toBeVisible();
   await saveSheet(
     page,

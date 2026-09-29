@@ -544,7 +544,7 @@ it("keeps sets in their natural order and renumbers them after deletion", async 
     "Row",
   ]);
   const rowActions = screen.getByLabelText(
-    "Actions de l’exercice",
+    "Modifier l’exercice",
   ).parentElement!;
   fireEvent.click(
     within(rowActions).getByRole("button", { name: "Supprimer" }),
@@ -564,9 +564,7 @@ it("selects a remaining exercise after deletion and restores the empty state aft
   await createExercise("Squat");
   await createExercise("Row");
   const removeSelected = () => {
-    const actions = screen.getByLabelText(
-      "Actions de l’exercice",
-    ).parentElement!;
+    const actions = screen.getByLabelText("Modifier l’exercice").parentElement!;
     fireEvent.click(within(actions).getByRole("button", { name: "Supprimer" }));
   };
   removeSelected();

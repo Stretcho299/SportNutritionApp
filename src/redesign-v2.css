@@ -1817,7 +1817,7 @@ html {
   grid-template-columns: 44px minmax(0, auto);
 }
 
-.exercise-menu > button[aria-label="Actions de l’exercice"] {
+.exercise-menu > button:first-child {
   display: inline-grid;
   place-items: center;
   width: 44px;
@@ -1839,7 +1839,7 @@ html {
     box-shadow 160ms ease;
 }
 
-.exercise-menu > button[aria-label="Actions de l’exercice"]:active {
+.exercise-menu > button:first-child:active {
   border-color: #81553f;
   background: #29272a;
   color: #f0aa88;

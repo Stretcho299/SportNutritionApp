@@ -1150,13 +1150,13 @@ export default function App() {
                   </div>
                   <div className="exercise-menu">
                     <button
-                      aria-label="Actions de l’exercice"
+                      aria-label="Modifier l’exercice"
                       onClick={() => {
                         setName(exercise.name);
                         setDialog("renameExercise");
                       }}
                     >
-                      <Icon name="more" size={18} />
+                      <Icon name="edit" size={18} />
                     </button>
                     {execution?.status === "inProgress" ? (
                       <button
