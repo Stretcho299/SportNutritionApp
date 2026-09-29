@@ -523,7 +523,9 @@ test("persists session kg and reps through exercise changes, reload, and a new s
     "8",
   );
   await page.reload();
-  await page.locator(".workout-card").click();
+  await page
+    .getByRole("button", { name: "Reprendre la séance Séance E2E" })
+    .click();
   await expect(page.getByLabel("Charge (kg)")).toHaveAttribute(
     "data-value",
     "80",
@@ -623,7 +625,9 @@ test("edits upcoming and performed sets and carries values into the next session
   await expect(a.getByRole("button", { name: "Supprimer" })).toHaveCount(0);
   await expect(page.getByRole("progressbar")).toHaveAttribute("value", "1");
   await page.reload();
-  await page.locator(".workout-card").click();
+  await page
+    .getByRole("button", { name: "Reprendre la séance Séance E2E" })
+    .click();
   await expect(
     page
       .getByRole("region", { name: "Séries de Exercice A" })
@@ -782,7 +786,9 @@ test("syncs planned rest without changing an active chrono", async ({
   expect(afterProgress).toBeGreaterThanOrEqual(beforeProgress);
   expect(afterProgress).toBeLessThan(50);
   await page.reload();
-  await page.locator(".workout-card").click();
+  await page
+    .getByRole("button", { name: "Reprendre la séance Séance E2E" })
+    .click();
   await expect(
     page.getByRole("timer", { name: "Temps de repos restant" }),
   ).toBeVisible();
@@ -993,15 +999,17 @@ test("returns to dashboard and resumes the same active session, then abandons it
   const sessionId = original.sessions[0].id;
   await page.getByRole("button", { name: "Retour aux séances" }).click();
   await expect(
-    page.getByRole("region", { name: "Séance en cours" }),
+    page.getByRole("button", { name: "Reprendre la séance Séance E2E" }),
   ).toBeVisible();
-  await expect(page.getByText("Reprendre")).toBeVisible();
+  await expect(page.locator(".active-workout-list")).toHaveCount(0);
 
   await page.reload();
   await expect(
-    page.getByRole("region", { name: "Séance en cours" }),
+    page.getByRole("button", { name: "Reprendre la séance Séance E2E" }),
   ).toBeVisible();
-  await page.locator(".workout-card-active").click();
+  await page
+    .getByRole("button", { name: "Reprendre la séance Séance E2E" })
+    .click();
   expect(
     (await readPersistedStore(page)).sessions.map((item) => item.id),
   ).toEqual([sessionId]);
@@ -1031,7 +1039,7 @@ test("returns to dashboard and resumes the same active session, then abandons it
     .getByRole("button", { name: "Abandonner la séance" })
     .click();
   await expect(
-    page.getByRole("region", { name: "Séance en cours" }),
+    page.getByRole("button", { name: "Reprendre la séance Séance E2E" }),
   ).toHaveCount(0);
   await expect
     .poll(async () => (await readPersistedStore(page)).sessions[0].status)
@@ -1070,6 +1078,10 @@ for (const width of [320, 390]) {
     await page.getByRole("button", { name: /Démarrer la séance/i }).click();
     const original = await readPersistedStore(page);
     const { id, startedAt } = original.sessions[0];
+    await finishRest(
+      page,
+      page.getByRole("region", { name: "Séries de Exercice A" }),
+    );
     await page.getByRole("button", { name: "Retour aux séances" }).click();
 
     const capsule = page.getByRole("button", {
@@ -1079,6 +1091,11 @@ for (const width of [320, 390]) {
       name: "Durée de la séance en cours",
     });
     await expect(capsule).toBeVisible();
+    await expect(capsule).toContainText("1 terminée · 1 restante");
+    await expect(
+      page.getByRole("region", { name: "Séance en cours" }),
+    ).toHaveCount(0);
+    await expect(page.locator(".active-workout-list")).toHaveCount(0);
     await expect(timer).toHaveAttribute("data-started-at", String(startedAt));
     const geometry = await page.evaluate(() => {
       const capsule = document
@@ -1099,11 +1116,54 @@ for (const width of [320, 390]) {
         navigation: { top: navigation.top, bottom: navigation.bottom },
         headerHeight: header.height,
         overflowX: document.documentElement.scrollWidth > window.innerWidth,
+        nameEllipsed: (() => {
+          const name = document.querySelector<HTMLElement>(
+            ".active-workout-capsule-name",
+          )!;
+          return (
+            name.scrollWidth > name.clientWidth &&
+            getComputedStyle(name).textOverflow === "ellipsis"
+          );
+        })(),
+        contentsFit: [
+          ...document.querySelectorAll(
+            ".active-workout-capsule-progress, .active-workout-capsule-duration",
+          ),
+        ].every((element) => {
+          const bounds = element.getBoundingClientRect();
+          return bounds.left >= capsule.left && bounds.right <= capsule.right;
+        }),
+        pulse: getComputedStyle(
+          document.querySelector(".active-workout-capsule-dot")!,
+        ).animationName,
       };
     });
+    expect(geometry.nameEllipsed).toBe(true);
+    expect(geometry.contentsFit).toBe(true);
+    expect(geometry.pulse).toBe("active-capsule-pulse");
     expect(geometry.capsule.height).toBeGreaterThanOrEqual(44);
     expect(geometry.capsule.bottom).toBeLessThan(geometry.navigation.top);
     expect(geometry.overflowX).toBe(false);
+    await page.evaluate(() =>
+      window.scrollTo({
+        top: document.documentElement.scrollHeight,
+        behavior: "instant",
+      }),
+    );
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const bottomContent = document
+            .querySelector(".future-tile:last-child")!
+            .getBoundingClientRect();
+          const capsule = document
+            .querySelector(".active-workout-capsule")!
+            .getBoundingClientRect();
+          return bottomContent.bottom < capsule.top;
+        }),
+      )
+      .toBe(true);
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
 
     await page.evaluate((timestamp) => {
       const nativeNow = Date.now.bind(Date);
@@ -1135,6 +1195,18 @@ for (const width of [320, 390]) {
     const resumed = await readPersistedStore(page);
     expect(resumed.sessions).toHaveLength(1);
     expect(resumed.sessions[0]).toMatchObject({ id, startedAt });
+    await page.getByRole("button", { name: "Lancer le repos" }).click();
+    await expect
+      .poll(async () => (await readPersistedStore(page)).sessions[0].status)
+      .toBe("readyToFinish");
+    await page.getByRole("button", { name: "Retour aux séances" }).click();
+    await expect(capsule).toBeVisible();
+    await expect(capsule).toContainText("2 terminées · 0 restantes");
+    expect((await readPersistedStore(page)).sessions[0]).toMatchObject({
+      id,
+      startedAt,
+    });
+    await capsule.click();
     expect(
       await page
         .locator(".workout-control")
@@ -1146,43 +1218,167 @@ for (const width of [320, 390]) {
 }
 
 for (const width of [320, 390]) {
-  test(`active Musculation tab returns the dashboard to the top at ${width}px`, async ({
+  for (const reducedMotion of ["no-preference", "reduce"] as const) {
+    test(`active Musculation tab returns the real dashboard to the top at ${width}px (${reducedMotion})`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ reducedMotion });
+      await page.setViewportSize({ width, height: 844 });
+      await page.goto("/");
+      await expect(page.locator(".active-workout-capsule")).toHaveCount(0);
+      const header = page.locator(".workout-control");
+      const initialHeader = await header.boundingBox();
+      await page.evaluate(() =>
+        window.scrollTo({ top: 500, behavior: "instant" }),
+      );
+      await expect
+        .poll(() => page.evaluate(() => window.scrollY))
+        .toBeGreaterThan(8);
+      await expect(header).toHaveAttribute("data-scrolled", "true");
+      const scrolledHeader = await header.boundingBox();
+      expect(scrolledHeader!.height).toBe(initialHeader!.height);
+      expect(scrolledHeader!.y).toBe(initialHeader!.y);
+      await expect
+        .poll(() =>
+          header
+            .locator(".brand-lockup")
+            .evaluate((element) => getComputedStyle(element).transform),
+        )
+        .toBe("matrix(0.97, 0, 0, 0.97, 0, 0)");
+      const layout = await page.evaluate(() => {
+        const trophy = document
+          .querySelector(".future-tile:last-child")!
+          .getBoundingClientRect();
+        const nav = document
+          .querySelector(".bottom-navigation-surface")!
+          .getBoundingClientRect();
+        return {
+          overflow: document.documentElement.scrollWidth > window.innerWidth,
+          bottomReachable: trophy.bottom < nav.top,
+        };
+      });
+      expect(layout).toEqual({ overflow: false, bottomReachable: true });
+      await page.evaluate(() => {
+        const nativeScrollTo = window.scrollTo.bind(window);
+        window.scrollTo = ((options: ScrollToOptions) => {
+          (
+            window as unknown as { requestedScrollBehavior?: string }
+          ).requestedScrollBehavior = options.behavior;
+          nativeScrollTo(options);
+        }) as typeof window.scrollTo;
+      });
+      await page.getByRole("button", { name: "Musculation" }).tap();
+      await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+      expect(
+        await page.evaluate(
+          () =>
+            (window as unknown as { requestedScrollBehavior?: string })
+              .requestedScrollBehavior,
+        ),
+      ).toBe(reducedMotion === "reduce" ? "instant" : "smooth");
+      await expect(header).not.toHaveAttribute("data-scrolled", "true");
+      await expect(header).toBeVisible();
+      const restoredHeader = await header.boundingBox();
+      expect(restoredHeader!.height).toBe(initialHeader!.height);
+      expect(restoredHeader!.y).toBe(initialHeader!.y);
+      await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
+      await expect(
+        page.getByRole("region", { name: "Mes séances" }),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "Musculation" }).tap();
+      await expect(
+        page.getByRole("heading", { name: "Entraînement" }),
+      ).toBeVisible();
+    });
+  }
+}
+
+for (const width of [320, 390]) {
+  test(`preparation header compacts but active execution title stays stable at ${width}px`, async ({
     page,
   }) => {
-    await page.emulateMedia({ reducedMotion: "reduce" });
     await page.setViewportSize({ width, height: 844 });
-    await page.goto("/");
+    await prepareWorkout(page, "8");
     const header = page.locator(".workout-control");
-    const initialHeaderHeight = await header.evaluate(
-      (element) => element.getBoundingClientRect().height,
-    );
-    const initialHeaderTop = await header.evaluate(
-      (element) => element.getBoundingClientRect().top,
-    );
-    await page.evaluate(() => {
-      document.documentElement.style.minHeight = "1400px";
-      window.scrollTo({ top: 500, behavior: "instant" });
-    });
+    const title = header.locator("h1");
+    const sets = page.locator(".planned-sets");
+    const readTitle = () =>
+      title.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        const styles = getComputedStyle(element);
+        return {
+          x: bounds.x,
+          y: bounds.y,
+          width: bounds.width,
+          height: bounds.height,
+          transform: styles.transform,
+          translate: styles.translate,
+          scale: styles.scale,
+        };
+      });
+    const scrollSets = (top: number) =>
+      sets.evaluate((element, top) => {
+        element.scrollTop = top;
+        element.dispatchEvent(new Event("scroll"));
+      }, top);
+    await expect
+      .poll(() =>
+        sets.evaluate((element) => element.scrollHeight > element.clientHeight),
+      )
+      .toBe(true);
+    const preparation = await readTitle();
+    await scrollSets(120);
     await expect(header).toHaveAttribute("data-scrolled", "true");
-    expect(
-      await header.evaluate(
-        (element) => element.getBoundingClientRect().height,
-      ),
-    ).toBe(initialHeaderHeight);
-    expect(
-      await header.evaluate((element) => element.getBoundingClientRect().top),
-    ).toBe(initialHeaderTop);
-    await page.getByRole("button", { name: "Musculation" }).click();
-    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
-
-    await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
-    await expect(
-      page.getByRole("region", { name: "Mes séances" }),
-    ).toBeVisible();
-    await page.getByRole("button", { name: "Musculation" }).click();
-    await expect(
-      page.getByRole("heading", { name: "Entraînement" }),
-    ).toBeVisible();
+    await expect(header).not.toHaveAttribute("data-execution-active", "true");
+    await expect
+      .poll(async () => (await readTitle()).transform)
+      .toBe("matrix(0.97, 0, 0, 0.97, 0, 0)");
+    expect((await readTitle()).height).toBeLessThan(preparation.height);
+    await scrollSets(0);
+    await page.getByRole("button", { name: "Démarrer la séance" }).click();
+    await expect(header).toHaveAttribute("data-execution-active", "true");
+    for (const status of ["inProgress", "readyToFinish"]) {
+      await expect
+        .poll(async () => (await readPersistedStore(page)).sessions[0].status)
+        .toBe(status);
+      await scrollSets(0);
+      const titleBefore = await readTitle();
+      const headerBefore = await header.boundingBox();
+      expect(titleBefore).toMatchObject({
+        transform: "none",
+        translate: "none",
+        scale: "none",
+      });
+      await scrollSets(120);
+      await expect
+        .poll(() => sets.evaluate((element) => element.scrollTop))
+        .toBeGreaterThan(8);
+      await expect(header).toHaveAttribute("data-scrolled", "true");
+      expect(await readTitle()).toEqual(titleBefore);
+      expect(await header.boundingBox()).toEqual(headerBefore);
+      if (status === "inProgress") {
+        await page.getByRole("button", { name: "Terminer l’exercice" }).click();
+        await page
+          .getByRole("alertdialog", { name: "Mettre fin à cet exercice ?" })
+          .getByRole("button", { name: "Mettre fin", exact: true })
+          .click();
+      }
+    }
+    await page.getByRole("button", { name: "Retour aux séances" }).click();
+    const capsule = page.getByRole("button", {
+      name: "Reprendre la séance Séance E2E",
+    });
+    await expect(capsule).toBeVisible();
+    await expect(capsule).toContainText("8 terminées · 0 restantes");
+    const original = (await readPersistedStore(page)).sessions[0];
+    await capsule.click();
+    const resumed = await readPersistedStore(page);
+    expect(resumed.sessions).toHaveLength(1);
+    expect(resumed.sessions[0]).toMatchObject({
+      id: original.id,
+      startedAt: original.startedAt,
+      status: "readyToFinish",
+    });
   });
 }
 
@@ -1201,6 +1397,9 @@ test("reduced motion removes capsule and header transitions", async ({
     capsuleAnimation: getComputedStyle(
       document.querySelector(".active-workout-capsule")!,
     ).animationDuration,
+    dotAnimation: getComputedStyle(
+      document.querySelector(".active-workout-capsule-dot")!,
+    ).animationName,
     capsuleTransition: getComputedStyle(
       document.querySelector(".active-workout-capsule")!,
     ).transitionDuration,
@@ -1209,6 +1408,8 @@ test("reduced motion removes capsule and header transitions", async ({
     ).transitionDuration,
   }));
   expect(motion.capsuleAnimation).toBe("0s");
+  expect(motion.dotAnimation).toBe("none");
+  await expect(page.locator(".active-workout-capsule-dot")).toBeVisible();
   expect(motion.capsuleTransition).toBe("0s");
   expect(motion.headerTransition).toBe("0s");
 });
@@ -1218,14 +1419,45 @@ test("does not create a second active session while another template is active",
 }) => {
   await prepareWorkout(page, "1");
   await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  const capsule = page.getByRole("button", {
+    name: "Reprendre la séance Séance E2E",
+  });
   await page.getByRole("button", { name: "Retour aux séances" }).click();
+  await expect(capsule).toBeVisible();
   await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
   await page.getByRole("button", { name: "Créer une séance" }).click();
+  await expect(capsule).toBeHidden();
   await page.getByRole("textbox", { name: "Nom" }).fill("Deuxième modèle");
   await saveSheet(page, "Séance", "Deuxième modèle");
   await page.getByText("Deuxième modèle").click();
   await expect(page.locator(".workout-preparation, .empty")).toBeVisible();
   await addExercise(page, "Exercice B", "1");
+  await expect(capsule).toBeVisible();
+  await page.getByRole("button", { name: "Charge (kg)", exact: true }).click();
+  const picker = page.getByRole("dialog", { name: "Choisir Charge (kg)" });
+  await expect(picker).toBeVisible();
+  await expect(capsule).toBeHidden();
+  await picker
+    .getByRole("listbox", { name: "Kilogrammes" })
+    .getByRole("option", { name: "20", exact: true })
+    .click();
+  await picker
+    .getByRole("button", { name: "ENREGISTRER", exact: true })
+    .click();
+  await expect(picker).toHaveCount(0);
+  await expect(capsule).toBeVisible();
+  await page
+    .locator(".exercise-menu")
+    .getByRole("button", { name: "Supprimer", exact: true })
+    .click();
+  const confirmation = page.getByRole("alertdialog", {
+    name: "Supprimer cet exercice ?",
+  });
+  await expect(confirmation).toBeVisible();
+  await expect(capsule).toBeHidden();
+  await confirmation.getByRole("button", { name: "Annuler" }).click();
+  await expect(confirmation).toHaveCount(0);
+  await expect(capsule).toBeVisible();
   await page.getByRole("button", { name: /Démarrer la séance/i }).click();
   await expect
     .poll(async () => {
@@ -1278,7 +1510,9 @@ test("starts the session clock only on start and restores elapsed wall time afte
   );
 
   await page.reload();
-  await page.locator(".workout-card-active").click();
+  await page
+    .getByRole("button", { name: "Reprendre la séance Séance E2E" })
+    .click();
   const resumedTimer = page.getByRole("timer", { name: "Durée de la séance" });
   await expect(resumedTimer).toHaveAttribute(
     "data-started-at",
@@ -1427,9 +1661,11 @@ test("persists permanent and session exercise notes independently", async ({
 
   await page.getByRole("button", { name: "Retour aux séances" }).click();
   await expect(
-    page.getByRole("region", { name: "Séance en cours" }),
+    page.getByRole("button", { name: "Reprendre la séance Séance E2E" }),
   ).toBeVisible();
-  await page.locator(".workout-card-active").click();
+  await page
+    .getByRole("button", { name: "Reprendre la séance Séance E2E" })
+    .click();
   await page.getByRole("button", { name: "Notes de l’exercice" }).click();
   const resumedNotes = page.getByRole("dialog", {
     name: "Notes de l’exercice",
@@ -1475,7 +1711,7 @@ test("persists permanent and session exercise notes independently", async ({
     .getByRole("button", { name: "Abandonner la séance" })
     .click();
   await expect(
-    page.getByRole("region", { name: "Séance en cours" }),
+    page.getByRole("button", { name: "Reprendre la séance Séance E2E" }),
   ).toHaveCount(0);
   await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
   await page.locator(".workout-card").click();

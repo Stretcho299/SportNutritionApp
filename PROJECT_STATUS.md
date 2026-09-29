@@ -89,13 +89,26 @@ pas leur lecture lorsqu’un changement les concerne.
 - Navigation basse flottante glass/lens avec scrub/hold-slide, capture du
   pointeur, minimisation à la descente et retour à l’approche du haut; respecte
   `prefers-reduced-motion`. Musculation est active, Nutrition désactivée.
-- L’issue #48 est en cours sur une branche dédiée : header sticky visuellement
-  compacté au scroll sans changement de géométrie, second tap sur Musculation
-  pour remonter au dashboard, et capsule de reprise de séance au-dessus de la
-  navigation. La capsule utilise l’horloge globale issue de `startedAt`, se
-  cache dans le détail de sa session et sous les overlays, et augmente la réserve
-  de scroll uniquement lorsqu’elle est visible. Cette passe n’est pas encore
-  mergée dans `main`.
+- L’issue #48 est en review dans la [PR #51](https://github.com/Stretcho299/SportNutritionApp/pull/51),
+  sur `feat/48-ios-navigation-continuity`, et n’est pas mergée dans `main`.
+  Après le premier test physique iPhone, le dashboard dispose d’une composition
+  verticale des quatre modules existants : Mes séances en carte principale,
+  puis Calendrier, Performances et Trophées toujours marqués « Bientôt ».
+  Ce contenu permet un scroll réel; le second tap Musculation remonte en haut.
+  Le gros bloc actif « Séance en cours » a été retiré du dashboard.
+  La capsule devient le point principal de reprise hors détail actif : nom
+  ellipsé, chrono à droite, progression des séries et point orange pulsant.
+  Sa lentille statique reprend le matériau glass de la navigation sans ses gestes
+  horizontaux. Les animations sont désactivées en reduced-motion.
+  Le header conserve son effet au scroll en préparation; pendant l’exécution
+  active, le titre reste strictement stable, sans scale, translation ou
+  compactage. Les interactions déjà validées physiquement restent inchangées.
+  Ces corrections attendent un second test physique iPhone. Vitest passe à
+  119 tests; la passe Playwright ciblée passe à 26/28. Les deux échecs sont des
+  crashes WebKit lors du retour animé en haut à 320 et 390 px, reproduits
+  isolément. Le retour instantané en reduced-motion passe. Cette observation
+  est distincte du scrub historique; sa cause n’est pas établie. Consulter la
+  PR #51 pour les résultats complets et les relances avant toute validation.
 - `ExerciseNavigator` distingue sélection et statut d’exécution; le long press
   tactile (300 ms, tolérance de mouvement de 8 px) démarre le reorder, avec
   clone et auto-scroll horizontal près des bords (44 px).
@@ -130,6 +143,11 @@ ultérieurs du template.
   `readyToFinish`. Son temps est calculé depuis le même `startedAt` et le clock
   global; elle ne crée ni ne modifie une session. Elle est cachée dans le détail
   de cette session et pendant les BottomSheets, pickers et confirmations.
+  Sa progression est dérivée de l’exécution, sans donnée persistée supplémentaire :
+  `performed` et `skipped` comptent comme terminées, les autres statuts comme
+  restantes. Les séries archivées sont incluses, comme dans `WorkoutProgress`.
+  La réserve de scroll augmente uniquement lorsque la capsule est visible pour
+  garder le contenu inférieur atteignable au-dessus des deux éléments flottants.
 - Notes permanentes et notes de session ont des portées distinctes; une note de
   séance ne doit pas se retrouver sur le template.
 - Les valeurs manquantes (`null`) et les zéros explicites sont différents.
@@ -157,11 +175,14 @@ schéma sans issue et tests dédiés.
   document ou combattre le clavier.
 - Navigation basse : préserver hit targets, scrub/hold-slide, arbitration du
   scroll, lens, minimisation et offsets historiques.
-- Le header normal suit le scroll du document; dans le détail, son état visuel
-  suit exclusivement `.planned-sets`, sans changer les fixed zones, le scroll
-  local, la géométrie du header ou les safe areas. L’onglet Musculation conserve
-  le retour depuis les sous-vues; sur le dashboard actif, il remonte le document
-  en haut et respecte reduced-motion.
+- Le header sticky suit le scroll du document; en préparation, son effet visuel
+  suit exclusivement `.planned-sets`. Le header du détail d’une session
+  `inProgress` ou `readyToFinish` conserve une géométrie et un titre identiques
+  avant/après scroll, sans traitement compact ou transformation du titre.
+  Cette distinction dépend de l’état métier, pas d’une règle globale sur le détail.
+  Les fixed zones, le scroll local et les safe areas sont préservés. L’onglet
+  Musculation conserve le retour depuis les sous-vues; sur le dashboard actif,
+  il remonte le document en haut et respecte reduced-motion.
 - ExerciseNavigator : conserver les gestes touch/pointer, long press,
   auto-scroll et restrictions de reorder selon l’exécution. La sélection d’un
   exercice n’active pas son avancement.
@@ -174,13 +195,19 @@ schéma sans issue et tests dédiés.
 
 [Issue #48 — moderniser la navigation iOS et la continuité de la séance active](https://github.com/Stretcho299/SportNutritionApp/issues/48) est **OPEN** et constitue la passe active sur la branche dédiée `feat/48-ios-navigation-continuity`. Les changements attendent review et ne sont pas présentés comme mergés. Son périmètre confirmé :
 
-1. Compacter le header et ajouter une séparation de bord haute discrète sans
-   saut de layout ni changement de safe area/viewport.
+1. Compacter le header et ajouter une séparation de bord haute discrète en
+   dehors de l’exécution active, sans saut de layout ni changement de safe
+   area/viewport. Conserver cet effet en préparation et stabiliser le titre
+   durant une session active.
 2. Sur le dashboard Musculation déjà actif, un second tap sur son onglet
    remonte en haut; depuis une sous-vue, le tap continue de revenir au dashboard.
-3. Ajouter au-dessus de la navigation une capsule de reprise seulement pour
-   `inProgress`/`readyToFinish`, cachée dans le détail actif et sous tout modal.
-   Elle réutilise `formatSessionDuration` et `startedAt` sans créer de session.
+3. Réorganiser le dashboard avec ses modules existants pour un scroll naturel.
+   Retirer son gros bloc actif et utiliser au-dessus de la navigation une
+   capsule de reprise seulement pour `inProgress`/`readyToFinish`, cachée dans
+   le détail actif et sous tout modal.
+   Elle affiche nom, durée, séries terminées/restantes et point pulsant dans
+   une lentille glass statique; elle réutilise `formatSessionDuration` et
+   `startedAt` sans créer de session.
 4. Ajouter des motions d’entrée/sortie et états actifs contenus, en respectant
    reduced-motion.
 

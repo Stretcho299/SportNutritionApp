@@ -983,26 +983,16 @@ it("shows the active workout capsule on the dashboard and resumes its unchanged 
   });
   expect(capsule).toBeVisible();
   expect(
+    screen.queryByRole("region", { name: "Séance en cours" }),
+  ).not.toBeInTheDocument();
+  expect(document.querySelector(".workout-card-active")).toBeNull();
+  expect(within(capsule).getByText("0 terminées · 1 restante")).toBeVisible();
+  expect(
     screen.getByRole("timer", { name: "Durée de la séance en cours" }),
   ).toHaveTextContent("00:00");
   expect(
     screen.getByRole("timer", { name: "Durée de la séance en cours" }),
   ).toHaveAttribute("data-started-at", String(startedAt));
-
-  fireEvent.click(screen.getByRole("button", { name: "Supprimer Push" }));
-  const removeConfirmation = screen.getByRole("alertdialog", {
-    name: "Supprimer cette séance ?",
-  });
-  expect(
-    screen.queryByRole("button", { name: "Reprendre la séance Push" }),
-  ).not.toBeInTheDocument();
-  fireEvent.click(
-    within(removeConfirmation).getByRole("button", { name: "Annuler" }),
-  );
-  await waitForMotion();
-  expect(
-    screen.getByRole("button", { name: "Reprendre la séance Push" }),
-  ).toBeVisible();
 
   now.mockReturnValue(225_000);
   fireEvent(window, new Event("pageshow"));
@@ -1034,6 +1024,7 @@ it("shows the active capsule for readyToFinish and hides it under overlays and i
   expect(
     screen.getByRole("button", { name: "Reprendre la séance Push" }),
   ).toBeVisible();
+  expect(screen.getByText("1 terminée · 0 restantes")).toBeVisible();
 
   fireEvent.click(
     screen.getByRole("button", { name: "Reprendre la séance Push" }),
@@ -1064,6 +1055,19 @@ it("hides the active capsule while a picker or confirmation is open", async () =
   });
   fireEvent.click(screen.getByText("Enregistrer"));
   await waitForMotion();
+  fireEvent.click(screen.getByRole("button", { name: "Supprimer Pull" }));
+  const confirmation = screen.getByRole("alertdialog", {
+    name: "Supprimer cette séance ?",
+  });
+  expect(
+    screen.queryByRole("button", { name: "Reprendre la séance Push" }),
+  ).not.toBeInTheDocument();
+  await clickAndWaitForMotion(
+    within(confirmation).getByRole("button", { name: "Annuler" }),
+  );
+  expect(
+    screen.getByRole("button", { name: "Reprendre la séance Push" }),
+  ).toBeVisible();
   fireEvent.click(screen.getByText("Pull").closest("button")!);
   expect(
     screen.getByRole("button", { name: "Reprendre la séance Push" }),
@@ -1100,6 +1104,35 @@ it("does not render the active capsule when there is no active session", async (
   expect(
     screen.queryByRole("button", { name: /Reprendre la séance/ }),
   ).not.toBeInTheDocument();
+});
+
+it("scopes the header scroll treatment to preparation instead of active execution", async () => {
+  const view = await openEmptyWorkout();
+  await createExercise("Squat", 2, 30);
+  const header = document.querySelector(".workout-control")!;
+  const sets = document.querySelector(".planned-sets")!;
+  Object.defineProperty(sets, "scrollTop", { configurable: true, value: 120 });
+  fireEvent.scroll(sets);
+  expect(header).toHaveAttribute("data-scrolled", "true");
+  expect(header).not.toHaveAttribute("data-execution-active");
+  fireEvent.click(screen.getByRole("button", { name: "Démarrer la séance" }));
+  expect(header).toHaveAttribute("data-execution-active", "true");
+  fireEvent.scroll(sets);
+  expect(header).toHaveAttribute("data-scrolled", "true");
+  fireEvent.click(screen.getByRole("button", { name: "Terminer l’exercice" }));
+  await clickAndWaitForMotion(
+    within(screen.getByRole("alertdialog")).getByRole("button", {
+      name: "Mettre fin",
+    }),
+  );
+  expect(storedWorkouts()[0].execution?.status).toBe("readyToFinish");
+  expect(header).toHaveAttribute("data-execution-active", "true");
+  fireEvent.click(screen.getByRole("button", { name: "Retour aux séances" }));
+  expect(screen.getByText("2 terminées · 0 restantes")).toBeVisible();
+  expect(document.querySelector(".workout-control")).not.toHaveAttribute(
+    "data-execution-active",
+  );
+  view.unmount();
 });
 
 it("returns from a subview to the dashboard and scrolls the active dashboard tab to the top", async () => {

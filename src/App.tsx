@@ -844,6 +844,7 @@ export default function App() {
       <header
         className={`workout-control${screen === "list" ? " home-header" : ""}`}
         data-scrolled={headerScrolled ? "true" : undefined}
+        data-execution-active={isActiveWorkoutDetail ? "true" : undefined}
       >
         {screen === "list" ? (
           <div className="brand-lockup">
@@ -904,33 +905,14 @@ export default function App() {
             <span>Votre espace d’entraînement</span>
           </div>
           <div className="dashboard-grid">
-            {activeWorkout && (
-              <section
-                className="active-workout-list"
-                aria-label="Séance en cours"
-              >
-                <ul className="workout-list">
-                  <WorkoutRow
-                    workout={activeWorkout}
-                    variant="active"
-                    onDelete={() => removeWorkout(activeWorkout.id)}
-                    onOpen={() => {
-                      setWorkoutId(activeWorkout.id);
-                      setExerciseId(sort(activeWorkout.exercises)[0]?.id ?? "");
-                      navigate("detail", "forward");
-                    }}
-                  />
-                </ul>
-              </section>
-            )}
             <button
               className="dashboard-tile sessions-tile"
               aria-label="Ouvrir Mes séances"
               onClick={() => navigate("workouts", "forward")}
             >
               <span className="dashboard-tile-art" aria-hidden="true">
-                <Icon name="dumbbell" size={46} strokeWidth={1.45} />
-                <Icon name="list" size={22} />
+                <Icon name="dumbbell" size={72} strokeWidth={1.45} />
+                <Icon name="list" size={28} />
               </span>
               <span className="dashboard-tile-copy">
                 <small>
@@ -958,7 +940,7 @@ export default function App() {
               <span className="future-tile-icon" aria-hidden="true">
                 <Icon name="performance" size={30} />
               </span>
-              <small>—</small>
+              <small>Bientôt</small>
               <strong>Performances</strong>
             </section>
             <section
@@ -1724,7 +1706,7 @@ export default function App() {
       {hasActiveWorkout && activeWorkout?.execution && (
         <ActiveWorkoutCapsule
           name={activeWorkout.name}
-          startedAt={activeWorkout.execution.startedAt}
+          execution={activeWorkout.execution}
           now={clock}
           visible={!isActiveWorkoutDetail && !isOverlayOpen}
           onResume={() => {
