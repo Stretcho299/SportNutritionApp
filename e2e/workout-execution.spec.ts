@@ -229,6 +229,74 @@ async function prepareWorkout(page, setCount = "2") {
   await saveSheet(page, "Exercice", "Exercice A");
 }
 
+test("keeps exercise options distinct and reachable beside finish at phone widths", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 844 });
+  await prepareWorkout(page);
+  await page.getByRole("button", { name: "Actions de l’exercice" }).click();
+  const renameSheet = page.getByRole("dialog", { name: "Exercice" });
+  await renameSheet
+    .getByRole("textbox", { name: "Nom" })
+    .fill("Développé incliné avec haltères et prise neutre");
+  await saveSheet(
+    page,
+    "Exercice",
+    "Développé incliné avec haltères et prise neutre",
+  );
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    const options = page.getByRole("button", {
+      name: "Actions de l’exercice",
+    });
+    const finish = page.getByRole("button", { name: "Terminer l’exercice" });
+    await expect(options).toBeVisible();
+    await expect(finish).toBeVisible();
+    const geometry = await page.evaluate(() => {
+      const options = document.querySelector<HTMLElement>(
+        '.exercise-menu > button[aria-label="Actions de l’exercice"]',
+      );
+      const finish = document.querySelector<HTMLElement>(
+        ".exercise-menu button:last-child",
+      );
+      if (!options || !finish) throw new Error("Exercise actions are missing");
+      const optionBounds = options.getBoundingClientRect();
+      const finishBounds = finish.getBoundingClientRect();
+      return {
+        documentWidth: document.documentElement.scrollWidth,
+        viewportWidth: document.documentElement.clientWidth,
+        optionsWidth: optionBounds.width,
+        optionsHeight: optionBounds.height,
+        verticalCenterDelta: Math.abs(
+          optionBounds.top +
+            optionBounds.height / 2 -
+            (finishBounds.top + finishBounds.height / 2),
+        ),
+        overlap: optionBounds.right > finishBounds.left,
+      };
+    });
+    expect(geometry.documentWidth).toBeLessThanOrEqual(geometry.viewportWidth);
+    expect(geometry.optionsWidth).toBeGreaterThanOrEqual(44);
+    expect(geometry.optionsHeight).toBeGreaterThanOrEqual(44);
+    expect(geometry.verticalCenterDelta).toBeLessThanOrEqual(1);
+    expect(geometry.overlap).toBe(false);
+  }
+
+  await page.getByRole("button", { name: "Actions de l’exercice" }).click();
+  await expect(page.getByRole("dialog", { name: "Exercice" })).toBeVisible();
+  await saveSheet(
+    page,
+    "Exercice",
+    "Développé incliné avec haltères et prise neutre",
+  );
+  await page.getByRole("button", { name: "Terminer l’exercice" }).click();
+  await expect(
+    page.getByRole("alertdialog", { name: "Mettre fin à cet exercice ?" }),
+  ).toBeVisible();
+});
+
 test("adds a third set after starting a workout", async ({ page }) => {
   await prepareWorkout(page);
   await page.getByRole("button", { name: /Démarrer la séance/i }).click();
