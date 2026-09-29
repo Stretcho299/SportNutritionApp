@@ -72,16 +72,14 @@ html {
   border: 0;
 }
 
-.app-shell:not(.workout-detail) > .workout-control {
+.workout-control[data-compact-header="true"] {
   position: sticky;
   z-index: 3;
   top: calc(12px + env(safe-area-inset-top, 0px));
   isolation: isolate;
 }
 
-.workout-control[data-scrolled="true"]:not(
-    [data-execution-active="true"]
-  )::before {
+.workout-control[data-compact-header="true"][data-scrolled="true"]::before {
   position: absolute;
   z-index: -1;
   inset: -8px -12px 0;
@@ -93,8 +91,8 @@ html {
   transition: opacity 180ms ease;
 }
 
-.workout-control[data-scrolled="true"]:not([data-execution-active="true"]) h1,
-.workout-control[data-scrolled="true"]:not([data-execution-active="true"])
+.workout-control[data-compact-header="true"][data-scrolled="true"] h1,
+.workout-control[data-compact-header="true"][data-scrolled="true"]
   .brand-lockup {
   transform: scale(0.97);
   transform-origin: left center;

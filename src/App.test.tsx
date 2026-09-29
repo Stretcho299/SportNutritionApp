@@ -3,6 +3,8 @@ import "@testing-library/jest-dom/vitest";
 import App from "./App";
 import {
   __storageKey,
+  completeWorkoutExecution,
+  createWorkoutSession,
   type Workout,
   type WorkoutStore,
 } from "./storage/database";
@@ -1106,19 +1108,69 @@ it("does not render the active capsule when there is no active session", async (
   ).not.toBeInTheDocument();
 });
 
-it("scopes the header scroll treatment to preparation instead of active execution", async () => {
+it.each(["list", "workouts", "preview"] as const)(
+  "keeps compact header scroll tracking on %s",
+  async (destination) => {
+    vi.stubGlobal("indexedDB", undefined);
+    const template = {
+      id: "header-workout",
+      name: "Header fixture",
+      exercises: [],
+    };
+    const session = createWorkoutSession(template, 100_000);
+    const store: WorkoutStore = {
+      version: 2,
+      templates: [template],
+      sessions: [
+        {
+          ...session,
+          status: "completed",
+          completedAt: 101_000,
+          execution: completeWorkoutExecution(session.execution, 101_000),
+        },
+      ],
+    };
+    localStorage.setItem(__storageKey, JSON.stringify(store));
+    const view = render(<App />);
+    await screen.findByRole("button", { name: "Ouvrir Mes séances" });
+    if (destination !== "list") await openPreparedWorkout("Header fixture");
+    if (destination === "workouts") {
+      fireEvent.click(
+        screen.getByRole("button", { name: "Retour aux séances" }),
+      );
+    }
+    expect(document.querySelector(".app-shell")).toHaveClass(
+      `screen-${destination}`,
+    );
+    const header = document.querySelector(".workout-control")!;
+    expect(header).toHaveAttribute("data-compact-header", "true");
+    vi.stubGlobal("scrollY", 120);
+    fireEvent.scroll(window);
+    expect(header).toHaveAttribute("data-scrolled", "true");
+    vi.stubGlobal("scrollY", 0);
+    fireEvent.scroll(window);
+    expect(header).not.toHaveAttribute("data-scrolled");
+    view.unmount();
+  },
+);
+
+it("disables header scroll tracking throughout preparation and active execution", async () => {
   const view = await openEmptyWorkout();
-  await createExercise("Squat", 2, 30);
   const header = document.querySelector(".workout-control")!;
+  expect(header).not.toHaveAttribute("data-compact-header");
+  vi.stubGlobal("scrollY", 120);
+  fireEvent.scroll(window);
+  expect(header).not.toHaveAttribute("data-scrolled");
+  await createExercise("Squat", 2, 30);
   const sets = document.querySelector(".planned-sets")!;
   Object.defineProperty(sets, "scrollTop", { configurable: true, value: 120 });
   fireEvent.scroll(sets);
-  expect(header).toHaveAttribute("data-scrolled", "true");
-  expect(header).not.toHaveAttribute("data-execution-active");
+  expect(header).not.toHaveAttribute("data-scrolled");
+  expect(header).not.toHaveAttribute("data-compact-header");
   fireEvent.click(screen.getByRole("button", { name: "Démarrer la séance" }));
-  expect(header).toHaveAttribute("data-execution-active", "true");
+  expect(header).not.toHaveAttribute("data-compact-header");
   fireEvent.scroll(sets);
-  expect(header).toHaveAttribute("data-scrolled", "true");
+  expect(header).not.toHaveAttribute("data-scrolled");
   fireEvent.click(screen.getByRole("button", { name: "Terminer l’exercice" }));
   await clickAndWaitForMotion(
     within(screen.getByRole("alertdialog")).getByRole("button", {
@@ -1126,11 +1178,14 @@ it("scopes the header scroll treatment to preparation instead of active executio
     }),
   );
   expect(storedWorkouts()[0].execution?.status).toBe("readyToFinish");
-  expect(header).toHaveAttribute("data-execution-active", "true");
+  fireEvent.scroll(sets);
+  expect(header).not.toHaveAttribute("data-compact-header");
+  expect(header).not.toHaveAttribute("data-scrolled");
   fireEvent.click(screen.getByRole("button", { name: "Retour aux séances" }));
   expect(screen.getByText("2 terminées · 0 restantes")).toBeVisible();
-  expect(document.querySelector(".workout-control")).not.toHaveAttribute(
-    "data-execution-active",
+  expect(document.querySelector(".workout-control")).toHaveAttribute(
+    "data-compact-header",
+    "true",
   );
   view.unmount();
 });

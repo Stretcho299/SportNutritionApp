@@ -1294,7 +1294,7 @@ for (const width of [320, 390]) {
 }
 
 for (const width of [320, 390]) {
-  test(`preparation header compacts but active execution title stays stable at ${width}px`, async ({
+  test(`detail header stays stable during preparation and active execution at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 844 });
@@ -1327,16 +1327,29 @@ for (const width of [320, 390]) {
       )
       .toBe(true);
     const preparation = await readTitle();
+    const preparationHeader = await header.boundingBox();
+    expect(preparation).toMatchObject({
+      transform: "none",
+      translate: "none",
+      scale: "none",
+    });
     await scrollSets(120);
-    await expect(header).toHaveAttribute("data-scrolled", "true");
-    await expect(header).not.toHaveAttribute("data-execution-active", "true");
     await expect
-      .poll(async () => (await readTitle()).transform)
-      .toBe("matrix(0.97, 0, 0, 0.97, 0, 0)");
-    expect((await readTitle()).height).toBeLessThan(preparation.height);
+      .poll(() => sets.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(8);
+    await expect(header).not.toHaveAttribute("data-scrolled");
+    await expect(header).not.toHaveAttribute("data-compact-header");
+    expect(await readTitle()).toEqual(preparation);
+    expect(await header.boundingBox()).toEqual(preparationHeader);
+    await expect(header).toHaveCSS("position", "static");
+    expect(
+      await header.evaluate(
+        (element) => getComputedStyle(element, "::before").content,
+      ),
+    ).toBe("none");
     await scrollSets(0);
     await page.getByRole("button", { name: "Démarrer la séance" }).click();
-    await expect(header).toHaveAttribute("data-execution-active", "true");
+    await expect(header).not.toHaveAttribute("data-compact-header");
     for (const status of ["inProgress", "readyToFinish"]) {
       await expect
         .poll(async () => (await readPersistedStore(page)).sessions[0].status)
@@ -1353,7 +1366,13 @@ for (const width of [320, 390]) {
       await expect
         .poll(() => sets.evaluate((element) => element.scrollTop))
         .toBeGreaterThan(8);
-      await expect(header).toHaveAttribute("data-scrolled", "true");
+      await expect(header).not.toHaveAttribute("data-scrolled");
+      await expect(header).not.toHaveAttribute("data-compact-header");
+      expect(
+        await header.evaluate(
+          (element) => getComputedStyle(element, "::before").content,
+        ),
+      ).toBe("none");
       expect(await readTitle()).toEqual(titleBefore);
       expect(await header.boundingBox()).toEqual(headerBefore);
       if (status === "inProgress") {

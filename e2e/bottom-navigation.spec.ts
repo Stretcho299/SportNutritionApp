@@ -694,15 +694,15 @@ for (const width of [390, 320]) {
       element.scrollTop = 120;
       element.dispatchEvent(new Event("scroll"));
     });
-    await expect(header).toHaveAttribute("data-scrolled", "true");
-    await expect(header).not.toHaveAttribute("data-execution-active", "true");
+    await expect(header).not.toHaveAttribute("data-scrolled");
+    await expect(header).not.toHaveAttribute("data-compact-header");
     await expect
       .poll(() =>
         header
           .locator("h1")
           .evaluate((element) => getComputedStyle(element).transform),
       )
-      .toBe("matrix(0.97, 0, 0, 0.97, 0, 0)");
+      .toBe("none");
     expect(
       await header.evaluate(
         (element) => element.getBoundingClientRect().height,

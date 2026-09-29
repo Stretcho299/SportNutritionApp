@@ -91,7 +91,7 @@ pas leur lecture lorsqu’un changement les concerne.
   `prefers-reduced-motion`. Musculation est active, Nutrition désactivée.
 - L’issue #48 est en review dans la [PR #51](https://github.com/Stretcho299/SportNutritionApp/pull/51),
   sur `feat/48-ios-navigation-continuity`, et n’est pas mergée dans `main`.
-  Après le premier test physique iPhone, le dashboard dispose d’une composition
+  Après les tests physiques iPhone, le dashboard dispose d’une composition
   verticale des quatre modules existants : Mes séances en carte principale,
   puis Calendrier, Performances et Trophées toujours marqués « Bientôt ».
   Ce contenu permet un scroll réel; le second tap Musculation remonte en haut.
@@ -100,15 +100,18 @@ pas leur lecture lorsqu’un changement les concerne.
   ellipsé, chrono à droite, progression des séries et point orange pulsant.
   Sa lentille statique reprend le matériau glass de la navigation sans ses gestes
   horizontaux. Les animations sont désactivées en reduced-motion.
-  Le header conserve son effet au scroll en préparation; pendant l’exécution
-  active, le titre reste strictement stable, sans scale, translation ou
-  compactage. Les interactions déjà validées physiquement restent inchangées.
-  Ces corrections attendent un second test physique iPhone. Vitest passe à
-  119 tests; la passe Playwright ciblée passe à 26/28. Les deux échecs sont des
-  crashes WebKit lors du retour animé en haut à 320 et 390 px, reproduits
-  isolément. Le retour instantané en reduced-motion passe. Cette observation
-  est distincte du scrub historique; sa cause n’est pas établie. Consulter la
-  PR #51 pour les résultats complets et les relances avant toute validation.
+  La règle finale du header dépend uniquement de l’écran : effet compact,
+  sticky, surface/fade et léger scale sur le dashboard (`list`), Mes séances
+  (`workouts`) et l’aperçu (`preview`). Tout écran de détail (`detail`) garde
+  un header normal et un titre strictement stable, en préparation comme en
+  exécution `inProgress`/`readyToFinish`, sans effet lié au scroll.
+  Le dashboard, le retour animé en haut, la capsule et les interactions ont
+  été validés physiquement sur iPhone. Cette dernière correction du scope du
+  header reste en review. Les crashes observés lors du retour animé uniquement
+  dans Playwright WebKit n’ont pas été reproduits sur le produit physique;
+  aucun contournement produit n’est appliqué. Consulter la PR #51 pour les
+  résultats des tests automatisés et leurs relances, distincts de la validation
+  physique.
 - `ExerciseNavigator` distingue sélection et statut d’exécution; le long press
   tactile (300 ms, tolérance de mouvement de 8 px) démarre le reorder, avec
   clone et auto-scroll horizontal près des bords (44 px).
@@ -175,11 +178,12 @@ schéma sans issue et tests dédiés.
   document ou combattre le clavier.
 - Navigation basse : préserver hit targets, scrub/hold-slide, arbitration du
   scroll, lens, minimisation et offsets historiques.
-- Le header sticky suit le scroll du document; en préparation, son effet visuel
-  suit exclusivement `.planned-sets`. Le header du détail d’une session
-  `inProgress` ou `readyToFinish` conserve une géométrie et un titre identiques
-  avant/après scroll, sans traitement compact ou transformation du titre.
-  Cette distinction dépend de l’état métier, pas d’une règle globale sur le détail.
+- Le header compact est explicitement autorisé par `data-compact-header`
+  uniquement lorsque `screen !== "detail"` : dashboard, Mes séances et preview.
+  Son état scrolled suit le document. Sur tout `detail`, préparation ou séance
+  active, aucun suivi visuel de scroll du header n’est installé : géométrie et
+  titre restent identiques avant/après scroll, sans scale, translation,
+  compactage ou surface/fade lié au scroll de `.planned-sets`.
   Les fixed zones, le scroll local et les safe areas sont préservés. L’onglet
   Musculation conserve le retour depuis les sous-vues; sur le dashboard actif,
   il remonte le document en haut et respecte reduced-motion.
@@ -195,10 +199,10 @@ schéma sans issue et tests dédiés.
 
 [Issue #48 — moderniser la navigation iOS et la continuité de la séance active](https://github.com/Stretcho299/SportNutritionApp/issues/48) est **OPEN** et constitue la passe active sur la branche dédiée `feat/48-ios-navigation-continuity`. Les changements attendent review et ne sont pas présentés comme mergés. Son périmètre confirmé :
 
-1. Compacter le header et ajouter une séparation de bord haute discrète en
-   dehors de l’exécution active, sans saut de layout ni changement de safe
-   area/viewport. Conserver cet effet en préparation et stabiliser le titre
-   durant une session active.
+1. Conserver le header compact/sticky et sa séparation de bord haute discrète
+   sur dashboard, Mes séances et preview (`screen !== "detail"`). Garder un
+   header normal/stable sur le détail, en préparation et pendant une séance
+   active, sans saut de layout ni changement de safe area/viewport.
 2. Sur le dashboard Musculation déjà actif, un second tap sur son onglet
    remonte en haut; depuis une sous-vue, le tap continue de revenir au dashboard.
 3. Réorganiser le dashboard avec ses modules existants pour un scroll naturel.

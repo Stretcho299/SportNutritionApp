@@ -809,20 +809,15 @@ export default function App() {
   const isMenu =
     dialog === "addMenu" || dialog === "organizeMenu" || dialog === "reorder";
   useEffect(() => {
-    const scrollContainer = isWorkoutDetail
-      ? document.querySelector<HTMLElement>(".planned-sets")
-      : null;
+    if (screen === "detail") return;
     const readScrollPosition = () => {
-      const top = scrollContainer
-        ? scrollContainer.scrollTop
-        : (document.scrollingElement?.scrollTop ?? window.scrollY);
+      const top = document.scrollingElement?.scrollTop ?? window.scrollY;
       setHeaderScrolled(top > 8);
     };
     readScrollPosition();
-    const target: Window | HTMLElement = scrollContainer ?? window;
-    target.addEventListener("scroll", readScrollPosition, { passive: true });
-    return () => target.removeEventListener("scroll", readScrollPosition);
-  }, [exercise?.id, isWorkoutDetail, screen, workoutId]);
+    window.addEventListener("scroll", readScrollPosition, { passive: true });
+    return () => window.removeEventListener("scroll", readScrollPosition);
+  }, [screen]);
 
   const handleWorkoutsTab = () => {
     if (screen !== "list") {
@@ -843,8 +838,10 @@ export default function App() {
     >
       <header
         className={`workout-control${screen === "list" ? " home-header" : ""}`}
-        data-scrolled={headerScrolled ? "true" : undefined}
-        data-execution-active={isActiveWorkoutDetail ? "true" : undefined}
+        data-compact-header={screen !== "detail" ? "true" : undefined}
+        data-scrolled={
+          screen !== "detail" && headerScrolled ? "true" : undefined
+        }
       >
         {screen === "list" ? (
           <div className="brand-lockup">
