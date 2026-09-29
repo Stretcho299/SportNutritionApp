@@ -106,13 +106,27 @@ for (const width of [320, 390]) {
         await expect(header).toHaveAttribute("data-scrolled", "true");
         await expect(title).toHaveCSS(
           "transform",
-          "matrix(0.97, 0, 0, 0.97, 0, 0)",
+          "matrix(0.95, 0, 0, 0.95, 0, 0)",
         );
-        expect(
-          await header.evaluate(
-            (element) => getComputedStyle(element, "::before").content,
-          ),
-        ).toBe('""');
+        const surface = await header.evaluate((element) => {
+          const style = getComputedStyle(element, "::before");
+          return {
+            content: style.content,
+            opacity: style.opacity,
+            backdropFilter:
+              style.backdropFilter !== "none"
+                ? style.backdropFilter
+                : style.webkitBackdropFilter,
+            supportsBlur:
+              CSS.supports("backdrop-filter", "blur(1px)") ||
+              CSS.supports("-webkit-backdrop-filter", "blur(1px)"),
+          };
+        });
+        expect(surface.content).toBe('""');
+        expect(surface.opacity).toBe("1");
+        if (surface.supportsBlur) {
+          expect(surface.backdropFilter).toContain("blur(18px)");
+        }
         const after = await header.boundingBox();
         expect(after!.height).toBe(before!.height);
         expect(after!.y).toBe(before!.y);
@@ -124,5 +138,35 @@ for (const width of [320, 390]) {
         ).toBe(false);
       });
     }
+  });
+
+  test(`compact header keeps its visual state without motion at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto("/");
+    const header = page.locator(".workout-control");
+    const title = header.locator(".brand-lockup");
+    await expect(header).toHaveAttribute("data-compact-header", "true");
+    await page.evaluate(() =>
+      window.scrollTo({ top: 160, behavior: "instant" }),
+    );
+    await expect(header).toHaveAttribute("data-scrolled", "true");
+    await expect(title).toHaveCSS(
+      "transform",
+      "matrix(0.95, 0, 0, 0.95, 0, 0)",
+    );
+    expect(
+      await header.evaluate((element) => {
+        const surface = getComputedStyle(element, "::before");
+        return [surface.opacity, surface.transitionDuration];
+      }),
+    ).toEqual(["1", "0s"]);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth > window.innerWidth,
+      ),
+    ).toBe(false);
   });
 }

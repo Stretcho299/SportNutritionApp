@@ -79,24 +79,55 @@ html {
   isolation: isolate;
 }
 
-.workout-control[data-compact-header="true"][data-scrolled="true"]::before {
+.workout-control[data-compact-header="true"]::before {
   position: absolute;
   z-index: -1;
-  inset: -8px -12px 0;
+  inset: -8px 0 -16px;
   border-radius: 0 0 20px 20px;
-  background: linear-gradient(180deg, #111114ed 0%, #111114c9 76%, #11111400);
-  opacity: 1;
+  background: linear-gradient(
+    180deg,
+    #101014f2 0%,
+    #101014e3 38%,
+    #101014a8 72%,
+    #10101400 100%
+  );
+  box-shadow:
+    inset 0 -1px 0 #ffffff1a,
+    0 13px 20px -18px #000000d9;
+  opacity: 0;
   content: "";
   pointer-events: none;
-  transition: opacity 180ms ease;
+  transition: opacity 190ms ease;
 }
 
-.workout-control[data-compact-header="true"][data-scrolled="true"] h1,
+@supports (backdrop-filter: blur(1px)) {
+  .workout-control[data-compact-header="true"]::before {
+    backdrop-filter: blur(18px) saturate(155%);
+    mask-image: linear-gradient(#000 0%, #000 52%, transparent 100%);
+  }
+}
+
+@supports (-webkit-backdrop-filter: blur(1px)) {
+  .workout-control[data-compact-header="true"]::before {
+    -webkit-backdrop-filter: blur(18px) saturate(155%);
+    -webkit-mask-image: linear-gradient(#000 0%, #000 52%, transparent 100%);
+  }
+}
+
+.workout-control[data-compact-header="true"][data-scrolled="true"]::before {
+  opacity: 1;
+}
+
+.workout-control[data-compact-header="true"] > h1,
+.workout-control[data-compact-header="true"] .brand-lockup {
+  transform-origin: left center;
+  transition: transform 190ms ease;
+}
+
+.workout-control[data-compact-header="true"][data-scrolled="true"] > h1,
 .workout-control[data-compact-header="true"][data-scrolled="true"]
   .brand-lockup {
-  transform: scale(0.97);
-  transform-origin: left center;
-  transition: transform 180ms ease;
+  transform: scale(0.95);
 }
 
 .brand-lockup {
@@ -1205,9 +1236,9 @@ html {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .workout-control[data-scrolled="true"]::before,
-  .workout-control[data-scrolled="true"] h1,
-  .workout-control[data-scrolled="true"] .brand-lockup,
+  .workout-control[data-compact-header="true"]::before,
+  .workout-control[data-compact-header="true"] > h1,
+  .workout-control[data-compact-header="true"] .brand-lockup,
   .active-workout-capsule,
   .active-workout-capsule-dot {
     animation: none !important;

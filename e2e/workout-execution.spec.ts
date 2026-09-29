@@ -1244,7 +1244,7 @@ for (const width of [320, 390]) {
             .locator(".brand-lockup")
             .evaluate((element) => getComputedStyle(element).transform),
         )
-        .toBe("matrix(0.97, 0, 0, 0.97, 0, 0)");
+        .toBe("matrix(0.95, 0, 0, 0.95, 0, 0)");
       const layout = await page.evaluate(() => {
         const trophy = document
           .querySelector(".future-tile:last-child")!
