@@ -670,6 +670,13 @@ for (const width of [390, 320]) {
     const navigation = page.getByRole("navigation", {
       name: "Navigation principale",
     });
+    const header = page.locator(".workout-control");
+    const headerHeight = await header.evaluate(
+      (element) => element.getBoundingClientRect().height,
+    );
+    const headerTop = await header.evaluate(
+      (element) => element.getBoundingClientRect().top,
+    );
     const sets = page.locator(".planned-sets");
     await sets.evaluate((element) => {
       element.scrollTop = 0;
@@ -687,6 +694,15 @@ for (const width of [390, 320]) {
       element.scrollTop = 120;
       element.dispatchEvent(new Event("scroll"));
     });
+    await expect(header).toHaveAttribute("data-scrolled", "true");
+    expect(
+      await header.evaluate(
+        (element) => element.getBoundingClientRect().height,
+      ),
+    ).toBe(headerHeight);
+    expect(
+      await header.evaluate((element) => element.getBoundingClientRect().top),
+    ).toBe(headerTop);
     await expect(navigation).toHaveAttribute("data-state", "minimized");
     await capture(page, info, `workout-minimized-${width}`);
 

@@ -208,14 +208,18 @@ async function setVisualViewport(
   );
 }
 
-async function prepareWorkout(page, setCount = "2") {
+async function prepareWorkout(
+  page,
+  setCount = "2",
+  workoutName = "Séance E2E",
+) {
   await page.goto("/");
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
   await page.getByRole("button", { name: "Créer une séance" }).click();
-  await page.getByRole("textbox", { name: "Nom" }).fill("Séance E2E");
-  await saveSheet(page, "Séance", "Séance E2E");
+  await page.getByRole("textbox", { name: "Nom" }).fill(workoutName);
+  await saveSheet(page, "Séance", workoutName);
   await page.locator(".workout-card").click();
   await expect(page.locator(".workout-preparation, .empty")).toBeVisible();
   await page.getByRole("button", { name: /Gérer les exercices/i }).click();
@@ -1054,6 +1058,159 @@ test("returns to dashboard and resumes the same active session, then abandons it
     .toEqual(["abandoned", "inProgress"]);
   expect((await readPersistedStore(page)).sessions[0].id).toBe(sessionId);
   expect((await readPersistedStore(page)).sessions[1].id).not.toBe(sessionId);
+});
+
+for (const width of [320, 390]) {
+  test(`active session capsule stays clear and resumes the same session at ${width}px`, async ({
+    page,
+  }) => {
+    const workoutName = "Séance E2E avec un nom suffisamment long pour mobile";
+    await page.setViewportSize({ width, height: 844 });
+    await prepareWorkout(page, "2", workoutName);
+    await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+    const original = await readPersistedStore(page);
+    const { id, startedAt } = original.sessions[0];
+    await page.getByRole("button", { name: "Retour aux séances" }).click();
+
+    const capsule = page.getByRole("button", {
+      name: `Reprendre la séance ${workoutName}`,
+    });
+    const timer = page.getByRole("timer", {
+      name: "Durée de la séance en cours",
+    });
+    await expect(capsule).toBeVisible();
+    await expect(timer).toHaveAttribute("data-started-at", String(startedAt));
+    const geometry = await page.evaluate(() => {
+      const capsule = document
+        .querySelector<HTMLElement>(".active-workout-capsule")!
+        .getBoundingClientRect();
+      const navigation = document
+        .querySelector<HTMLElement>(".bottom-navigation-surface")!
+        .getBoundingClientRect();
+      const header = document
+        .querySelector<HTMLElement>(".workout-control")!
+        .getBoundingClientRect();
+      return {
+        capsule: {
+          top: capsule.top,
+          bottom: capsule.bottom,
+          height: capsule.height,
+        },
+        navigation: { top: navigation.top, bottom: navigation.bottom },
+        headerHeight: header.height,
+        overflowX: document.documentElement.scrollWidth > window.innerWidth,
+      };
+    });
+    expect(geometry.capsule.height).toBeGreaterThanOrEqual(44);
+    expect(geometry.capsule.bottom).toBeLessThan(geometry.navigation.top);
+    expect(geometry.overflowX).toBe(false);
+
+    await page.evaluate((timestamp) => {
+      const nativeNow = Date.now.bind(Date);
+      Date.now = () => timestamp + 3_723_000;
+      window.dispatchEvent(new Event("pageshow"));
+      document.dispatchEvent(new Event("visibilitychange"));
+      Date.now = nativeNow;
+    }, startedAt);
+    await expect(timer).toHaveText("1:02:03");
+    expect((await readPersistedStore(page)).sessions[0].startedAt).toBe(
+      startedAt,
+    );
+
+    await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
+    await page.getByRole("button", { name: "Créer une séance" }).click();
+    await expect(page.getByRole("dialog", { name: "Séance" })).toBeVisible();
+    await expect(capsule).toBeHidden();
+    await page
+      .getByRole("button", { name: "Fermer le panneau" })
+      .press("Enter");
+    await expect(page.getByRole("dialog", { name: "Séance" })).toHaveCount(0);
+    await expect(capsule).toBeVisible();
+
+    await capsule.click();
+    await expect(
+      page.getByRole("region", { name: "Séries de Exercice A" }),
+    ).toBeVisible();
+    await expect(capsule).toBeHidden();
+    const resumed = await readPersistedStore(page);
+    expect(resumed.sessions).toHaveLength(1);
+    expect(resumed.sessions[0]).toMatchObject({ id, startedAt });
+    expect(
+      await page
+        .locator(".workout-control")
+        .evaluate((header) =>
+          Math.round(header.getBoundingClientRect().height),
+        ),
+    ).toBeGreaterThan(0);
+  });
+}
+
+for (const width of [320, 390]) {
+  test(`active Musculation tab returns the dashboard to the top at ${width}px`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("/");
+    const header = page.locator(".workout-control");
+    const initialHeaderHeight = await header.evaluate(
+      (element) => element.getBoundingClientRect().height,
+    );
+    const initialHeaderTop = await header.evaluate(
+      (element) => element.getBoundingClientRect().top,
+    );
+    await page.evaluate(() => {
+      document.documentElement.style.minHeight = "1400px";
+      window.scrollTo({ top: 500, behavior: "instant" });
+    });
+    await expect(header).toHaveAttribute("data-scrolled", "true");
+    expect(
+      await header.evaluate(
+        (element) => element.getBoundingClientRect().height,
+      ),
+    ).toBe(initialHeaderHeight);
+    expect(
+      await header.evaluate((element) => element.getBoundingClientRect().top),
+    ).toBe(initialHeaderTop);
+    await page.getByRole("button", { name: "Musculation" }).click();
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+
+    await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
+    await expect(
+      page.getByRole("region", { name: "Mes séances" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Musculation" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Entraînement" }),
+    ).toBeVisible();
+  });
+}
+
+test("reduced motion removes capsule and header transitions", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await prepareWorkout(page, "1");
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+  await page.getByRole("button", { name: "Retour aux séances" }).click();
+  await expect(
+    page.getByRole("button", { name: "Reprendre la séance Séance E2E" }),
+  ).toBeVisible();
+  const motion = await page.evaluate(() => ({
+    capsuleAnimation: getComputedStyle(
+      document.querySelector(".active-workout-capsule")!,
+    ).animationDuration,
+    capsuleTransition: getComputedStyle(
+      document.querySelector(".active-workout-capsule")!,
+    ).transitionDuration,
+    headerTransition: getComputedStyle(
+      document.querySelector(".workout-control .brand-lockup")!,
+    ).transitionDuration,
+  }));
+  expect(motion.capsuleAnimation).toBe("0s");
+  expect(motion.capsuleTransition).toBe("0s");
+  expect(motion.headerTransition).toBe("0s");
 });
 
 test("does not create a second active session while another template is active", async ({

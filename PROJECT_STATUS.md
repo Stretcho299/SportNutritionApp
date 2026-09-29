@@ -23,9 +23,9 @@ implémentée dans l’application. Les spikes Ciqual et Open Food Facts dans
 ## Baseline stable
 
 - Branche stable : `main`.
-- État : après merge de la PR [#47](https://github.com/Stretcho299/SportNutritionApp/pull/47), le 29 septembre 2026.
-- Commit de référence : `875c68735f55b1c9a417322f8da21f17c81a04e4` — `feat: simplify workout start and add persistent session timer (#47)`.
-- Dernière exécution CI connue sur ce commit : [Web CI réussie](https://github.com/Stretcho299/SportNutritionApp/actions/runs/36541064838). Le job Ubuntu / Node 20 exécute format, lint, Vitest et build; il ne lance pas Playwright.
+- État : `main` inclut les PRs [#47](https://github.com/Stretcho299/SportNutritionApp/pull/47) et [#50](https://github.com/Stretcho299/SportNutritionApp/pull/50), au 29 septembre 2026.
+- Commit de référence de `main` avant l’issue #48 : `690548745d3c71e33bef03432a6db62120204f7d` — merge de la documentation projet #50, après le jalon fonctionnel #47 (`875c68735f55b1c9a417322f8da21f17c81a04e4`).
+- Dernière exécution CI connue sur le jalon #47 : [Web CI réussie](https://github.com/Stretcho299/SportNutritionApp/actions/runs/36541064838). Le job Ubuntu / Node 20 exécute format, lint, Vitest et build; il ne lance pas Playwright. Consulter l’historique Actions pour le statut du commit courant.
 - Référence Vitest : 108 tests passent. `npm run lint` conserve un avertissement Fast Refresh préexistant dans `src/OrientationGuard.tsx`, sans erreur.
 - Historique Playwright de #47 : les scénarios ciblés ont été validés. Une exécution complète rapportée a fini à 102/104, avec deux problèmes WebKit décrits dans [la PR #47](https://github.com/Stretcho299/SportNutritionApp/pull/47) : fermeture de page/timeout sur le scrub de navigation à 390 px et différence de géométrie de 0,86 px sur une préparation dense. Le second a passé en relance isolée; le premier a été reproduit isolément. Ce sont des observations historiques de test, pas des régressions établies sur chaque commit de `main`.
 
@@ -36,6 +36,7 @@ implémentée dans l’application. Les spikes Ciqual et Open Food Facts dans
 - `src/storage/database.ts` : modèles, transitions métier et persistance.
 - `src/BottomSheet.tsx`, `src/SetValuePicker.tsx`, `src/ConfirmationDialog.tsx` : feuilles, pickers et confirmations.
 - `src/BottomNavigation.tsx`, `src/ExerciseNavigator.tsx`, `src/WorkoutProgress.tsx`, `src/ActiveRestTimer.tsx` : navigation, navigation des exercices, progression et repos.
+- `src/ActiveWorkoutCapsule.tsx` (issue #48 en cours) : reprise visuelle de la session active, sans stockage propre.
 - `src/index.css`, `src/App.css`, `src/redesign-v2.css` : styles; la feuille redesign contient des couches cumulatives et des corrections mobiles.
 - `public/manifest.webmanifest`, `public/sw.js`, `public/icons/` : installation et cache PWA.
 - Configurations : `vite.config.ts` configure Vitest; `tsconfig*.json`, `eslint.config.js`, `.prettierignore`, `playwright.config.ts` et `.github/workflows/web.yml` décrivent compilation, qualité et navigateur.
@@ -88,6 +89,13 @@ pas leur lecture lorsqu’un changement les concerne.
 - Navigation basse flottante glass/lens avec scrub/hold-slide, capture du
   pointeur, minimisation à la descente et retour à l’approche du haut; respecte
   `prefers-reduced-motion`. Musculation est active, Nutrition désactivée.
+- L’issue #48 est en cours sur une branche dédiée : header sticky visuellement
+  compacté au scroll sans changement de géométrie, second tap sur Musculation
+  pour remonter au dashboard, et capsule de reprise de séance au-dessus de la
+  navigation. La capsule utilise l’horloge globale issue de `startedAt`, se
+  cache dans le détail de sa session et sous les overlays, et augmente la réserve
+  de scroll uniquement lorsqu’elle est visible. Cette passe n’est pas encore
+  mergée dans `main`.
 - `ExerciseNavigator` distingue sélection et statut d’exécution; le long press
   tactile (300 ms, tolérance de mouvement de 8 px) démarre le reorder, avec
   clone et auto-scroll horizontal près des bords (44 px).
@@ -118,6 +126,10 @@ ultérieurs du template.
   timestamp de fin.
 - Le repos et le chrono global dérivent d’horodatages persistés; à la reprise,
   ne jamais recréer ni décaler `startedAt` ou `restEndsAt`.
+- La capsule de continuité est une vue de l’unique session `inProgress` ou
+  `readyToFinish`. Son temps est calculé depuis le même `startedAt` et le clock
+  global; elle ne crée ni ne modifie une session. Elle est cachée dans le détail
+  de cette session et pendant les BottomSheets, pickers et confirmations.
 - Notes permanentes et notes de session ont des portées distinctes; une note de
   séance ne doit pas se retrouver sur le template.
 - Les valeurs manquantes (`null`) et les zéros explicites sont différents.
@@ -145,6 +157,11 @@ schéma sans issue et tests dédiés.
   document ou combattre le clavier.
 - Navigation basse : préserver hit targets, scrub/hold-slide, arbitration du
   scroll, lens, minimisation et offsets historiques.
+- Le header normal suit le scroll du document; dans le détail, son état visuel
+  suit exclusivement `.planned-sets`, sans changer les fixed zones, le scroll
+  local, la géométrie du header ou les safe areas. L’onglet Musculation conserve
+  le retour depuis les sous-vues; sur le dashboard actif, il remonte le document
+  en haut et respecte reduced-motion.
 - ExerciseNavigator : conserver les gestes touch/pointer, long press,
   auto-scroll et restrictions de reorder selon l’exécution. La sélection d’un
   exercice n’active pas son avancement.
@@ -153,9 +170,9 @@ schéma sans issue et tests dédiés.
 
 ## État actuel et roadmap
 
-### Prochain travail fonctionnel : issue #48
+### Travail fonctionnel en cours : issue #48
 
-[Issue #48 — moderniser la navigation iOS et la continuité de la séance active](https://github.com/Stretcho299/SportNutritionApp/issues/48) est **OPEN** et constitue la prochaine passe active. Son périmètre confirmé :
+[Issue #48 — moderniser la navigation iOS et la continuité de la séance active](https://github.com/Stretcho299/SportNutritionApp/issues/48) est **OPEN** et constitue la passe active sur la branche dédiée `feat/48-ios-navigation-continuity`. Les changements attendent review et ne sont pas présentés comme mergés. Son périmètre confirmé :
 
 1. Compacter le header et ajouter une séparation de bord haute discrète sans
    saut de layout ni changement de safe area/viewport.
@@ -175,10 +192,12 @@ sans réécrire les interactions tactiles déjà validées.
 
 ### Étapes futures
 
-Ces axes sont évoqués par la roadmap, mais ne sont pas le prochain travail de
-#48; aucun ordre au-delà de cette issue n’est confirmé :
+Après validation de #48, la prochaine passe prévue poursuit le polish iOS avec
+les haptics/vibrations. Les autres axes ci-dessous restent futurs; aucun ordre
+au-delà de cette prochaine passe n’est confirmé :
 
-- Continuité visuelle, transitions et motion plus larges; haptique/vibrations.
+- Motion, transitions et continuité visuelle plus larges.
+- Haptique/vibrations dans une issue dédiée, après validation de #48.
 - Résumé enrichi de fin de séance et consultation UI de l’historique. L’écran
   affiche déjà « Séance terminée », mais les données de sessions n’ont pas
   encore de bilan détaillé ni d’expérience d’historique dédiée.

@@ -37,6 +37,15 @@
   );
 }
 
+:root:has(.active-workout-capsule[data-visible="true"]) {
+  --bottom-navigation-scroll-reserve: calc(
+    var(--bottom-navigation-action-height) +
+      var(--bottom-navigation-system-clearance) +
+      var(--bottom-navigation-floating-lift) - var(--bottom-nav-visual-offset) +
+      12px + 66px
+  );
+}
+
 body {
   background:
     radial-gradient(circle at 80% -10%, #ff5a1f17, transparent 34rem), #09090b;
@@ -61,6 +70,32 @@ html {
 .home-header {
   padding: 12px 0 18px;
   border: 0;
+}
+
+.app-shell:not(.workout-detail) > .workout-control {
+  position: sticky;
+  z-index: 3;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  isolation: isolate;
+}
+
+.workout-control[data-scrolled="true"]::before {
+  position: absolute;
+  z-index: -1;
+  inset: -8px -12px 0;
+  border-radius: 0 0 20px 20px;
+  background: linear-gradient(180deg, #111114ed 0%, #111114c9 76%, #11111400);
+  opacity: 1;
+  content: "";
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
+.workout-control[data-scrolled="true"] h1,
+.workout-control[data-scrolled="true"] .brand-lockup {
+  transform: scale(0.97);
+  transform-origin: left center;
+  transition: transform 180ms ease;
 }
 
 .brand-lockup {
@@ -854,6 +889,94 @@ html {
     box-shadow 180ms ease;
 }
 
+.active-workout-capsule {
+  position: fixed;
+  z-index: 2;
+  left: 50%;
+  bottom: calc(
+    var(--bottom-navigation-floating-lift) +
+      var(--bottom-navigation-system-clearance) -
+      var(--bottom-nav-visual-offset) + var(--bottom-navigation-action-height) +
+      10px
+  );
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: min(320px, calc(100vw - 32px));
+  min-height: 56px;
+  padding: 8px 16px;
+  border: 1px solid #ffffff20;
+  border-radius: 20px;
+  background: rgb(27 27 32 / 88%);
+  box-shadow:
+    0 8px 28px #0007,
+    inset 0 1px #ffffff12;
+  color: var(--text);
+  text-align: left;
+  transform: translateX(-50%);
+  animation: active-capsule-in 180ms ease-out both;
+  transition:
+    opacity 180ms ease,
+    translate 180ms ease;
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+}
+
+.active-workout-capsule[data-visible="false"] {
+  opacity: 0;
+  pointer-events: none;
+  translate: 0 8px;
+  visibility: hidden;
+}
+
+.active-workout-capsule:active {
+  border-color: #ff9a6c55;
+  background: rgb(37 30 29 / 92%);
+  transform: translateX(-50%) scale(0.985);
+}
+
+.active-workout-capsule-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  box-shadow: 0 0 12px #ff5a1f70;
+}
+
+.active-workout-capsule-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.active-workout-capsule-name {
+  overflow: hidden;
+  color: #f4f1ef;
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.active-workout-capsule-duration {
+  flex: 0 0 auto;
+  color: #c8c4c3;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+@keyframes active-capsule-in {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+  }
+}
+
 .bottom-navigation-surface::before {
   position: absolute;
   z-index: 0;
@@ -1031,6 +1154,14 @@ html {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .workout-control[data-scrolled="true"]::before,
+  .workout-control[data-scrolled="true"] h1,
+  .workout-control[data-scrolled="true"] .brand-lockup,
+  .active-workout-capsule {
+    animation: none !important;
+    transition: none !important;
+  }
+
   .bottom-navigation-surface,
   .bottom-navigation-lens,
   .bottom-navigation-tab {

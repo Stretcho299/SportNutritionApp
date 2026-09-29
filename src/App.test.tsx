@@ -969,6 +969,166 @@ it("derives the global workout clock from startedAt and syncs on foreground", as
   view.unmount();
 });
 
+it("shows the active workout capsule on the dashboard and resumes its unchanged session", async () => {
+  const view = await openEmptyWorkout();
+  await createExercise("Squat", 1, 30);
+  const now = vi.spyOn(Date, "now").mockReturnValue(100_000);
+  fireEvent.click(screen.getByRole("button", { name: "Démarrer la séance" }));
+  const startedAt = storedWorkouts()[0].execution?.startedAt;
+  const sessionId = storedWorkouts()[0].execution?.sessionId;
+  fireEvent.click(screen.getByLabelText("Retour aux séances"));
+
+  const capsule = screen.getByRole("button", {
+    name: "Reprendre la séance Push",
+  });
+  expect(capsule).toBeVisible();
+  expect(
+    screen.getByRole("timer", { name: "Durée de la séance en cours" }),
+  ).toHaveTextContent("00:00");
+  expect(
+    screen.getByRole("timer", { name: "Durée de la séance en cours" }),
+  ).toHaveAttribute("data-started-at", String(startedAt));
+
+  fireEvent.click(screen.getByRole("button", { name: "Supprimer Push" }));
+  const removeConfirmation = screen.getByRole("alertdialog", {
+    name: "Supprimer cette séance ?",
+  });
+  expect(
+    screen.queryByRole("button", { name: "Reprendre la séance Push" }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(
+    within(removeConfirmation).getByRole("button", { name: "Annuler" }),
+  );
+  await waitForMotion();
+  expect(
+    screen.getByRole("button", { name: "Reprendre la séance Push" }),
+  ).toBeVisible();
+
+  now.mockReturnValue(225_000);
+  fireEvent(window, new Event("pageshow"));
+  expect(
+    screen.getByRole("timer", { name: "Durée de la séance en cours" }),
+  ).toHaveTextContent("02:05");
+  fireEvent(document, new Event("visibilitychange"));
+  fireEvent(window, new Event("focus"));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Reprendre la séance Push" }),
+  );
+
+  expect(screen.getByRole("region", { name: "Séries de Squat" })).toBeVisible();
+  expect(storedWorkouts()[0].execution?.sessionId).toBe(sessionId);
+  expect(storedWorkouts()[0].execution?.startedAt).toBe(startedAt);
+  expect(storedWorkouts()).toHaveLength(1);
+  view.unmount();
+});
+
+it("shows the active capsule for readyToFinish and hides it under overlays and in its workout detail", async () => {
+  const view = await openEmptyWorkout();
+  await createExercise("Squat", 1, 30);
+  fireEvent.click(screen.getByText("Démarrer la séance"));
+  await chooseValue("Répétitions", 10);
+  await chooseValue("Charge (kg)", 80);
+  fireEvent.click(screen.getByText("Lancer le repos"));
+  expect(storedWorkouts()[0].execution?.status).toBe("readyToFinish");
+  fireEvent.click(screen.getByLabelText("Retour aux séances"));
+  expect(
+    screen.getByRole("button", { name: "Reprendre la séance Push" }),
+  ).toBeVisible();
+
+  fireEvent.click(
+    screen.getByRole("button", { name: "Reprendre la séance Push" }),
+  );
+  expect(
+    screen.queryByRole("button", { name: "Reprendre la séance Push" }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getByLabelText("Gérer les exercices"));
+  expect(
+    screen.queryByRole("button", { name: "Reprendre la séance Push" }),
+  ).not.toBeInTheDocument();
+  view.unmount();
+});
+
+it("hides the active capsule while a picker or confirmation is open", async () => {
+  const view = await openEmptyWorkout();
+  await createExercise("Squat", 1, 30);
+  fireEvent.click(screen.getByText("Démarrer la séance"));
+  fireEvent.click(screen.getByLabelText("Retour aux séances"));
+  expect(
+    screen.getByRole("button", { name: "Reprendre la séance Push" }),
+  ).toBeVisible();
+
+  fireEvent.click(screen.getByRole("button", { name: "Ouvrir Mes séances" }));
+  fireEvent.click(screen.getByRole("button", { name: "Créer une séance" }));
+  fireEvent.change(screen.getByLabelText("Nom"), {
+    target: { value: "Pull" },
+  });
+  fireEvent.click(screen.getByText("Enregistrer"));
+  await waitForMotion();
+  fireEvent.click(screen.getByText("Pull").closest("button")!);
+  expect(
+    screen.getByRole("button", { name: "Reprendre la séance Push" }),
+  ).toBeVisible();
+
+  fireEvent.click(screen.getByLabelText("Gérer les exercices"));
+  expect(
+    screen.queryByRole("button", { name: "Reprendre la séance Push" }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(
+    within(
+      screen.getByRole("dialog", { name: "Actions de la séance" }),
+    ).getByText("Ajouter un exercice"),
+  );
+  expect(screen.getByRole("dialog", { name: "Exercice" })).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: "Reprendre la séance Push" }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getAllByLabelText("Nombre de séries initiales")[0]);
+  expect(
+    screen.getByRole("dialog", {
+      name: "Choisir Nombre de séries initiales",
+    }),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: "Reprendre la séance Push" }),
+  ).not.toBeInTheDocument();
+  view.unmount();
+});
+
+it("does not render the active capsule when there is no active session", async () => {
+  render(<App />);
+  await screen.findByRole("button", { name: "Musculation" });
+  expect(
+    screen.queryByRole("button", { name: /Reprendre la séance/ }),
+  ).not.toBeInTheDocument();
+});
+
+it("returns from a subview to the dashboard and scrolls the active dashboard tab to the top", async () => {
+  const view = await openEmptyWorkout();
+  const scrollTo = vi.fn();
+  vi.stubGlobal("scrollY", 96);
+  vi.stubGlobal("scrollTo", scrollTo);
+  fireEvent.click(screen.getByRole("button", { name: "Musculation" }));
+  expect(screen.getByRole("heading", { name: "Entraînement" })).toBeVisible();
+  expect(scrollTo).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole("button", { name: "Musculation" }));
+  expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: "smooth" });
+  view.unmount();
+});
+
+it("returns the active dashboard tab to the top instantly with reduced motion", async () => {
+  const view = render(<App />);
+  await screen.findByRole("button", { name: "Musculation" });
+  vi.stubGlobal("matchMedia", () => ({ matches: true }));
+  vi.stubGlobal("scrollY", 96);
+  const scrollTo = vi.fn();
+  vi.stubGlobal("scrollTo", scrollTo);
+
+  fireEvent.click(screen.getByRole("button", { name: "Musculation" }));
+  expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: "instant" });
+  view.unmount();
+});
+
 it("keeps future exercise states unchanged while browsing and starts them explicitly", async () => {
   await openEmptyWorkout();
   await createExercise("A", 1, 30);
