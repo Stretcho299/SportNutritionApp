@@ -3,6 +3,7 @@ import "./App.css";
 import "./redesign-v2.css";
 import { Icon } from "./Icon";
 import { WorkoutProgress } from "./WorkoutProgress";
+import { ActiveWorkoutCapsule } from "./ActiveWorkoutCapsule";
 import {
   ConfirmationDialog,
   type ConfirmationRequest,
@@ -76,6 +77,7 @@ export default function App() {
   const [permanentNoteDraft, setPermanentNoteDraft] = useState("");
   const [sessionNoteDraft, setSessionNoteDraft] = useState("");
   const [clock, setClock] = useState(Date.now);
+  const [headerScrolled, setHeaderScrolled] = useState(false);
   const [confirmation, setConfirmation] = useState<ConfirmationRequest | null>(
     null,
   );
@@ -155,12 +157,20 @@ export default function App() {
     void saveWorkouts(next);
   }, []);
   const workout = workouts.find((w) => w.id === workoutId);
+  const activeWorkout = workouts.find(
+    (item) =>
+      item.execution?.status === "inProgress" ||
+      item.execution?.status === "readyToFinish",
+  );
   const exercise = workout?.exercises.find((e) => e.id === exerciseId);
   const execution = workout?.execution;
-  const clockEnabled = Boolean(execution && execution.status !== "completed");
-  const clockSessionId = execution?.sessionId;
-  const clockStartedAt = execution?.startedAt;
-  const clockExecutionStatus = execution?.status;
+  const clockExecution = activeWorkout?.execution ?? execution;
+  const clockEnabled = Boolean(
+    clockExecution && clockExecution.status !== "completed",
+  );
+  const clockSessionId = clockExecution?.sessionId;
+  const clockStartedAt = clockExecution?.startedAt;
+  const clockExecutionStatus = clockExecution?.status;
   const notePreview =
     (execution && execution.status !== "completed"
       ? workout?.sessionNotes?.[exercise?.id ?? ""]?.trim()
@@ -773,11 +783,10 @@ export default function App() {
     [],
   );
   const isWorkoutDetail = screen === "detail" && !!workout;
-  const activeWorkout = workouts.find(
-    (item) =>
-      item.execution?.status === "inProgress" ||
-      item.execution?.status === "readyToFinish",
-  );
+  const isActiveWorkoutDetail =
+    isWorkoutDetail && workoutId === activeWorkout?.id;
+  const isOverlayOpen = !!dialog || !!confirmation || pickerOpen;
+  const hasActiveWorkout = !!activeWorkout?.execution;
   const preparedWorkouts = workouts.filter(
     (item) => item.id !== activeWorkout?.id,
   );
@@ -799,12 +808,40 @@ export default function App() {
   };
   const isMenu =
     dialog === "addMenu" || dialog === "organizeMenu" || dialog === "reorder";
+  useEffect(() => {
+    if (screen === "detail") return;
+    const readScrollPosition = () => {
+      const top = document.scrollingElement?.scrollTop ?? window.scrollY;
+      setHeaderScrolled(top > 8);
+    };
+    readScrollPosition();
+    window.addEventListener("scroll", readScrollPosition, { passive: true });
+    return () => window.removeEventListener("scroll", readScrollPosition);
+  }, [screen]);
+
+  const handleWorkoutsTab = () => {
+    if (screen !== "list") {
+      setScreen("list");
+      return;
+    }
+    const currentScrollTop =
+      document.scrollingElement?.scrollTop ?? window.scrollY;
+    if (currentScrollTop <= 0) return;
+    const reducedMotion =
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    window.scrollTo({ top: 0, behavior: reducedMotion ? "instant" : "smooth" });
+  };
+
   return (
     <main
       className={`app-shell screen-${screen}${screen === "detail" && exercise ? " workout-detail" : ""}`}
     >
       <header
         className={`workout-control${screen === "list" ? " home-header" : ""}`}
+        data-compact-header={screen !== "detail" ? "true" : undefined}
+        data-scrolled={
+          screen !== "detail" && headerScrolled ? "true" : undefined
+        }
       >
         {screen === "list" ? (
           <div className="brand-lockup">
@@ -865,33 +902,14 @@ export default function App() {
             <span>Votre espace d’entraînement</span>
           </div>
           <div className="dashboard-grid">
-            {activeWorkout && (
-              <section
-                className="active-workout-list"
-                aria-label="Séance en cours"
-              >
-                <ul className="workout-list">
-                  <WorkoutRow
-                    workout={activeWorkout}
-                    variant="active"
-                    onDelete={() => removeWorkout(activeWorkout.id)}
-                    onOpen={() => {
-                      setWorkoutId(activeWorkout.id);
-                      setExerciseId(sort(activeWorkout.exercises)[0]?.id ?? "");
-                      navigate("detail", "forward");
-                    }}
-                  />
-                </ul>
-              </section>
-            )}
             <button
               className="dashboard-tile sessions-tile"
               aria-label="Ouvrir Mes séances"
               onClick={() => navigate("workouts", "forward")}
             >
               <span className="dashboard-tile-art" aria-hidden="true">
-                <Icon name="dumbbell" size={46} strokeWidth={1.45} />
-                <Icon name="list" size={22} />
+                <Icon name="dumbbell" size={72} strokeWidth={1.45} />
+                <Icon name="list" size={28} />
               </span>
               <span className="dashboard-tile-copy">
                 <small>
@@ -919,7 +937,7 @@ export default function App() {
               <span className="future-tile-icon" aria-hidden="true">
                 <Icon name="performance" size={30} />
               </span>
-              <small>—</small>
+              <small>Bientôt</small>
               <strong>Performances</strong>
             </section>
             <section
@@ -1679,9 +1697,22 @@ export default function App() {
         </BottomSheet>
       )}
       <BottomNavigation
-        onWorkouts={() => setScreen("list")}
-        isModalOpen={!!dialog || !!confirmation || pickerOpen}
+        onWorkouts={handleWorkoutsTab}
+        isModalOpen={isOverlayOpen}
       />
+      {hasActiveWorkout && activeWorkout?.execution && (
+        <ActiveWorkoutCapsule
+          name={activeWorkout.name}
+          execution={activeWorkout.execution}
+          now={clock}
+          visible={!isActiveWorkoutDetail && !isOverlayOpen}
+          onResume={() => {
+            setWorkoutId(activeWorkout.id);
+            setExerciseId(sort(activeWorkout.exercises)[0]?.id ?? "");
+            navigate("detail", "forward");
+          }}
+        />
+      )}
       <OrientationGuard />
     </main>
   );

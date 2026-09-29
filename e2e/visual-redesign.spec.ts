@@ -285,9 +285,11 @@ for (const width of [390, 320]) {
     });
     const sessionsBounds = await sessionsTile.boundingBox();
     const calendarBounds = await calendarTile.boundingBox();
-    expect(
-      Math.abs(sessionsBounds!.width - sessionsBounds!.height),
-    ).toBeLessThan(2);
+    expect(sessionsBounds!.width).toBeGreaterThan(width - 40);
+    expect(sessionsBounds!.height).toBeGreaterThan(calendarBounds!.height);
+    expect(calendarBounds!.y).toBeGreaterThan(
+      sessionsBounds!.y + sessionsBounds!.height,
+    );
     expect(
       Math.abs(sessionsBounds!.width - calendarBounds!.width),
     ).toBeLessThan(2);
@@ -641,15 +643,18 @@ for (const width of [390, 320]) {
     expect(finishAlignment.verticalOffset).toBeLessThan(1);
     await screenshot(page, info, "execution-started");
     await page.getByRole("button", { name: "Retour aux séances" }).click();
-    const activeModule = page.getByRole("region", { name: "Séance en cours" });
-    await expect(activeModule.locator(".active-session-dot")).toBeVisible();
-    await expect(activeModule).toContainText("Force · Haut du corps");
-    await expect(activeModule).toContainText("0 / 4 séries");
-    await expect(activeModule).toContainText("Reprendre");
-    await expect(activeModule.locator(".workout-card")).toHaveCount(1);
-    await expect(activeModule.locator(".active-session-module")).toHaveCount(0);
+    const capsule = page.getByRole("button", {
+      name: "Reprendre la séance Force · Haut du corps",
+    });
+    await expect(capsule.locator(".active-workout-capsule-dot")).toBeVisible();
+    await expect(capsule).toContainText("Force · Haut du corps");
+    await expect(capsule).toContainText("0 terminées · 4 restantes");
+    await expect(
+      page.getByRole("region", { name: "Séance en cours" }),
+    ).toHaveCount(0);
+    await expect(page.locator(".workout-card-active")).toHaveCount(0);
     await screenshot(page, info, "dashboard-active");
-    await activeModule.locator(".workout-card").click();
+    await capsule.click();
     const first = page.locator(".set-block").first();
     const rail = page.getByRole("list", { name: "Exercices" });
     await first.scrollIntoViewIfNeeded();
@@ -698,8 +703,8 @@ for (const width of [390, 320]) {
     await expect(timer).toBeInViewport();
     // Reload restores the deadline and numeric execution data from IndexedDB.
     await page.reload();
-    await expect(page.locator(".workout-card")).toBeVisible();
-    await page.locator(".workout-card").click();
+    await expect(capsule).toBeVisible();
+    await capsule.click();
     await expect(timer).toBeVisible();
     await expect(first.getByLabel("Charge (kg)")).toHaveAttribute(
       "data-value",
