@@ -23,11 +23,11 @@ implémentée dans l’application. Les spikes Ciqual et Open Food Facts dans
 ## Baseline stable
 
 - Branche stable : `main`.
-- État : `main` inclut les PRs [#47](https://github.com/Stretcho299/SportNutritionApp/pull/47) et [#50](https://github.com/Stretcho299/SportNutritionApp/pull/50), au 29 septembre 2026.
-- Commit de référence de `main` avant l’issue #48 : `690548745d3c71e33bef03432a6db62120204f7d` — merge de la documentation projet #50, après le jalon fonctionnel #47 (`875c68735f55b1c9a417322f8da21f17c81a04e4`).
-- Dernière exécution CI connue sur le jalon #47 : [Web CI réussie](https://github.com/Stretcho299/SportNutritionApp/actions/runs/36541064838). Le job Ubuntu / Node 20 exécute format, lint, Vitest et build; il ne lance pas Playwright. Consulter l’historique Actions pour le statut du commit courant.
-- Référence Vitest : 108 tests passent. `npm run lint` conserve un avertissement Fast Refresh préexistant dans `src/OrientationGuard.tsx`, sans erreur.
-- Historique Playwright de #47 : les scénarios ciblés ont été validés. Une exécution complète rapportée a fini à 102/104, avec deux problèmes WebKit décrits dans [la PR #47](https://github.com/Stretcho299/SportNutritionApp/pull/47) : fermeture de page/timeout sur le scrub de navigation à 390 px et différence de géométrie de 0,86 px sur une préparation dense. Le second a passé en relance isolée; le premier a été reproduit isolément. Ce sont des observations historiques de test, pas des régressions établies sur chaque commit de `main`.
+- État : `main` inclut les PRs [#47](https://github.com/Stretcho299/SportNutritionApp/pull/47), [#50](https://github.com/Stretcho299/SportNutritionApp/pull/50) et [#51](https://github.com/Stretcho299/SportNutritionApp/pull/51), au 29 septembre 2026.
+- Commit de référence : `e6aec5939d3baf02e95fdb3383cd2c37a8d883be` — merge de la PR #51, qui clôt l’issue #48.
+- CI de référence : [Web CI #100 réussie](https://github.com/Stretcho299/SportNutritionApp/actions/runs/36612608413). Le job Ubuntu / Node 20 exécute format, lint, Vitest et build; il ne lance pas Playwright.
+- Référence Vitest : 122 tests passent. `npm run lint` conserve un avertissement Fast Refresh préexistant dans `src/OrientationGuard.tsx`, sans erreur.
+- Validation Playwright finale de #48 : la passe complète rapportée sur la PR #51 termine à 131/132, avec un unique timeout WebKit sur un long scénario d’édition/propagation déjà observé avant le dernier ajustement visuel. Les tests ciblés du header passent 16/16. Les comportements critiques ont également été validés physiquement sur iPhone avant merge.
 
 ## Stack et points d’entrée
 
@@ -36,7 +36,7 @@ implémentée dans l’application. Les spikes Ciqual et Open Food Facts dans
 - `src/storage/database.ts` : modèles, transitions métier et persistance.
 - `src/BottomSheet.tsx`, `src/SetValuePicker.tsx`, `src/ConfirmationDialog.tsx` : feuilles, pickers et confirmations.
 - `src/BottomNavigation.tsx`, `src/ExerciseNavigator.tsx`, `src/WorkoutProgress.tsx`, `src/ActiveRestTimer.tsx` : navigation, navigation des exercices, progression et repos.
-- `src/ActiveWorkoutCapsule.tsx` (issue #48 en cours) : reprise visuelle de la session active, sans stockage propre.
+- `src/ActiveWorkoutCapsule.tsx` (livré par l’issue #48) : reprise visuelle de la session active, sans stockage propre.
 - `src/index.css`, `src/App.css`, `src/redesign-v2.css` : styles; la feuille redesign contient des couches cumulatives et des corrections mobiles.
 - `public/manifest.webmanifest`, `public/sw.js`, `public/icons/` : installation et cache PWA.
 - Configurations : `vite.config.ts` configure Vitest; `tsconfig*.json`, `eslint.config.js`, `.prettierignore`, `playwright.config.ts` et `.github/workflows/web.yml` décrivent compilation, qualité et navigateur.
@@ -89,8 +89,7 @@ pas leur lecture lorsqu’un changement les concerne.
 - Navigation basse flottante glass/lens avec scrub/hold-slide, capture du
   pointeur, minimisation à la descente et retour à l’approche du haut; respecte
   `prefers-reduced-motion`. Musculation est active, Nutrition désactivée.
-- L’issue #48 est en review dans la [PR #51](https://github.com/Stretcho299/SportNutritionApp/pull/51),
-  sur `feat/48-ios-navigation-continuity`, et n’est pas mergée dans `main`.
+- L’issue [#48](https://github.com/Stretcho299/SportNutritionApp/issues/48) est livrée dans `main` via la [PR #51](https://github.com/Stretcho299/SportNutritionApp/pull/51).
   Après les tests physiques iPhone, le dashboard dispose d’une composition
   verticale des quatre modules existants : Mes séances en carte principale,
   puis Calendrier, Performances et Trophées toujours marqués « Bientôt ».
@@ -101,17 +100,12 @@ pas leur lecture lorsqu’un changement les concerne.
   Sa lentille statique reprend le matériau glass de la navigation sans ses gestes
   horizontaux. Les animations sont désactivées en reduced-motion.
   La règle finale du header dépend uniquement de l’écran : effet compact,
-  sticky, surface/fade et léger scale sur le dashboard (`list`), Mes séances
-  (`workouts`) et l’aperçu (`preview`). Tout écran de détail (`detail`) garde
-  un header normal et un titre strictement stable, en préparation comme en
-  exécution `inProgress`/`readyToFinish`, sans effet lié au scroll.
-  Le dashboard, le retour animé en haut, la capsule et les interactions ont
-  été validés physiquement sur iPhone. Cette dernière correction du scope du
-  header reste en review. Les crashes observés lors du retour animé uniquement
-  dans Playwright WebKit n’ont pas été reproduits sur le produit physique;
-  aucun contournement produit n’est appliqué. Consulter la PR #51 pour les
-  résultats des tests automatisés et leurs relances, distincts de la validation
-  physique.
+  sticky, surface/fade, blur et scale `0.95` sur le dashboard (`list`),
+  Mes séances (`workouts`) et l’aperçu (`preview`). Tout écran de détail
+  (`detail`) garde un header normal et un titre strictement stable, en
+  préparation comme en exécution `inProgress`/`readyToFinish`, sans effet
+  lié au scroll. Le dashboard, le retour animé en haut, la capsule et les
+  interactions ont été validés physiquement sur iPhone avant merge.
 - `ExerciseNavigator` distingue sélection et statut d’exécution; le long press
   tactile (300 ms, tolérance de mouvement de 8 px) démarre le reorder, avec
   clone et auto-scroll horizontal près des bords (44 px).
@@ -195,40 +189,35 @@ schéma sans issue et tests dédiés.
 
 ## État actuel et roadmap
 
-### Travail fonctionnel en cours : issue #48
+### Dernier jalon livré : issue #48
 
-[Issue #48 — moderniser la navigation iOS et la continuité de la séance active](https://github.com/Stretcho299/SportNutritionApp/issues/48) est **OPEN** et constitue la passe active sur la branche dédiée `feat/48-ios-navigation-continuity`. Les changements attendent review et ne sont pas présentés comme mergés. Son périmètre confirmé :
+[Issue #48 — moderniser la navigation iOS et la continuité de la séance active](https://github.com/Stretcho299/SportNutritionApp/issues/48) est **CLOSED** et livrée dans `main` via la PR #51. Le commit de merge de référence est `e6aec5939d3baf02e95fdb3383cd2c37a8d883be`.
 
-1. Conserver le header compact/sticky et sa séparation de bord haute discrète
-   sur dashboard, Mes séances et preview (`screen !== "detail"`). Garder un
-   header normal/stable sur le détail, en préparation et pendant une séance
-   active, sans saut de layout ni changement de safe area/viewport.
-2. Sur le dashboard Musculation déjà actif, un second tap sur son onglet
-   remonte en haut; depuis une sous-vue, le tap continue de revenir au dashboard.
-3. Réorganiser le dashboard avec ses modules existants pour un scroll naturel.
-   Retirer son gros bloc actif et utiliser au-dessus de la navigation une
-   capsule de reprise seulement pour `inProgress`/`readyToFinish`, cachée dans
-   le détail actif et sous tout modal.
-   Elle affiche nom, durée, séries terminées/restantes et point pulsant dans
-   une lentille glass statique; elle réutilise `formatSessionDuration` et
-   `startedAt` sans créer de session.
-4. Ajouter des motions d’entrée/sortie et états actifs contenus, en respectant
-   reduced-motion.
-
-L’issue #48 gèle explicitement BottomSheet, clavier/visualViewport,
+Le périmètre livré comprend le header compact sur dashboard/Mes séances/preview,
+le header stable sur `detail`, le retour en haut via second tap Musculation,
+le dashboard vertical et la capsule de continuité enrichie. Les zones tactiles
+stabilisées restent gelées : BottomSheet, clavier/visualViewport,
 `useBodyScrollLock`, backdrop, ExerciseNavigator/reorder, set pickers, timers,
 lifecycle, stockage, cascade KG/REPS/REPOS, glass/lens, offsets et
-`100lvh`/`100dvh`, sauf nécessité directement démontrée. Ajouter cette passe
-sans réécrire les interactions tactiles déjà validées.
+`100lvh`/`100dvh`, sauf nécessité directement démontrée.
+
+### Prochaine passe : issue #52
+
+[Issue #52 — évaluer les retours haptiques pour la PWA](https://github.com/Stretcho299/SportNutritionApp/issues/52) est **OPEN** et constitue la prochaine passe. La cible principale restant l’iPhone en PWA standalone, cette issue commence par un audit de faisabilité réel avant toute implémentation.
+
+La Web Vibration API n’est pas supposée disponible sur iPhone/WebKit. Toute
+implémentation doit être progressive, feature-detected et no-op sur plateforme
+non supportée. Aucun hack CSS/audio/focus ou dépendance lourde ne doit simuler
+un retour haptique. Une solution native/wrapper est hors scope et nécessiterait
+une décision d’architecture séparée.
 
 ### Étapes futures
 
-Après validation de #48, la prochaine passe prévue poursuit le polish iOS avec
-les haptics/vibrations. Les autres axes ci-dessous restent futurs; aucun ordre
-au-delà de cette prochaine passe n’est confirmé :
+La prochaine passe active est l’issue #52 sur la faisabilité haptique. Les autres
+axes ci-dessous restent futurs; aucun ordre au-delà de cette prochaine passe
+n’est confirmé :
 
 - Motion, transitions et continuité visuelle plus larges.
-- Haptique/vibrations dans une issue dédiée, après validation de #48.
 - Résumé enrichi de fin de séance et consultation UI de l’historique. L’écran
   affiche déjà « Séance terminée », mais les données de sessions n’ont pas
   encore de bilan détaillé ni d’expérience d’historique dédiée.
