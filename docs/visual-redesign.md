@@ -1,5 +1,7 @@
 # Refonte visuelle Stitch
 
+> **Document historique — PR #38 / issue #37.** Le contrat et les mesures ci-dessous décrivent l’état de cette refonte à l’époque, notamment le schéma IndexedDB v1. Pour l’état actuel (IndexedDB v2, fonctionnalités livrées et zones stabilisées), consulter [`PROJECT_STATUS.md`](../PROJECT_STATUS.md). Les règles restent un historique utile, pas la source de vérité de l’application actuelle.
+
 ## Audit avant modification
 
 Référence fonctionnelle : `feat/37-workout-execution`, commit `c846040` (PR #38,

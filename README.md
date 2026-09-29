@@ -2,6 +2,8 @@
 
 PWA personnelle de suivi des séances de musculation et de la nutrition. Le prototype SwiftUI est préservé dans la branche `archive/ios-swiftui-prototype-2026-09-14`.
 
+Voir [`PROJECT_STATUS.md`](PROJECT_STATUS.md) pour la baseline actuelle, les invariants et la roadmap.
+
 ## Ubuntu
 
 Node.js 20+ et npm sont les seuls prérequis :
@@ -30,8 +32,8 @@ Après déploiement HTTPS, ouvrir dans Safari, **Partager** → **Sur l’écran
 
 ## Structure
 
-- `src/App.tsx` : shell Séances / Nutrition ;
-- `src/storage` : frontière pour la future persistance IndexedDB ;
+- `src/App.tsx` : parcours Séances ; l’onglet Nutrition est visible mais désactivé ;
+- `src/storage` : modèles templates/sessions et persistance IndexedDB v2, avec fallback localStorage ;
 - `public/manifest.webmanifest` et `public/sw.js` : PWA.
 - `src/index.css` : tokens visuels et polices locales ; `src/App.css` : composants ;
 - `src/WorkoutProgress.tsx` : affichage de la progression et du repos, dérivé des états métier.

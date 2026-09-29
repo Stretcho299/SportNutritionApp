@@ -2,7 +2,7 @@
 
 ## Projet
 
-Application iPhone Sport & Nutrition développée en Swift et SwiftUI.
+PWA personnelle Sport & Nutrition en React/TypeScript, mobile-first et principalement destinée à l’iPhone en mode standalone. `PROJECT_STATUS.md` décrit l’état actuel et la roadmap.
 
 ## Principes
 
@@ -14,6 +14,8 @@ Application iPhone Sport & Nutrition développée en Swift et SwiftUI.
 ## Prise en charge autonome d'une Issue
 
 Avant toute modification, lire l'Issue dans son intégralité, puis inspecter le code et la configuration concernés. Respecter strictement son périmètre et ne réaliser aucun changement sans rapport.
+
+Pour une reprise de projet ou une tâche touchant la roadmap, l’architecture ou l’UX globale, lire `PROJECT_STATUS.md` puis les documents utiles au périmètre. Une petite modification locale ne nécessite pas de relire toute la documentation : lire l’Issue, ce fichier et le code/configuration concernés. Toute PR substantielle qui modifie réellement l’état du projet, la roadmap ou ses invariants doit mettre à jour `PROJECT_STATUS.md` dans la même PR.
 
 En cas d'ambiguïté bloquante, ou lorsqu'une décision fonctionnelle ou architecturale importante n'est pas couverte par l'Issue, la signaler et demander une décision plutôt que d'en inventer une. Les problèmes techniques découverts peuvent être corrigés de manière autonome s'ils restent dans le périmètre de l'Issue.
 

@@ -1,5 +1,7 @@
 # Audit de l’environnement Codex
 
+> **Rapport historique du 13 septembre 2026.** Les références à l’application SwiftUI, à la CI macOS/XCUITest et à l’architecture iOS ci-dessous précèdent le pivot PWA de la PR #32. Elles ne décrivent pas le projet actif. Pour l’état, la stack et la CI actuels, consulter [`PROJECT_STATUS.md`](../PROJECT_STATUS.md), `package.json` et `.github/workflows/web.yml`. Les observations d’installation Codex restent un instantané de la machine à cette date.
+
 Date de l’audit : 13 septembre 2026. Ce document décrit l’installation locale
 réellement observée pour SportNutritionApp. Il ne modifie ni la configuration
 globale Codex, ni les plugins, MCP ou permissions.
