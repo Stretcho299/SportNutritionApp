@@ -440,7 +440,7 @@ export function ExerciseNavigator({
       </ul>
       {draggingIndex !== null && draggedExercise && dragPosition && (
         <div
-          className="exercise-tab-drag-clone"
+          className={`exercise-tab-drag-clone execution-${draggedStatus}${draggedExercise.id === selectedExerciseId ? " selected" : ""}`}
           style={{ left: dragPosition.x, top: dragPosition.y }}
           aria-hidden="true"
         >

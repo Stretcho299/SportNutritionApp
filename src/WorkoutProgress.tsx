@@ -1,17 +1,16 @@
 import { ActiveRestTimer } from "./ActiveRestTimer";
+import { formatSessionDuration } from "./formatSessionDuration";
 import type { WorkoutExecution, Workout } from "./storage/database";
 
 export function WorkoutProgress({
   execution,
   workout,
   clock,
-  onFinishRest,
   selectedExerciseId,
 }: {
   execution: WorkoutExecution;
   workout: Workout;
   clock: number;
-  onFinishRest?: () => void;
   selectedExerciseId: string;
 }) {
   const sets = [
@@ -40,15 +39,32 @@ export function WorkoutProgress({
     (exercise) => exercise.id === currentExercise?.exerciseId,
   )?.name;
   const ratio = sets.length > 0 ? settled / sets.length : 0;
+  const sessionClock =
+    execution.status === "completed" && execution.completedAt != null
+      ? execution.completedAt
+      : clock;
+  const elapsedSeconds = Math.max(
+    0,
+    Math.floor((sessionClock - execution.startedAt) / 1000),
+  );
   return (
     <section
-      className={`workout-progress${resting && onFinishRest ? " has-rest" : ""}`}
+      className={`workout-progress${resting ? " has-rest" : ""}`}
       aria-label="Progression de la séance"
     >
       <div className="progress-copy">
         <div className="progress-label">
           <span>
             {execution.status === "completed" ? "Terminée" : "Progression"}
+          </span>
+          <span
+            className="session-duration"
+            role="timer"
+            aria-label="Durée de la séance"
+            data-started-at={execution.startedAt}
+            data-completed-at={execution.completedAt ?? ""}
+          >
+            ◷ {formatSessionDuration(elapsedSeconds)}
           </span>
           <strong>
             {settled} / {sets.length}
@@ -71,14 +87,13 @@ export function WorkoutProgress({
             : "Séries effectuées ou skippées"}
         </small>
       </div>
-      {resting && onFinishRest && (
+      {resting && (
         <ActiveRestTimer
           remaining={Math.max(
             0,
             Math.ceil(((resting.restEndsAt ?? clock) - clock) / 1000),
           )}
           total={resting.restDurationSeconds ?? resting.restSeconds}
-          onFinish={onFinishRest}
         />
       )}
     </section>

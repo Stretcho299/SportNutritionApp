@@ -45,6 +45,7 @@ import {
   type Workout,
 } from "./storage/database";
 type Screen = "list" | "workouts" | "preview" | "detail";
+const timestampNow = () => Date.now();
 type Dialog =
   | null
   | "workout"
@@ -156,6 +157,10 @@ export default function App() {
   const workout = workouts.find((w) => w.id === workoutId);
   const exercise = workout?.exercises.find((e) => e.id === exerciseId);
   const execution = workout?.execution;
+  const clockEnabled = Boolean(execution && execution.status !== "completed");
+  const clockSessionId = execution?.sessionId;
+  const clockStartedAt = execution?.startedAt;
+  const clockExecutionStatus = execution?.status;
   const notePreview =
     (execution && execution.status !== "completed"
       ? workout?.sessionNotes?.[exercise?.id ?? ""]?.trim()
@@ -197,7 +202,9 @@ export default function App() {
       )
     )
       return;
-    const session = createWorkoutSession(workout, undefined, initialExerciseId);
+    const startedAt = timestampNow();
+    setClock(startedAt);
+    const session = createWorkoutSession(workout, startedAt, initialExerciseId);
     update(
       workouts.map((item) =>
         item.id === workout.id
@@ -261,13 +268,30 @@ export default function App() {
     });
   };
   useEffect(() => {
+    if (!clockEnabled) return;
+    const syncClock = () => setClock(Date.now());
+    const syncWhenVisible = () => {
+      if (document.visibilityState === "visible") syncClock();
+    };
+    syncClock();
+    const interval = window.setInterval(syncClock, 1000);
+    window.addEventListener("focus", syncClock);
+    window.addEventListener("pageshow", syncClock);
+    document.addEventListener("visibilitychange", syncWhenVisible);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", syncClock);
+      window.removeEventListener("pageshow", syncClock);
+      document.removeEventListener("visibilitychange", syncWhenVisible);
+    };
+  }, [clockEnabled, clockSessionId, clockStartedAt, clockExecutionStatus]);
+  useEffect(() => {
     const resting = execution?.exercises
       .flatMap((item) => item.sets)
       .find((item) => item.status === "resting");
     const restEndsAt = resting?.restEndsAt;
     if (!restEndsAt) return;
     const tick = () => {
-      setClock(Date.now());
       if (restEndsAt <= Date.now())
         updateExecution(finishExecutedRest(execution!));
     };
@@ -799,13 +823,14 @@ export default function App() {
               onClick={() => {
                 if (screen === "workouts") navigate("list", "back");
                 else if (screen === "preview") navigate("workouts", "back");
-                else
+                else if (screen === "detail" && workout && !workout.execution)
                   navigate(
-                    screen === "detail" && workout && !workout.execution
+                    completedTemplateIds.includes(workout.id)
                       ? "preview"
-                      : "list",
+                      : "workouts",
                     "back",
                   );
+                else navigate("list", "back");
               }}
             >
               <Icon name="arrow-left" size={19} />
@@ -944,7 +969,12 @@ export default function App() {
                   onOpen={() => {
                     setWorkoutId(item.id);
                     setExerciseId(sort(item.exercises)[0]?.id ?? "");
-                    navigate("preview", "forward");
+                    navigate(
+                      completedTemplateIds.includes(item.id)
+                        ? "preview"
+                        : "detail",
+                      "forward",
+                    );
                   }}
                 />
               ))}
@@ -1035,7 +1065,7 @@ export default function App() {
                 navigate("detail", "forward");
               }}
             >
-              <Icon name="edit" size={16} /> DÉMARRER LA SÉANCE
+              <Icon name="edit" size={16} /> PRÉPARER LA SÉANCE
             </button>
           </div>
         </section>
@@ -1120,13 +1150,13 @@ export default function App() {
                   </div>
                   <div className="exercise-menu">
                     <button
-                      aria-label="Actions de l’exercice"
+                      aria-label="Modifier l’exercice"
                       onClick={() => {
                         setName(exercise.name);
                         setDialog("renameExercise");
                       }}
                     >
-                      <Icon name="more" size={18} />
+                      <Icon name="edit" size={18} />
                     </button>
                     {execution?.status === "inProgress" ? (
                       <button
@@ -1177,7 +1207,6 @@ export default function App() {
                     execution={execution}
                     workout={workout}
                     clock={clock}
-                    onFinishRest={finishCurrentRest}
                     selectedExerciseId={exercise.id}
                   />
                 )}

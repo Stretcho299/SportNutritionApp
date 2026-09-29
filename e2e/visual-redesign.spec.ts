@@ -179,7 +179,7 @@ async function createWorkoutAndOpenPreparation(page: Page, name: string) {
   await workoutForm.getByRole("button", { name: "Enregistrer" }).click();
   await expect(workoutForm).toHaveCount(0);
   await page.locator(".workout-card").click();
-  await page.getByRole("button", { name: "DÉMARRER LA SÉANCE" }).click();
+  await expect(page.locator(".workout-preparation, .empty")).toBeVisible();
 }
 
 for (const width of [390, 320]) {
@@ -389,24 +389,19 @@ for (const width of [390, 320]) {
     );
     await populatedSessionsTile.click();
     await page.locator(".workout-card").click();
+    await expect(page.locator(".workout-preparation, .empty")).toBeVisible();
     await expect(
       page.getByRole("region", { name: "Aperçu de Force · Haut du corps" }),
-    ).toBeVisible();
-    await expect(page.getByText("Première séance")).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "DÉMARRER LA SÉANCE" }),
-    ).toBeVisible();
-    await expect(page.locator(".preview-metric-unavailable")).toHaveCount(0);
-    await expect(page.getByText("Pas encore de données")).toHaveCount(0);
-    await expect(page.locator(".preview-metrics > div")).toHaveCount(2);
-    await page.getByRole("button", { name: "DÉMARRER LA SÉANCE" }).click();
+    ).toHaveCount(0);
     await addExercise(page, "Développé couché", "12");
     await page.getByRole("button", { name: "Retour aux séances" }).click();
-    const populatedPreview = page.getByRole("region", {
-      name: "Aperçu de Force · Haut du corps",
-    });
-    await expect(populatedPreview.getByText("12 séries")).toBeVisible();
-    await screenshot(page, info, "preview-populated");
+    await expect(
+      page.getByRole("region", { name: "Mes séances" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "Aperçu de Force · Haut du corps" }),
+    ).toHaveCount(0);
+    await screenshot(page, info, "workout-library-populated");
     await noOverflow(page);
   });
 
@@ -579,6 +574,37 @@ for (const width of [390, 320]) {
     await choosePickerValue(page, "Charge (kg)", 62.5);
     await choosePickerValue(page, "Répétitions", 10);
     await page.getByRole("button", { name: "Démarrer la séance" }).click();
+    const sessionTimer = page.getByRole("timer", {
+      name: "Durée de la séance",
+    });
+    await expect(sessionTimer).toHaveCSS("font-size", "12px");
+    const startedAt = Number(
+      await sessionTimer.getAttribute("data-started-at"),
+    );
+    await page.evaluate((timestamp) => {
+      const nativeNow = Date.now.bind(Date);
+      Date.now = () => timestamp + 3_723_000;
+      window.dispatchEvent(new Event("pageshow"));
+      Date.now = nativeNow;
+    }, startedAt);
+    await expect(sessionTimer).toHaveText("◷ 1:02:03");
+    const compactProgress = await page
+      .getByRole("region", { name: "Progression de la séance" })
+      .locator(".progress-label")
+      .evaluate((label) => {
+        const items = Array.from(label.children).map((item) =>
+          item.getBoundingClientRect(),
+        );
+        return {
+          overflows: label.scrollWidth > label.clientWidth + 1,
+          overlaps: items.some(
+            (item, index) =>
+              index > 0 && item.left < items[index - 1].right - 1,
+          ),
+        };
+      });
+    expect(compactProgress).toEqual({ overflows: false, overlaps: false });
+    await page.evaluate(() => window.dispatchEvent(new Event("pageshow")));
     const finishExercise = page.getByRole("button", {
       name: "Terminer l’exercice",
     });
@@ -631,8 +657,18 @@ for (const width of [390, 320]) {
     await expect(
       page.locator(".set-block").nth(1).locator(".order"),
     ).toHaveCount(1);
+    const tabSizes = await rail.getByRole("button").evaluateAll((buttons) =>
+      buttons.map((button) => {
+        const bounds = button.getBoundingClientRect();
+        return [bounds.width, bounds.height];
+      }),
+    );
+    expect(tabSizes).toEqual([
+      [42, 42],
+      [42, 42],
+    ]);
     await first.getByRole("button", { name: "Lancer le repos" }).click();
-    const timer = page.getByRole("timer");
+    const timer = page.getByRole("timer", { name: "Temps de repos restant" });
     await expect(timer).toBeVisible();
     const ringProgress = timer.locator(".countdown-value");
     const initialOffset = Number(
@@ -708,6 +744,11 @@ for (const width of [390, 320]) {
         .getByRole("button", { name: "Mettre fin" })
         .click();
     }
+    await expect(rail.locator("li").first()).toHaveClass(/execution-completed/);
+    await expect(rail.getByRole("button").first()).toHaveCSS(
+      "border-color",
+      "rgb(49, 91, 62)",
+    );
     await page
       .getByRole("button", { name: "Terminer la séance", exact: true })
       .click();
@@ -722,7 +763,7 @@ for (const width of [390, 320]) {
     await page.reload();
     await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
     await page.locator(".workout-card").click();
-    await page.getByRole("button", { name: "DÉMARRER LA SÉANCE" }).click();
+    await page.getByRole("button", { name: "PRÉPARER LA SÉANCE" }).click();
     await expect(
       page.getByRole("button", { name: "Démarrer la séance" }),
     ).toBeVisible();
@@ -800,7 +841,7 @@ test("finishing the rest marks the set performed and advances progress", async (
   await page.getByRole("textbox", { name: "Nom" }).fill("Tempo");
   await page.getByRole("button", { name: "Enregistrer" }).click();
   await page.locator(".workout-card").click();
-  await page.getByRole("button", { name: "DÉMARRER LA SÉANCE" }).click();
+  await expect(page.locator(".workout-preparation, .empty")).toBeVisible();
   await addExercise(page, "Squat", "2", "1");
   await page.getByRole("button", { name: "Démarrer la séance" }).click();
   const firstSet = page
@@ -808,7 +849,9 @@ test("finishing the rest marks the set performed and advances progress", async (
     .getByRole("listitem")
     .first();
   await firstSet.getByRole("button", { name: "Lancer le repos" }).click();
-  await expect(page.getByRole("timer")).toBeVisible();
+  await expect(
+    page.getByRole("timer", { name: "Temps de repos restant" }),
+  ).toBeVisible();
   await expect(firstSet).toHaveClass(/status-resting/);
   await expect(firstSet).toHaveClass(/status-performed/, { timeout: 5_000 });
   await expect(page.getByRole("progressbar")).toHaveAttribute("value", "1");
@@ -824,7 +867,7 @@ test("manually scrolls an overflowing timeline before locking reorder", async ({
   await page.getByRole("textbox", { name: "Nom" }).fill("Overflow");
   await page.getByRole("button", { name: "Enregistrer" }).click();
   await page.locator(".workout-card").click();
-  await page.getByRole("button", { name: "DÉMARRER LA SÉANCE" }).click();
+  await expect(page.locator(".workout-preparation, .empty")).toBeVisible();
   for (let index = 0; index < 8; index += 1)
     await addExercise(page, "Exercice " + (index + 1), "1");
 
@@ -887,7 +930,7 @@ test("exercise navigation animates according to workout order without changing e
   await page.getByRole("textbox", { name: "Nom" }).fill("Direction");
   await page.getByRole("button", { name: "Enregistrer" }).click();
   await page.locator(".workout-card").click();
-  await page.getByRole("button", { name: "DÉMARRER LA SÉANCE" }).click();
+  await expect(page.locator(".workout-preparation, .empty")).toBeVisible();
   await addExercise(page, "Premier", "1");
   await addExercise(page, "Deuxième", "1");
   await addExercise(page, "Troisième", "1");
@@ -955,6 +998,9 @@ test("exercise navigation animates according to workout order without changing e
   await page.mouse.move(firstBox!.x - 12, thirdBox!.y + thirdBox!.height / 2, {
     steps: 6,
   });
+  const clone = page.locator(".exercise-tab-drag-clone");
+  await expect(clone).toBeVisible();
+  await expect(clone).toHaveCSS("border-radius", "13px");
   await page.mouse.up();
   await expect(rail.getByRole("button").first()).toHaveAccessibleName(
     /Troisième/,

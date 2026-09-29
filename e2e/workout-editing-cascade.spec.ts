@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-async function createWorkoutPreview(page: Page, name: string) {
+async function createWorkoutPreparation(page: Page, name: string) {
   await page.goto("/");
   await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
   await page.getByRole("button", { name: "Créer une séance" }).click();
@@ -9,15 +9,11 @@ async function createWorkoutPreview(page: Page, name: string) {
   await form.getByRole("button", { name: "Enregistrer" }).click();
   await expect(form).toHaveCount(0);
   await page.locator(".workout-card").click();
-  await expect(
-    page.getByRole("region", { name: `Aperçu de ${name}` }),
-  ).toBeVisible();
+  await expect(page.locator(".workout-preparation, .empty")).toBeVisible();
 }
 
 async function openPreparation(page: Page) {
-  await page
-    .getByRole("button", { name: "DÉMARRER LA SÉANCE", exact: true })
-    .click();
+  await expect(page.locator(".workout-preparation, .empty")).toBeVisible();
 }
 
 async function addExercise(
@@ -142,28 +138,14 @@ async function expectSetValue(
 }
 
 for (const width of [390, 320]) {
-  test(`2C.1 first session and exercise defaults at ${width}px`, async ({
+  test(`first session opens preparation directly at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 844 });
-    await createWorkoutPreview(page, `Première ${width}`);
-    const preview = page.getByRole("region", {
-      name: `Aperçu de Première ${width}`,
-    });
-    await expect(preview.getByText("Première séance")).toBeVisible();
-    await expect(preview.locator(".preview-metric-unavailable")).toHaveCount(0);
-    await expect(preview.getByText("Pas encore de données")).toHaveCount(0);
-    await expect(preview.locator(".preview-metrics > div")).toHaveCount(2);
-    await expect(preview.getByText("Exercices", { exact: true })).toBeVisible();
+    await createWorkoutPreparation(page, `Première ${width}`);
     await expect(
-      preview.getByText("Séries prévues", { exact: true }),
-    ).toBeVisible();
-    await expect(
-      preview.getByRole("button", {
-        name: "DÉMARRER LA SÉANCE",
-        exact: true,
-      }),
-    ).toBeVisible();
+      page.getByRole("region", { name: `Aperçu de Première ${width}` }),
+    ).toHaveCount(0);
     await openPreparation(page);
     await addExercise(page, "Développé couché");
     await expect(page.locator(".set-block")).toHaveCount(3);
@@ -178,7 +160,7 @@ for (const width of [390, 320]) {
     page,
   }) => {
     await page.setViewportSize({ width, height: 844 });
-    await createWorkoutPreview(page, `Cascade ${width}`);
+    await createWorkoutPreparation(page, `Cascade ${width}`);
     await openPreparation(page);
     await addExercise(page, "Squat", { sets: 4, rest: 30 });
 
