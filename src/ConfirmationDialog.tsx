@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { triggerHaptic } from "./haptics";
 import { useBodyScrollLock } from "./useBodyScrollLock";
 
 export type ConfirmationRequest = {
@@ -7,6 +8,7 @@ export type ConfirmationRequest = {
   cancelLabel?: string;
   confirmLabel: string;
   onConfirm: () => void;
+  haptic?: false;
 };
 
 export function ConfirmationDialog({
@@ -18,7 +20,14 @@ export function ConfirmationDialog({
 }) {
   const [closing, setClosing] = useState(false);
   const closeTimeout = useRef<number | undefined>(undefined);
+  const announced = useRef(false);
   useBodyScrollLock(true);
+
+  useEffect(() => {
+    if (announced.current) return;
+    announced.current = true;
+    if (request.haptic !== false) triggerHaptic("medium");
+  }, [request.haptic]);
 
   useEffect(
     () => () => {

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { triggerHaptic } from "./haptics";
 import { Icon } from "./Icon";
 import type { Exercise, ExerciseExecutionStatus } from "./storage/database";
 
@@ -158,6 +159,7 @@ export function ExerciseNavigator({
     if (!active || active.mode !== "pending" || canDrag?.(index) === false)
       return;
     active.mode = "reordering";
+    triggerHaptic("light");
     const bounds = button.getBoundingClientRect();
     setDraggingIndex(index);
     setDropIndex(index);
@@ -231,6 +233,7 @@ export function ExerciseNavigator({
       if (!current || current.mode !== "pending" || canDrag?.(index) === false)
         return;
       current.mode = "reordering";
+      triggerHaptic("light");
       const bounds = button.getBoundingClientRect();
       setDraggingIndex(index);
       setDropIndex(index);

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
 import "./redesign-v2.css";
 import { Icon } from "./Icon";
+import { triggerHaptic } from "./haptics";
 import { WorkoutProgress } from "./WorkoutProgress";
 import { ActiveWorkoutCapsule } from "./ActiveWorkoutCapsule";
 import {
@@ -93,6 +94,7 @@ export default function App() {
   );
   const exerciseTransitionTimeout = useRef<number | undefined>(undefined);
   const dialogCloseTimeout = useRef<number | undefined>(undefined);
+  const immediateRestFeedback = useRef<ExecutedSet | undefined>(undefined);
   const navigate = (next: Screen, direction: "forward" | "back") => {
     setScreenTransition(direction);
     setScreen(next);
@@ -154,7 +156,7 @@ export default function App() {
   }, []);
   const update = useCallback((next: Workout[]) => {
     setWorkouts(next);
-    void saveWorkouts(next);
+    return saveWorkouts(next);
   }, []);
   const workout = workouts.find((w) => w.id === workoutId);
   const activeWorkout = workouts.find(
@@ -226,6 +228,7 @@ export default function App() {
           : item,
       ),
     );
+    triggerHaptic("light");
   };
   const openExerciseNotes = () => {
     if (!exercise || !workout) return;
@@ -246,9 +249,31 @@ export default function App() {
       currentSet?.status === "upcoming"
         ? activateExecutedExercise(execution, targetExerciseId)
         : execution;
-    updateExecution(
-      startExecutedSetRest(immediateBase, targetExerciseId, targetSetId),
+    const next = startExecutedSetRest(
+      immediateBase,
+      targetExerciseId,
+      targetSetId,
     );
+    updateExecution(next);
+    const nextExercise = next.exercises.find(
+      (item) => item.exerciseId === targetExerciseId,
+    );
+    const nextSet = nextExercise?.sets.find(
+      (item) => item.setId === targetSetId,
+    );
+    if (
+      currentSet?.status !== "resting" &&
+      nextSet?.status === "resting" &&
+      nextSet.restSeconds === 0
+    )
+      immediateRestFeedback.current = nextSet;
+    if (
+      currentSet?.status !== "performed" &&
+      nextExercise?.sets.find((item) => item.setId === targetSetId)?.status ===
+        "performed"
+    ) {
+      triggerHaptic(nextExercise.status === "completed" ? "medium" : "light");
+    }
 
     // Re-read after the immediate local transition so another tab cannot
     // start from a stale snapshot and overwrite the session's active clock.
@@ -301,13 +326,51 @@ export default function App() {
       .find((item) => item.status === "resting");
     const restEndsAt = resting?.restEndsAt;
     if (!restEndsAt) return;
-    const tick = () => {
-      if (restEndsAt <= Date.now())
-        updateExecution(finishExecutedRest(execution!));
+    // Feedback only for a deadline crossed by consecutive foreground ticks.
+    // Reload, resume and delayed callbacks still settle the persisted timer silently.
+    let previousVisibleTick: number | undefined;
+    let settled = false;
+    const disarm = () => {
+      previousVisibleTick = undefined;
+      immediateRestFeedback.current = undefined;
     };
+    const tick = () => {
+      if (settled) return;
+      const now = Date.now();
+      if (restEndsAt <= now) {
+        settled = true;
+        // A freshly requested zero-second rest has no pre-deadline tick.
+        const immediate = immediateRestFeedback.current === resting;
+        immediateRestFeedback.current = undefined;
+        updateExecution(finishExecutedRest(execution!));
+        if (
+          document.visibilityState === "visible" &&
+          (immediate ||
+            (previousVisibleTick !== undefined &&
+              previousVisibleTick < restEndsAt &&
+              now >= previousVisibleTick &&
+              now - previousVisibleTick <= 1500)) &&
+          now - restEndsAt <= 1500
+        )
+          triggerHaptic("light");
+      } else {
+        previousVisibleTick =
+          document.visibilityState === "visible" ? now : undefined;
+      }
+    };
+    document.addEventListener("visibilitychange", disarm);
+    window.addEventListener("pagehide", disarm);
+    window.addEventListener("pageshow", disarm);
+    window.addEventListener("focus", disarm);
     tick();
     const interval = window.setInterval(tick, 1000);
-    return () => window.clearInterval(interval);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", disarm);
+      window.removeEventListener("pagehide", disarm);
+      window.removeEventListener("pageshow", disarm);
+      window.removeEventListener("focus", disarm);
+    };
   }, [execution, updateExecution]);
   const finishWorkout = () => {
     if (execution)
@@ -316,7 +379,18 @@ export default function App() {
         description: "Cette séance sera clôturée définitivement.",
         confirmLabel: "Terminer",
         onConfirm: () => {
-          updateExecution(completeWorkoutExecution(execution));
+          const completed = completeWorkoutExecution(execution);
+          if (completed === execution || completed.status !== "completed")
+            return;
+          void updateExecution(completed).then(
+            () => triggerHaptic("success"),
+            (error: unknown) => {
+              console.error(
+                "Impossible de sauvegarder la fin de séance",
+                error,
+              );
+            },
+          );
           setCompletedTemplateIds((current) =>
             current.includes(workoutId) ? current : [...current, workoutId],
           );
@@ -367,6 +441,7 @@ export default function App() {
     const remaining = restRemaining;
     requestConfirmation({
       title: "Mettre fin au repos ?",
+      haptic: false,
       description: `Il reste ${remaining} ${remaining === 1 ? "seconde" : "secondes"}. La série sera considérée comme terminée et vous passerez à la suivante.`,
       confirmLabel: "Mettre fin",
       onConfirm: () => updateExecution(finishExecutedRest(execution)),

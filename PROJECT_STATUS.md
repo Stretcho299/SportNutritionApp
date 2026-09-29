@@ -201,15 +201,45 @@ stabilisées restent gelées : BottomSheet, clavier/visualViewport,
 lifecycle, stockage, cascade KG/REPS/REPOS, glass/lens, offsets et
 `100lvh`/`100dvh`, sauf nécessité directement démontrée.
 
-### Prochaine passe : issue #52
+### Expérimentation en cours : issue #52
 
-[Issue #52 — évaluer les retours haptiques pour la PWA](https://github.com/Stretcho299/SportNutritionApp/issues/52) est **OPEN** et constitue la prochaine passe. La cible principale restant l’iPhone en PWA standalone, cette issue commence par un audit de faisabilité réel avant toute implémentation.
+[Issue #52 — évaluer les retours haptiques pour la PWA](https://github.com/Stretcho299/SportNutritionApp/issues/52) est **OPEN**. L’expérimentation sur `feat/52-haptic-feedback` part de `main` après la PR #53 (`f9481143160db8c5abc1882e4a22efee7ec96903`) et n’est pas présentée comme mergée.
 
 La Web Vibration API n’est pas supposée disponible sur iPhone/WebKit. Toute
 implémentation doit être progressive, feature-detected et no-op sur plateforme
 non supportée. Aucun hack CSS/audio/focus ou dépendance lourde ne doit simuler
 un retour haptique. Une solution native/wrapper est hors scope et nécessiterait
 une décision d’architecture séparée.
+
+Audit effectué avant intégration : Chromium local 153.0.8010.12 expose une
+fonction `navigator.vibrate`; WebKit local 26.6 renvoie `undefined`. Aucun
+haptique Web standard n’est attendu sur Safari/iPhone, qui reste un no-op.
+La présence d’API Chromium et les mocks ne valident aucun moteur physique.
+Safari iPhone et PWA standalone physiques restent à vérifier par l’utilisateur.
+
+La primitive `triggerHaptic` centralise trois motifs courts : `light` 20 ms,
+`medium` 50 ms, `success` [25, 35, 45] ms. Aucun état persistant ni dépendance.
+Les points expérimentaux sont les confirmations à l’apparition, le nouveau
+démarrage, les transitions réelles de série/exercice, la clôture sauvegardée,
+l’expiration naturelle de repos et la prise du reorder. Pas de vibration sur
+navigation, scroll, pickers ou ouverture/fermeture de BottomSheet.
+
+Les priorités du repos sont explicites : fin manuelle entièrement silencieuse
+(y compris sa confirmation), expiration naturelle `light` unique même si elle
+termine l’exercice, dernière série sans repos final `medium` seul. Les autres
+confirmations annoncent `medium` une fois ; seul le succès de clôture ajoute
+`success` après persistance. Pas de feedback à la reprise d’une session.
+Le repos échu continue d’être réglé par son timestamp existant, mais aucun
+feedback n’est rattrapé après reload/suspension/resync. Le feedback exige deux
+observations visibles séparées d’au plus 1 500 ms autour de l’échéance ; les
+événements de retour désarment cette observation. Aucun Web Push/backend.
+
+Les six nouveaux scénarios Playwright ciblés passent : Chromium avec mock,
+WebKit avec API réellement absente, parcours fonctionnels sans crash.
+L’[audit haptique détaillé](docs/haptic-feedback.md) distingue support théorique,
+détection, mocks, navigateur et checklist physique, avec les règles de priorité
+et limites background. Les résultats de la suite complète sont rapportés dans
+la PR de l’issue #52.
 
 ### Étapes futures
 
