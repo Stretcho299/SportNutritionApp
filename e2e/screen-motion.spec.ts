@@ -101,6 +101,44 @@ async function expectPageMotion(
   });
 }
 
+async function expectPreviewDetailMotion(page: Page, target: Locator) {
+  await expect(target).toHaveClass(/page-forward/);
+  await expect(target).toHaveClass(/detail-entry-preview/);
+  await expect
+    .poll(() =>
+      target.evaluate((element) => {
+        const animation = element
+          .getAnimations()
+          .find(
+            (item) =>
+              (item as CSSAnimation).animationName ===
+              "detail-preview-forward-in",
+          );
+        return animation?.effect?.getKeyframes().map((frame) => ({
+          opacity: frame.opacity,
+          transform: frame.transform,
+        }));
+      }),
+    )
+    .toEqual([
+      { opacity: "0", transform: "translate(36px)" },
+      { opacity: "1", transform: "none" },
+    ]);
+  const style = await target.evaluate((element) => {
+    const computed = getComputedStyle(element);
+    return {
+      animationName: computed.animationName,
+      duration: computed.animationDuration,
+      easing: computed.animationTimingFunction,
+    };
+  });
+  expect(style).toEqual({
+    animationName: "detail-preview-forward-in",
+    duration: "0.24s",
+    easing: "cubic-bezier(0.2, 0.8, 0.2, 1)",
+  });
+}
+
 async function recordMotionEvents(page: Page) {
   await page.addInitScript(() => {
     const motionWindow = window as typeof window & {
@@ -287,11 +325,11 @@ for (const width of [320, 390]) {
       page,
       "animationend",
       "workout-preparation",
-      "page-forward-in",
+      "detail-preview-forward-in",
     );
     await page.getByRole("button", { name: "PRÉPARER LA SÉANCE" }).click();
     const detail = page.locator(".workout-preparation");
-    await expectPageMotion(page, detail, "forward");
+    await expectPreviewDetailMotion(page, detail);
     await expectNoHorizontalOverflow(page);
     const header = page.locator(".workout-control");
     expect(
@@ -302,7 +340,7 @@ for (const width of [320, 390]) {
     await waitForMotionEnd(
       page,
       "workout-preparation",
-      "page-forward-in",
+      "detail-preview-forward-in",
       detailForwardCount,
     );
     await expectSameRect(navBefore, await bottomNavigation.boundingBox());
@@ -451,6 +489,9 @@ for (const width of [320, 390]) {
       "Exercice B",
     ]);
     const preparation = page.locator(".workout-preparation");
+    await preparation.evaluate((element) =>
+      element.classList.add("detail-entry-preview"),
+    );
     expect(
       await preparation.evaluate(
         (element) => getComputedStyle(element).animationName,

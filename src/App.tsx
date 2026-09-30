@@ -89,12 +89,18 @@ export default function App() {
     plannedSetCount: number;
   } | null>(null);
   const [screenTransition, setScreenTransition] = useState<
-    "forward" | "back" | null
+    "forward" | "back" | "preview-detail" | null
   >(null);
   const exerciseTransitionTimeout = useRef<number | undefined>(undefined);
   const dialogCloseTimeout = useRef<number | undefined>(undefined);
   const navigate = (next: Screen, direction: "forward" | "back") => {
-    if (next !== screen) setScreenTransition(direction);
+    if (next !== screen) {
+      setScreenTransition(
+        screen === "preview" && next === "detail" && direction === "forward"
+          ? "preview-detail"
+          : direction,
+      );
+    }
     setScreen(next);
   };
   useEffect(() => {
@@ -835,7 +841,12 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: reducedMotion ? "instant" : "smooth" });
   };
 
-  const pageMotionClass = screenTransition ? ` page-${screenTransition}` : "";
+  const pageMotionClass =
+    screenTransition === "preview-detail"
+      ? " page-forward detail-entry-preview"
+      : screenTransition
+        ? ` page-${screenTransition}`
+        : "";
 
   return (
     <main
