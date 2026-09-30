@@ -55,16 +55,22 @@ it("does not repeat feedback on cancellation", () => {
   expect(triggerHaptic).toHaveBeenCalledExactlyOnceWith("medium");
 });
 
-it("keeps an explicitly silent confirmation silent through its action", () => {
+it("announces manual rest confirmation once with no additional action feedback", () => {
   vi.useFakeTimers();
   render(
     <ConfirmationDialog
-      request={{ ...request, haptic: false }}
+      request={{
+        ...request,
+        title: "Mettre fin au repos ?",
+        confirmLabel: "Mettre fin",
+      }}
       onCancel={vi.fn()}
     />,
   );
-  fireEvent.click(screen.getByRole("button", { name: "Supprimer" }));
+  expect(triggerHaptic).toHaveBeenCalledExactlyOnceWith("medium");
+  fireEvent.click(screen.getByRole("button", { name: "Mettre fin" }));
   act(() => vi.advanceTimersByTime(180));
   expect(request.onConfirm).toHaveBeenCalledTimes(1);
-  expect(triggerHaptic).not.toHaveBeenCalled();
+  act(() => vi.advanceTimersByTime(5000));
+  expect(triggerHaptic).toHaveBeenCalledExactlyOnceWith("medium");
 });

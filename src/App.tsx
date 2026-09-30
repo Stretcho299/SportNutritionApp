@@ -441,7 +441,6 @@ export default function App() {
     const remaining = restRemaining;
     requestConfirmation({
       title: "Mettre fin au repos ?",
-      haptic: false,
       description: `Il reste ${remaining} ${remaining === 1 ? "seconde" : "secondes"}. La série sera considérée comme terminée et vous passerez à la suivante.`,
       confirmLabel: "Mettre fin",
       onConfirm: () => updateExecution(finishExecutedRest(execution)),

@@ -8,7 +8,6 @@ export type ConfirmationRequest = {
   cancelLabel?: string;
   confirmLabel: string;
   onConfirm: () => void;
-  haptic?: false;
 };
 
 export function ConfirmationDialog({
@@ -26,8 +25,8 @@ export function ConfirmationDialog({
   useEffect(() => {
     if (announced.current) return;
     announced.current = true;
-    if (request.haptic !== false) triggerHaptic("medium");
-  }, [request.haptic]);
+    triggerHaptic("medium");
+  }, []);
 
   useEffect(
     () => () => {

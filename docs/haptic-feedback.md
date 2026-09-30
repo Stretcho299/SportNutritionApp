@@ -72,9 +72,9 @@ Les priorités absolues du repos et des confirmations évitent les doublons :
 
 - Expiration naturelle : un seul `light`, même si elle termine également la
   série et l’exercice. Aucun deuxième feedback d’exercice.
-- Arrêt manuel : aucun feedback, même s’il termine série/exercice. La
-  confirmation existante « Mettre fin au repos ? » reçoit `haptic: false` :
-  c’est l’exception explicite au défaut du `ConfirmationDialog`.
+- Arrêt manuel : la confirmation « Mettre fin au repos ? » annonce un seul
+  `medium`, comme tout `ConfirmationDialog`. Le clic « Mettre fin » et la fin
+  manuelle du timer n’ajoutent aucun feedback, même s’ils terminent série/exercice.
 - Fin explicite d’exercice : le dialogue annonce `medium`; son bouton qui
   ignore les séries restantes ne répète pas le retour.
 - Suppression séance/exercice/série et abandon : dialogue `medium`, confirmation

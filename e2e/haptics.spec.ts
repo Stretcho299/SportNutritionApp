@@ -90,7 +90,7 @@ test("dispatches start, final set, confirmation and persisted success; native We
   expect(errors).toEqual([]);
 });
 
-test("natural foreground expiry emits once and manual rest termination stays silent", async ({
+test("natural expiry emits once; manual rest only emits medium on confirmation opening", async ({
   page,
   browserName,
 }) => {
@@ -110,7 +110,11 @@ test("natural foreground expiry emits once and manual rest termination stays sil
   });
   await page.clock.runFor(3000);
   await expectCalls(page, browserName, [20, 20]);
+  await page.evaluate(() => {
+    (window as HapticWindow).hapticCalls = [];
+  });
   await sets.nth(1).getByRole("button", { name: "Lancer le repos" }).click();
+  await expectCalls(page, browserName, []);
   await sets
     .nth(1)
     .getByRole("button", { name: "Mettre fin au repos" })
@@ -119,13 +123,14 @@ test("natural foreground expiry emits once and manual rest termination stays sil
     name: "Mettre fin au repos ?",
   });
   await expect(confirmation).toBeVisible();
-  await expectCalls(page, browserName, [20, 20]);
+  await expectCalls(page, browserName, [50]);
   await confirmation
     .getByRole("button", { name: "Mettre fin", exact: true })
     .click();
   await expect(sets.nth(1)).toHaveClass(/status-performed/);
+  await expectCalls(page, browserName, [50]);
   await page.clock.runFor(31000);
-  await expectCalls(page, browserName, [20, 20]);
+  await expectCalls(page, browserName, [50]);
 });
 
 test("a suspended expired rest settles silently and an existing session resumes silently", async ({

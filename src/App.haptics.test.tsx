@@ -113,18 +113,23 @@ it("signals one natural expiration and performed transition, with no tick/resync
   expect(vibrate.mock.calls).toEqual([[20]]);
 });
 
-it("keeps manual rest termination silent, including its confirmation", async () => {
+it("announces manual rest confirmation once without any termination or later tick feedback", async () => {
   await openWorkout();
   vi.useFakeTimers();
   start();
-  rest();
   vibrate.mockClear();
-  fireEvent.click(screen.getByRole("button", { name: "Mettre fin au repos" }));
+  rest();
   expect(vibrate).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Mettre fin au repos" }));
+  expect(
+    screen.getByRole("alertdialog", { name: "Mettre fin au repos ?" }),
+  ).toBeVisible();
+  expect(vibrate.mock.calls).toEqual([[50]]);
   await confirm("Mettre fin");
   expect(execution().exercises[0].sets[0].status).toBe("performed");
+  expect(vibrate.mock.calls).toEqual([[50]]);
   await advance(5000);
-  expect(vibrate).not.toHaveBeenCalled();
+  expect(vibrate.mock.calls).toEqual([[50]]);
 });
 
 it("replaces set light with exercise medium for the final set action", async () => {
@@ -256,7 +261,7 @@ it("keeps natural rest light even when it also completes the exercise", async ()
   expect(vibrate.mock.calls).toEqual([[20]]);
 });
 
-it("keeps manual rest silent even when it also completes the exercise", async () => {
+it("only announces the dialog when manual rest also completes the exercise", async () => {
   await openWorkout(1, false, false, true);
   vi.useFakeTimers();
   start();
@@ -265,7 +270,7 @@ it("keeps manual rest silent even when it also completes the exercise", async ()
   fireEvent.click(screen.getByRole("button", { name: "Mettre fin au repos" }));
   await confirm("Mettre fin");
   expect(execution().exercises[0].status).toBe("completed");
-  expect(vibrate).not.toHaveBeenCalled();
+  expect(vibrate.mock.calls).toEqual([[50]]);
 });
 
 it("announces explicit exercise termination at the dialog with no second confirm pulse", async () => {

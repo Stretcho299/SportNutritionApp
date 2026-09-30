@@ -1,6 +1,6 @@
 # État du projet SportNutritionApp
 
-Dernière mise à jour : 29 septembre 2026
+Dernière mise à jour : 30 septembre 2026
 
 Ce document est la source de vérité de continuité pour le produit, son
 architecture, ses invariants et sa roadmap. En cas de divergence, vérifier
@@ -224,9 +224,10 @@ démarrage, les transitions réelles de série/exercice, la clôture sauvegardé
 l’expiration naturelle de repos et la prise du reorder. Pas de vibration sur
 navigation, scroll, pickers ou ouverture/fermeture de BottomSheet.
 
-Les priorités du repos sont explicites : fin manuelle entièrement silencieuse
-(y compris sa confirmation), expiration naturelle `light` unique même si elle
-termine l’exercice, dernière série sans repos final `medium` seul. Les autres
+Les priorités du repos sont explicites : confirmation de fin manuelle
+`medium` une fois, puis aucun feedback supplémentaire au clic « Mettre fin »
+ni à la fin manuelle du timer. Expiration naturelle `light` unique même si elle
+termine l’exercice, dernière série sans repos final `medium` seul. Toutes les
 confirmations annoncent `medium` une fois ; seul le succès de clôture ajoute
 `success` après persistance. Pas de feedback à la reprise d’une session.
 Le repos échu continue d’être réglé par son timestamp existant, mais aucun
