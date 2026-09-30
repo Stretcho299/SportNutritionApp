@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type AnimationEvent,
+} from "react";
 import "./App.css";
 import "./redesign-v2.css";
 import { Icon } from "./Icon";
@@ -89,18 +95,12 @@ export default function App() {
     plannedSetCount: number;
   } | null>(null);
   const [screenTransition, setScreenTransition] = useState<
-    "forward" | "back" | "preview-detail" | null
+    "forward" | "back" | null
   >(null);
   const exerciseTransitionTimeout = useRef<number | undefined>(undefined);
   const dialogCloseTimeout = useRef<number | undefined>(undefined);
   const navigate = (next: Screen, direction: "forward" | "back") => {
-    if (next !== screen) {
-      setScreenTransition(
-        screen === "preview" && next === "detail" && direction === "forward"
-          ? "preview-detail"
-          : direction,
-      );
-    }
+    if (next !== screen) setScreenTransition(direction);
     setScreen(next);
   };
   useEffect(() => {
@@ -841,16 +841,27 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: reducedMotion ? "instant" : "smooth" });
   };
 
-  const pageMotionClass =
-    screenTransition === "preview-detail"
-      ? " page-forward detail-entry-preview"
-      : screenTransition
-        ? ` page-${screenTransition}`
-        : "";
+  const pageMotionClass = screenTransition ? ` page-${screenTransition}` : "";
+  const clearPageMotion = (event: AnimationEvent<HTMLElement>) => {
+    if (
+      !(event.target instanceof HTMLElement) ||
+      event.target.parentElement !== event.currentTarget ||
+      (event.animationName !== "page-forward-in" &&
+        event.animationName !== "page-back-in")
+    ) {
+      return;
+    }
+    const finishedDirection =
+      event.animationName === "page-forward-in" ? "forward" : "back";
+    setScreenTransition((current) =>
+      current === finishedDirection ? null : current,
+    );
+  };
 
   return (
     <main
       className={`app-shell screen-${screen}${screen === "detail" && exercise ? " workout-detail" : ""}`}
+      onAnimationEndCapture={clearPageMotion}
     >
       <header
         className={`workout-control${screen === "list" ? " home-header" : ""}`}

@@ -1521,22 +1521,10 @@ html {
   animation: page-back-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
-.workout-preparation.detail-entry-preview.page-forward,
-.empty.detail-entry-preview.page-forward {
-  animation: detail-preview-forward-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
-
 @keyframes page-forward-in {
   from {
     opacity: 0.12;
     transform: translateX(26px);
-  }
-}
-
-@keyframes detail-preview-forward-in {
-  from {
-    opacity: 0;
-    transform: translateX(36px);
   }
 }
 

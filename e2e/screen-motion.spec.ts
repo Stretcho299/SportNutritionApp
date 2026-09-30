@@ -14,6 +14,15 @@ type MotionEvent = {
   targetClassName: string;
 };
 
+type PageMotionProfile = {
+  animationName: string;
+  duration: string;
+  easing: string;
+  keyframes: Array<{ opacity: string; translateX: number }>;
+  targetClassName: string;
+  targetParentClassName: string;
+};
+
 async function chooseValue(page: Page, label: string, value: number) {
   await page.getByRole("button", { name: label, exact: true }).first().click();
   const picker = page.getByRole("dialog", { name: `Choisir ${label}` });
@@ -81,62 +90,74 @@ async function expectPageMotion(
   page: Page,
   target: Locator,
   direction: "forward" | "back",
-) {
+): Promise<PageMotionProfile> {
   await expect(target).toHaveClass(new RegExp(`page-${direction}`));
   await expect
     .poll(() =>
       target.evaluate((element) => getComputedStyle(element).animationName),
     )
     .toBe(`page-${direction}-in`);
-  const style = await target.evaluate((element) => {
-    const computed = getComputedStyle(element);
-    return {
-      duration: computed.animationDuration,
-      easing: computed.animationTimingFunction,
-    };
-  });
-  expect(style).toEqual({
-    duration: "0.22s",
-    easing: "cubic-bezier(0.2, 0.8, 0.2, 1)",
-  });
-}
-
-async function expectPreviewDetailMotion(page: Page, target: Locator) {
-  await expect(target).toHaveClass(/page-forward/);
-  await expect(target).toHaveClass(/detail-entry-preview/);
   await expect
     .poll(() =>
-      target.evaluate((element) => {
-        const animation = element
-          .getAnimations()
-          .find(
-            (item) =>
-              (item as CSSAnimation).animationName ===
-              "detail-preview-forward-in",
-          );
-        return animation?.effect?.getKeyframes().map((frame) => ({
-          opacity: frame.opacity,
-          transform: frame.transform,
-        }));
-      }),
+      target.evaluate(
+        (element, animationName) =>
+          element
+            .getAnimations()
+            .some(
+              (animation) =>
+                (animation as CSSAnimation).animationName === animationName,
+            ),
+        `page-${direction}-in`,
+      ),
     )
-    .toEqual([
-      { opacity: "0", transform: "translate(36px)" },
-      { opacity: "1", transform: "none" },
-    ]);
-  const style = await target.evaluate((element) => {
+    .toBe(true);
+  const profile = await target.evaluate((element, direction) => {
     const computed = getComputedStyle(element);
+    const animationName = `page-${direction}-in`;
+    const animation = element
+      .getAnimations()
+      .find((item) => (item as CSSAnimation).animationName === animationName);
     return {
       animationName: computed.animationName,
       duration: computed.animationDuration,
       easing: computed.animationTimingFunction,
+      targetClassName: element.getAttribute("class") ?? "",
+      targetParentClassName: element.parentElement?.getAttribute("class") ?? "",
+      keyframes:
+        animation?.effect?.getKeyframes().map((frame) => ({
+          opacity: String(frame.opacity),
+          translateX:
+            frame.transform === "none"
+              ? 0
+              : new DOMMatrixReadOnly(frame.transform ?? "none").m41,
+        })) ?? [],
     };
-  });
-  expect(style).toEqual({
-    animationName: "detail-preview-forward-in",
-    duration: "0.24s",
+  }, direction);
+  expect(profile).toMatchObject({
+    animationName: `page-${direction}-in`,
+    duration: "0.22s",
     easing: "cubic-bezier(0.2, 0.8, 0.2, 1)",
   });
+  expect(profile.keyframes).toEqual([
+    { opacity: "0.12", translateX: direction === "forward" ? 26 : -26 },
+    { opacity: "1", translateX: 0 },
+  ]);
+  expect(profile.targetClassName.split(/\s+/)).toContain(`page-${direction}`);
+  expect(profile.targetParentClassName.split(/\s+/)).toContain("app-shell");
+  return profile;
+}
+
+function expectMirroredPageMotion(
+  forward: PageMotionProfile,
+  back: PageMotionProfile,
+) {
+  expect(forward.animationName).toBe("page-forward-in");
+  expect(back.animationName).toBe("page-back-in");
+  expect(forward.duration).toBe(back.duration);
+  expect(forward.easing).toBe(back.easing);
+  expect(forward.keyframes[0].opacity).toBe(back.keyframes[0].opacity);
+  expect(forward.keyframes[0].translateX).toBe(-back.keyframes[0].translateX);
+  expect(forward.keyframes[1]).toEqual(back.keyframes[1]);
 }
 
 async function recordMotionEvents(page: Page) {
@@ -198,6 +219,22 @@ async function waitForMotionEnd(
       motionEventCount(page, "animationend", className, animationName),
     )
     .toBeGreaterThan(previousCount);
+  await expect
+    .poll(() => page.locator(`.${className}`).first().getAttribute("class"))
+    .not.toMatch(/page-(forward|back)/);
+}
+
+async function waitForMotionStart(
+  page: Page,
+  className: string,
+  animationName: string,
+  previousCount: number,
+) {
+  await expect
+    .poll(() =>
+      motionEventCount(page, "animationstart", className, animationName),
+    )
+    .toBeGreaterThan(previousCount);
 }
 
 async function expectNoHorizontalOverflow(page: Page) {
@@ -241,6 +278,12 @@ for (const width of [320, 390]) {
 
     const bottomNavigation = page.locator(".bottom-navigation");
     const navBefore = await bottomNavigation.boundingBox();
+    const forwardStartCount = await motionEventCount(
+      page,
+      "animationstart",
+      "sessions-library",
+      "page-forward-in",
+    );
     const forwardCount = await motionEventCount(
       page,
       "animationend",
@@ -249,8 +292,18 @@ for (const width of [320, 390]) {
     );
     await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
     const workouts = page.locator(".sessions-library");
-    await expectPageMotion(page, workouts, "forward");
+    const workoutsForwardMotion = await expectPageMotion(
+      page,
+      workouts,
+      "forward",
+    );
     await expectNoHorizontalOverflow(page);
+    await waitForMotionStart(
+      page,
+      "sessions-library",
+      "page-forward-in",
+      forwardStartCount,
+    );
     await waitForMotionEnd(
       page,
       "sessions-library",
@@ -265,10 +318,18 @@ for (const width of [320, 390]) {
       "dashboard",
       "page-back-in",
     );
+    const backStartCount = await motionEventCount(
+      page,
+      "animationstart",
+      "dashboard",
+      "page-back-in",
+    );
     await page.getByLabel("Retour aux séances").click();
-    await expectPageMotion(page, dashboard, "back");
+    const dashboardBackMotion = await expectPageMotion(page, dashboard, "back");
     await expectNoHorizontalOverflow(page);
+    await waitForMotionStart(page, "dashboard", "page-back-in", backStartCount);
     await waitForMotionEnd(page, "dashboard", "page-back-in", backCount);
+    expectMirroredPageMotion(workoutsForwardMotion, dashboardBackMotion);
     await expectSameRect(navBefore, await bottomNavigation.boundingBox());
 
     const nextForwardCount = await motionEventCount(
@@ -277,8 +338,20 @@ for (const width of [320, 390]) {
       "sessions-library",
       "page-forward-in",
     );
+    const nextForwardStartCount = await motionEventCount(
+      page,
+      "animationstart",
+      "sessions-library",
+      "page-forward-in",
+    );
     await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
     await expectPageMotion(page, workouts, "forward");
+    await waitForMotionStart(
+      page,
+      "sessions-library",
+      "page-forward-in",
+      nextForwardStartCount,
+    );
     await waitForMotionEnd(
       page,
       "sessions-library",
@@ -290,8 +363,112 @@ for (const width of [320, 390]) {
     await workoutForm.getByRole("textbox", { name: "Nom" }).fill("Motion");
     await workoutForm.getByRole("button", { name: "Enregistrer" }).click();
     await expect(workoutForm).toHaveCount(0);
+    const emptyForwardStartCount = await motionEventCount(
+      page,
+      "animationstart",
+      "empty",
+      "page-forward-in",
+    );
+    const emptyForwardEndCount = await motionEventCount(
+      page,
+      "animationend",
+      "empty",
+      "page-forward-in",
+    );
     await page.locator(".workout-card").click();
+    const emptyDetail = page.locator(".empty");
+    const emptyForwardMotion = await expectPageMotion(
+      page,
+      emptyDetail,
+      "forward",
+    );
+    await waitForMotionStart(
+      page,
+      "empty",
+      "page-forward-in",
+      emptyForwardStartCount,
+    );
+    await waitForMotionEnd(
+      page,
+      "empty",
+      "page-forward-in",
+      emptyForwardEndCount,
+    );
     await addExercise(page, "Exercice A");
+    const preparedDetail = page.locator(".workout-preparation");
+    await expect(preparedDetail).not.toHaveClass(/page-(forward|back)/);
+    expect(
+      await preparedDetail.evaluate(
+        (element) => getComputedStyle(element).animationName,
+      ),
+    ).toBe("none");
+
+    const detailBackStartCount = await motionEventCount(
+      page,
+      "animationstart",
+      "sessions-library",
+      "page-back-in",
+    );
+    const detailBackEndCount = await motionEventCount(
+      page,
+      "animationend",
+      "sessions-library",
+      "page-back-in",
+    );
+    await page.getByLabel("Retour aux séances").click();
+    const returnedWorkouts = page.locator(".sessions-library");
+    const detailBackMotion = await expectPageMotion(
+      page,
+      returnedWorkouts,
+      "back",
+    );
+    await waitForMotionStart(
+      page,
+      "sessions-library",
+      "page-back-in",
+      detailBackStartCount,
+    );
+    await waitForMotionEnd(
+      page,
+      "sessions-library",
+      "page-back-in",
+      detailBackEndCount,
+    );
+
+    const detailForwardStartCount = await motionEventCount(
+      page,
+      "animationstart",
+      "workout-preparation",
+      "page-forward-in",
+    );
+    const detailForwardEndCount = await motionEventCount(
+      page,
+      "animationend",
+      "workout-preparation",
+      "page-forward-in",
+    );
+    await page.locator(".workout-card").click();
+    const directDetail = page.locator(".workout-preparation");
+    const directDetailForwardMotion = await expectPageMotion(
+      page,
+      directDetail,
+      "forward",
+    );
+    await waitForMotionStart(
+      page,
+      "workout-preparation",
+      "page-forward-in",
+      detailForwardStartCount,
+    );
+    await waitForMotionEnd(
+      page,
+      "workout-preparation",
+      "page-forward-in",
+      detailForwardEndCount,
+    );
+    expectMirroredPageMotion(directDetailForwardMotion, detailBackMotion);
+    expectMirroredPageMotion(emptyForwardMotion, detailBackMotion);
+
     await page.getByRole("button", { name: "Démarrer la séance" }).click();
     await page
       .getByRole("region", { name: "Séries de Exercice A" })
@@ -310,26 +487,122 @@ for (const width of [320, 390]) {
       "workout-preview",
       "page-back-in",
     );
+    const previewBackStartCount = await motionEventCount(
+      page,
+      "animationstart",
+      "workout-preview",
+      "page-back-in",
+    );
     await page.getByLabel("Retour aux séances").click();
     const preview = page.locator(".workout-preview");
     await expect(preview).toBeVisible();
-    await expectPageMotion(page, preview, "back");
+    const detailToPreviewBackMotion = await expectPageMotion(
+      page,
+      preview,
+      "back",
+    );
     await expectNoHorizontalOverflow(page);
+    await waitForMotionStart(
+      page,
+      "workout-preview",
+      "page-back-in",
+      previewBackStartCount,
+    );
     await waitForMotionEnd(
       page,
       "workout-preview",
       "page-back-in",
       previewBackCount,
     );
-    const detailForwardCount = await motionEventCount(
+    const previewToSessionsBackCount = await motionEventCount(
+      page,
+      "animationend",
+      "sessions-library",
+      "page-back-in",
+    );
+    const previewToSessionsBackStartCount = await motionEventCount(
+      page,
+      "animationstart",
+      "sessions-library",
+      "page-back-in",
+    );
+    await page.getByLabel("Retour aux séances").click();
+    const previewToSessionsBackMotion = await expectPageMotion(
+      page,
+      workouts,
+      "back",
+    );
+    await waitForMotionStart(
+      page,
+      "sessions-library",
+      "page-back-in",
+      previewToSessionsBackStartCount,
+    );
+    await waitForMotionEnd(
+      page,
+      "sessions-library",
+      "page-back-in",
+      previewToSessionsBackCount,
+    );
+    const sessionsToPreviewForwardCount = await motionEventCount(
+      page,
+      "animationend",
+      "workout-preview",
+      "page-forward-in",
+    );
+    const sessionsToPreviewForwardStartCount = await motionEventCount(
+      page,
+      "animationstart",
+      "workout-preview",
+      "page-forward-in",
+    );
+    await page.locator(".workout-card").click();
+    const completedPreview = page.locator(".workout-preview");
+    const sessionsToPreviewForwardMotion = await expectPageMotion(
+      page,
+      completedPreview,
+      "forward",
+    );
+    await expectNoHorizontalOverflow(page);
+    await waitForMotionStart(
+      page,
+      "workout-preview",
+      "page-forward-in",
+      sessionsToPreviewForwardStartCount,
+    );
+    await waitForMotionEnd(
+      page,
+      "workout-preview",
+      "page-forward-in",
+      sessionsToPreviewForwardCount,
+    );
+    expectMirroredPageMotion(
+      sessionsToPreviewForwardMotion,
+      previewToSessionsBackMotion,
+    );
+    const prepareDetailForwardEndCount = await motionEventCount(
       page,
       "animationend",
       "workout-preparation",
-      "detail-preview-forward-in",
+      "page-forward-in",
+    );
+    const prepareDetailForwardStartCount = await motionEventCount(
+      page,
+      "animationstart",
+      "workout-preparation",
+      "page-forward-in",
     );
     await page.getByRole("button", { name: "PRÉPARER LA SÉANCE" }).click();
     const detail = page.locator(".workout-preparation");
-    await expectPreviewDetailMotion(page, detail);
+    const previewToDetailForwardMotion = await expectPageMotion(
+      page,
+      detail,
+      "forward",
+    );
+    expectMirroredPageMotion(
+      previewToDetailForwardMotion,
+      detailToPreviewBackMotion,
+    );
     await expectNoHorizontalOverflow(page);
     const header = page.locator(".workout-control");
     expect(
@@ -337,11 +610,17 @@ for (const width of [320, 390]) {
         (element) => getComputedStyle(element).animationName,
       ),
     ).toBe("none");
+    await waitForMotionStart(
+      page,
+      "workout-preparation",
+      "page-forward-in",
+      prepareDetailForwardStartCount,
+    );
     await waitForMotionEnd(
       page,
       "workout-preparation",
-      "detail-preview-forward-in",
-      detailForwardCount,
+      "page-forward-in",
+      prepareDetailForwardEndCount,
     );
     await expectSameRect(navBefore, await bottomNavigation.boundingBox());
   });
@@ -489,9 +768,6 @@ for (const width of [320, 390]) {
       "Exercice B",
     ]);
     const preparation = page.locator(".workout-preparation");
-    await preparation.evaluate((element) =>
-      element.classList.add("detail-entry-preview"),
-    );
     expect(
       await preparation.evaluate(
         (element) => getComputedStyle(element).animationName,
