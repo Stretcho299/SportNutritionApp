@@ -239,6 +239,8 @@ export default function App() {
   };
   const startRest = (targetExerciseId: string, targetSetId: string) => {
     if (!execution) return;
+    const now = timestampNow();
+    setClock(now);
     const currentSet = execution.exercises
       .find((item) => item.exerciseId === targetExerciseId)
       ?.sets.find((item) => item.setId === targetSetId);
@@ -247,7 +249,7 @@ export default function App() {
         ? activateExecutedExercise(execution, targetExerciseId)
         : execution;
     updateExecution(
-      startExecutedSetRest(immediateBase, targetExerciseId, targetSetId),
+      startExecutedSetRest(immediateBase, targetExerciseId, targetSetId, now),
     );
 
     // Re-read after the immediate local transition so another tab cannot

@@ -741,6 +741,43 @@ test("persists structural session changes in the template and next session", asy
   ).toHaveCount(2);
 });
 
+test("starts a two-second rest at two and ends at the persisted deadline", async ({
+  page,
+}) => {
+  await prepareWorkout(page, "2");
+  await chooseValue(page, "Repos", 2);
+  await page.clock.pauseAt(new Date("2026-09-30T10:00:00.000Z"));
+  await page.getByRole("button", { name: /Démarrer la séance/i }).click();
+
+  const region = page.getByRole("region", { name: "Séries de Exercice A" });
+  const startedAt = await page.evaluate(() => Date.now());
+  await region.getByRole("button", { name: "Lancer le repos" }).click();
+
+  const timer = page.getByRole("timer", { name: "Temps de repos restant" });
+  await expect(timer).toHaveText("0:02");
+  const store = await readPersistedStore(page);
+  expect(store.sessions[0].execution.exercises[0].sets[0].restEndsAt).toBe(
+    startedAt + 2_000,
+  );
+
+  await page.clock.runFor(1_000);
+  await expect(timer).toHaveText("0:01");
+  await page.clock.runFor(999);
+  await expect(region.locator(".set-block").first()).toHaveClass(
+    /status-resting/,
+  );
+  await page.clock.runFor(1);
+  await expect(timer).toHaveCount(0);
+  await expect(region.locator(".set-block").first()).toHaveClass(
+    /status-performed/,
+  );
+  await expect(region.getByText("Effectuée")).toBeVisible();
+  const completed = await readPersistedStore(page);
+  expect(completed.sessions[0].execution.exercises[0].sets[0].status).toBe(
+    "performed",
+  );
+});
+
 test("syncs planned rest without changing an active chrono", async ({
   page,
 }) => {

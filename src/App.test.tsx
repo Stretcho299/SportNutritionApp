@@ -11,6 +11,7 @@ import {
 
 beforeEach(() => localStorage.clear());
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -968,6 +969,86 @@ it("derives the global workout clock from startedAt and syncs on foreground", as
   fireEvent(window, new Event("focus"));
   expect(timer).toHaveTextContent("◷ 02:05");
   expect(storedWorkouts()[0].execution?.startedAt).toBe(100_000);
+  view.unmount();
+});
+
+it("starts a two-second rest at two and finishes at its persisted deadline", async () => {
+  const view = await openEmptyWorkout();
+  await createExercise("Squat", 2, 2);
+  const startedAt = 100_000;
+  vi.useFakeTimers({ now: startedAt });
+
+  fireEvent.click(screen.getByRole("button", { name: "Démarrer la séance" }));
+  fireEvent.click(screen.getByRole("button", { name: "Lancer le repos" }));
+
+  const timer = screen.getByRole("timer", { name: "Temps de repos restant" });
+  expect(timer).toHaveTextContent("0:02");
+  expect(storedWorkouts()[0].execution?.exercises[0].sets[0]).toMatchObject({
+    status: "resting",
+    restEndsAt: startedAt + 2_000,
+    restDurationSeconds: 2,
+  });
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1_000);
+  });
+  expect(timer).toHaveTextContent("0:01");
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(999);
+  });
+  expect(storedWorkouts()[0].execution?.exercises[0].sets[0].status).toBe(
+    "resting",
+  );
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1);
+  });
+  expect(
+    screen.queryByRole("timer", { name: "Temps de repos restant" }),
+  ).not.toBeInTheDocument();
+  expect(within(seriesRegion("Squat")).getByText("Effectuée")).toBeVisible();
+  expect(storedWorkouts()[0].execution?.exercises[0].sets[0].status).toBe(
+    "performed",
+  );
+  view.unmount();
+});
+
+it("starts a longer rest at its configured duration", async () => {
+  const view = await openEmptyWorkout();
+  await createExercise("Squat", 2, 90);
+  const startedAt = 200_000;
+  vi.useFakeTimers({ now: startedAt });
+
+  fireEvent.click(screen.getByRole("button", { name: "Démarrer la séance" }));
+  fireEvent.click(screen.getByRole("button", { name: "Lancer le repos" }));
+
+  const timer = screen.getByRole("timer", { name: "Temps de repos restant" });
+  expect(timer).toHaveTextContent("1:30");
+  expect(timer).not.toHaveTextContent("1:31");
+  expect(storedWorkouts()[0].execution?.exercises[0].sets[0].restEndsAt).toBe(
+    startedAt + 90_000,
+  );
+  view.unmount();
+});
+
+it("resynchronizes a stale workout clock when starting rest", async () => {
+  const view = await openEmptyWorkout();
+  await createExercise("Squat", 2, 2);
+  const startedAt = 300_000;
+  vi.useFakeTimers({ now: startedAt });
+
+  fireEvent.click(screen.getByRole("button", { name: "Démarrer la séance" }));
+  vi.setSystemTime(startedAt + 700);
+  fireEvent.click(screen.getByRole("button", { name: "Lancer le repos" }));
+
+  const timer = screen.getByRole("timer", { name: "Temps de repos restant" });
+  expect(timer).toHaveTextContent("0:02");
+  expect(timer).not.toHaveTextContent("0:03");
+  expect(storedWorkouts()[0].execution?.exercises[0].sets[0]).toMatchObject({
+    status: "resting",
+    restEndsAt: startedAt + 700 + 2_000,
+  });
   view.unmount();
 });
 
