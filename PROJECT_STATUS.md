@@ -201,20 +201,20 @@ stabilisées restent gelées : BottomSheet, clavier/visualViewport,
 lifecycle, stockage, cascade KG/REPS/REPOS, glass/lens, offsets et
 `100lvh`/`100dvh`, sauf nécessité directement démontrée.
 
-### Prochaine passe : issue #52
+### Issue #52 reportée ; passe active #55
 
-[Issue #52 — évaluer les retours haptiques pour la PWA](https://github.com/Stretcho299/SportNutritionApp/issues/52) est **OPEN** et constitue la prochaine passe. La cible principale restant l’iPhone en PWA standalone, cette issue commence par un audit de faisabilité réel avant toute implémentation.
+[Issue #52 — évaluer les retours haptiques pour la PWA](https://github.com/Stretcho299/SportNutritionApp/issues/52) est **CLOSED / not planned** pour la PWA actuelle. WebKit sur iPhone ne fournit pas la Web Vibration API standard utilisée par l’expérimentation : `navigator.vibrate` est absent dans le WebKit local et l’essai physique de la PWA standalone n’a produit aucune vibration.
 
-La Web Vibration API n’est pas supposée disponible sur iPhone/WebKit. Toute
-implémentation doit être progressive, feature-detected et no-op sur plateforme
-non supportée. Aucun hack CSS/audio/focus ou dépendance lourde ne doit simuler
-un retour haptique. Une solution native/wrapper est hors scope et nécessiterait
-une décision d’architecture séparée.
+La [PR #54](https://github.com/Stretcho299/SportNutritionApp/pull/54) a été fermée sans merge ; son code n’appartient pas à `main`. Les haptics sont reportés à une future véritable application ou couche native. Aucun retour haptique n’est simulé dans la PWA actuelle.
+
+[Issue #55 — synchroniser le compte à rebours du repos au démarrage](https://github.com/Stretcho299/SportNutritionApp/issues/55) est la passe active. Le bug a été observé physiquement sur iPhone avec un repos de 2 secondes : l’affichage pouvait commencer à 3, puis passer à 2 et 1 avant la fin. `Math.ceil` n’est pas intrinsèquement fautif : le `clock` d’affichage peut être ancien de plusieurs centaines de millisecondes lorsque `restEndsAt` est créé au clic, ce qui fait calculer plus que la durée réellement restante.
+
+La correction retenue capture un timestamp unique dans `startRest`, synchronise immédiatement le `clock` avec lui et transmet ce même instant à `startExecutedSetRest`, qui conserve la deadline absolue persistée `restEndsAt`. La durée réelle et la transition à l’échéance restent inchangées. Les resynchronisations foreground, `pageshow`, `visibilitychange`, le verrouillage, le reload et la reprise continuent de s’appuyer sur la deadline persistée existante. Vitest passe 125/125 ; le scénario E2E du compteur et celui de persistance/reload passent dans Chromium et WebKit. La suite complète passe 132/134 : les deux échecs étaient des crashes WebKit de cible Playwright hors timer, et chacun passe au rejeu isolé sans changement de timeout. La checklist physique iPhone reste à faire sur la preview de la PR.
 
 ### Étapes futures
 
-La prochaine passe active est l’issue #52 sur la faisabilité haptique. Les autres
-axes ci-dessous restent futurs; aucun ordre au-delà de cette prochaine passe
+La passe active est l’issue #55 sur la synchronisation au démarrage du repos.
+Les autres axes ci-dessous restent futurs; aucun ordre au-delà de cette passe
 n’est confirmé :
 
 - Motion, transitions et continuité visuelle plus larges.
