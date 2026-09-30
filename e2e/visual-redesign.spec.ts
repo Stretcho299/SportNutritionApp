@@ -960,9 +960,14 @@ test("exercise navigation animates according to workout order without changing e
     await page
       .locator(".workout-preparation, .workout-fixed-zones, .exercise-hero")
       .evaluateAll((elements) =>
-        elements.map((element) => getComputedStyle(element).transform),
+        elements.map((element) => {
+          const transform = getComputedStyle(element).transform;
+          return (
+            transform === "none" || new DOMMatrixReadOnly(transform).isIdentity
+          );
+        }),
       ),
-  ).toEqual(["none", "none", "none"]);
+  ).toEqual([true, true, true]);
 
   await rail.getByRole("button").nth(2).click();
   await expect(preparation).toHaveClass(/transition-next/);

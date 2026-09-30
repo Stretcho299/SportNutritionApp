@@ -88,13 +88,13 @@ export default function App() {
     name: string;
     plannedSetCount: number;
   } | null>(null);
-  const [screenTransition, setScreenTransition] = useState<"forward" | "back">(
-    "forward",
-  );
+  const [screenTransition, setScreenTransition] = useState<
+    "forward" | "back" | null
+  >(null);
   const exerciseTransitionTimeout = useRef<number | undefined>(undefined);
   const dialogCloseTimeout = useRef<number | undefined>(undefined);
   const navigate = (next: Screen, direction: "forward" | "back") => {
-    setScreenTransition(direction);
+    if (next !== screen) setScreenTransition(direction);
     setScreen(next);
   };
   useEffect(() => {
@@ -823,6 +823,7 @@ export default function App() {
 
   const handleWorkoutsTab = () => {
     if (screen !== "list") {
+      setScreenTransition(null);
       setScreen("list");
       return;
     }
@@ -833,6 +834,8 @@ export default function App() {
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
     window.scrollTo({ top: 0, behavior: reducedMotion ? "instant" : "smooth" });
   };
+
+  const pageMotionClass = screenTransition ? ` page-${screenTransition}` : "";
 
   return (
     <main
@@ -897,7 +900,7 @@ export default function App() {
       </header>
       {screen === "list" && (
         <section
-          className={`workout-library dashboard page-${screenTransition}`}
+          className={`workout-library dashboard${pageMotionClass}`}
           aria-label="Entraînement"
         >
           <div className="library-heading">
@@ -957,7 +960,7 @@ export default function App() {
       )}
       {screen === "workouts" && (
         <section
-          className={`workout-library sessions-library page-${screenTransition}`}
+          className={`workout-library sessions-library${pageMotionClass}`}
           aria-label="Mes séances"
         >
           <div className="sessions-library-heading">
@@ -1012,7 +1015,7 @@ export default function App() {
       )}
       {screen === "preview" && workout && (
         <section
-          className={`workout-preview page-${screenTransition}`}
+          className={`workout-preview${pageMotionClass}`}
           aria-label={`Aperçu de ${workout.name}`}
         >
           <div className="preview-hero">
@@ -1093,7 +1096,7 @@ export default function App() {
       {screen === "detail" && workout && (
         <>
           {workout.exercises.length === 0 && (
-            <section className="empty">
+            <section className={`empty${pageMotionClass}`}>
               <h2>Aucun exercice</h2>
               <span>
                 Ajoutez votre premier exercice pour préparer cette séance.
@@ -1105,7 +1108,7 @@ export default function App() {
           )}
           {exercise && (
             <div
-              className={`workout-preparation transition-${exerciseTransition}`}
+              className={`workout-preparation transition-${exerciseTransition}${pageMotionClass}`}
             >
               <div className="workout-fixed-zones">
                 <ExerciseNavigator

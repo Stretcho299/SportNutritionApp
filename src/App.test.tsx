@@ -132,6 +132,50 @@ function selectExercise(name: string) {
 const seriesRegion = (name: string) =>
   screen.getByRole("region", { name: `Séries de ${name}` });
 
+it("applies page motion only when the screen changes", async () => {
+  render(<App />);
+
+  const dashboard = await screen.findByRole("region", { name: "Entraînement" });
+  expect(dashboard).not.toHaveClass("page-forward", "page-back");
+
+  fireEvent.click(screen.getByRole("button", { name: "Ouvrir Mes séances" }));
+  const workouts = screen.getByRole("region", { name: "Mes séances" });
+  expect(workouts).toHaveClass("page-forward");
+
+  fireEvent.click(screen.getByLabelText("Retour aux séances"));
+  expect(screen.getByRole("region", { name: "Entraînement" })).toHaveClass(
+    "page-back",
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "Ouvrir Mes séances" }));
+  expect(screen.getByRole("region", { name: "Mes séances" })).toHaveClass(
+    "page-forward",
+  );
+});
+
+it("resumes the same active session into detail with forward page motion", async () => {
+  const view = await openEmptyWorkout();
+  await createExercise("Squat", 1, 30);
+  fireEvent.click(screen.getByRole("button", { name: "Démarrer la séance" }));
+  const sessionId = storedWorkouts()[0].execution?.sessionId;
+
+  fireEvent.click(screen.getByLabelText("Retour aux séances"));
+  expect(screen.getByRole("region", { name: "Entraînement" })).toHaveClass(
+    "page-back",
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "Reprendre la séance Push" }),
+  );
+
+  const detail = document.querySelector(".workout-preparation");
+  expect(detail).toHaveClass("page-forward");
+  expect(
+    screen.getByLabelText("Retour aux séances").parentElement,
+  ).not.toHaveClass("page-forward", "page-back");
+  expect(storedWorkouts()[0].execution?.sessionId).toBe(sessionId);
+  view.unmount();
+});
+
 it("shows a new workout without zones 1, 2 and 3", async () => {
   await openEmptyWorkout();
   expect(
@@ -935,20 +979,26 @@ it("keeps a completed workout final after returning home and reloading", async (
   );
   expect(screen.getByText("Démarrer la séance")).toBeInTheDocument();
   fireEvent.click(screen.getByLabelText("Retour aux séances"));
-  expect(
-    screen.getByRole("region", { name: "Aperçu de Push" }),
-  ).toBeInTheDocument();
   const preview = screen.getByRole("region", { name: "Aperçu de Push" });
+  expect(preview).toBeInTheDocument();
+  expect(preview).toHaveClass("page-back");
   expect(within(preview).getByText("Durée moyenne")).toBeInTheDocument();
   expect(within(preview).getByText("Calories moyennes")).toBeInTheDocument();
   expect(within(preview).getAllByText("Pas encore de données")).toHaveLength(2);
   fireEvent.click(screen.getByLabelText("Retour aux séances"));
   fireEvent.click(screen.getByText("Push"));
+  const repeatedPreview = screen.getByRole("region", {
+    name: "Aperçu de Push",
+  });
+  expect(repeatedPreview).toHaveClass("page-forward");
   expect(
     screen.getByRole("button", { name: "PRÉPARER LA SÉANCE" }),
   ).toBeEnabled();
   fireEvent.click(screen.getByRole("button", { name: "PRÉPARER LA SÉANCE" }));
   expect(screen.getByText("Démarrer la séance")).toBeInTheDocument();
+  expect(document.querySelector(".workout-preparation")).toHaveClass(
+    "page-forward",
+  );
   view.unmount();
   render(<App />);
   await openPreparedWorkout();
