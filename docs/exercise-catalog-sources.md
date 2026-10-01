@@ -8,3 +8,5 @@ Références consultées le 1er octobre 2026 pour la structure et le contrôle d
 - [Free Exercise DB de yuhonas](https://github.com/yuhonas/free-exercise-db), licence [Unlicense](https://github.com/yuhonas/free-exercise-db/blob/main/LICENSE.md). Référence secondaire pour vérifier la couverture des mouvements courants et les catégories de muscles et matériel.
 
 Aucune donnée substantielle de ces jeux n'a été copiée dans le catalogue V1. Toute future importation devra conserver les mentions de licence requises et être revue séparément.
+
+Les définitions officielles portent un `illustrationId` local stable, copié dans les snapshots. L’interface conserve l’icône haltère en fallback : aucun asset ni URL n’est chargé. Les illustrations réelles feront l’objet d’une passe dédiée aux sources, licences et droits de redistribution.

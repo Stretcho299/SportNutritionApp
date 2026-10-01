@@ -57,6 +57,22 @@ describe("local exercise catalog", () => {
     expect(validateCatalog(officialExercises)).toEqual([]);
   });
 
+  it("supports optional stable illustration references without requiring assets", () => {
+    const official = officialExercises.find(
+      (exercise) => exercise.id === "official:bench-press-barbell",
+    )!;
+    const custom = createCustomExercise({
+      name: "Sans image",
+      primaryMuscle: "grand_pectoral",
+    });
+    expect(official.illustrationId).toBe("exercise-bench-press-barbell");
+    expect(custom.illustrationId).toBeUndefined();
+    expect(validateCatalog([official, custom])).toEqual([]);
+    expect(validateCatalog([{ ...custom, illustrationId: "   " }])).toContain(
+      `Identifiant d'illustration invalide : ${custom.id}`,
+    );
+  });
+
   it("rejects repeated targets and more than one primary", () => {
     const bench = officialExercises[0];
     expect(

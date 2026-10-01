@@ -48,6 +48,77 @@ export type WorkoutStore = {
   sessions: WorkoutSession[];
   customDefinitions?: ExerciseDefinition[];
 };
+
+export function replaceExerciseDefinition(
+  workout: Workout,
+  exerciseId: string,
+  definition: ExerciseDefinition,
+): Workout {
+  return {
+    ...workout,
+    exercises: workout.exercises.map((exercise) => {
+      if (exercise.id !== exerciseId) return exercise;
+      return {
+        ...exercise,
+        permanentNote: undefined,
+        name: definition.name,
+        exerciseDefinitionId: definition.id,
+        definitionSnapshot: clone(definition),
+        plannedSets: exercise.plannedSets.map((set) => ({
+          ...set,
+          weightKg: null,
+          repetitions: null,
+        })),
+      };
+    }),
+    ...(workout.sessionNotes
+      ? {
+          sessionNotes: Object.fromEntries(
+            Object.entries(workout.sessionNotes).filter(
+              ([id]) => id !== exerciseId,
+            ),
+          ),
+        }
+      : {}),
+  };
+}
+
+export function updateCustomDefinitionInWorkout(
+  workout: WorkoutTemplate,
+  definition: ExerciseDefinition,
+): WorkoutTemplate {
+  return {
+    ...workout,
+    exercises: workout.exercises.map((exercise) =>
+      exercise.exerciseDefinitionId === definition.id
+        ? {
+            ...exercise,
+            name: definition.name,
+            definitionSnapshot: clone(definition),
+          }
+        : exercise,
+    ),
+  };
+}
+
+export function updateCustomDefinitionInStore(
+  store: WorkoutStore,
+  definition: ExerciseDefinition,
+): WorkoutStore {
+  return {
+    ...store,
+    customDefinitions: (store.customDefinitions ?? []).some(
+      (item) => item.id === definition.id,
+    )
+      ? (store.customDefinitions ?? []).map((item) =>
+          item.id === definition.id ? clone(definition) : item,
+        )
+      : [...(store.customDefinitions ?? []), clone(definition)],
+    templates: store.templates.map((template) =>
+      updateCustomDefinitionInWorkout(template, definition),
+    ),
+  };
+}
 export const defaultInitialSetCount = 3;
 export const defaultRestSeconds = 150;
 export const legacyDefaultRestSeconds = 90;
@@ -430,6 +501,20 @@ export function saveCustomDefinitions(definitions: ExerciseDefinition[]) {
   saveWorkoutsQueue = saveWorkoutsQueue.then(async () => {
     const store = await loadWorkoutStore();
     await saveWorkoutStore({ ...store, customDefinitions: clone(definitions) });
+  });
+  return saveWorkoutsQueue;
+}
+
+export function saveCustomDefinitionAndUpdateTemplates(
+  definition: ExerciseDefinition,
+) {
+  if (!globalThis.indexedDB) {
+    const store = migrateStore(JSON.parse(localStorage.getItem(key) ?? "[]"));
+    return saveWorkoutStore(updateCustomDefinitionInStore(store, definition));
+  }
+  saveWorkoutsQueue = saveWorkoutsQueue.then(async () => {
+    const store = await loadWorkoutStore();
+    await saveWorkoutStore(updateCustomDefinitionInStore(store, definition));
   });
   return saveWorkoutsQueue;
 }

@@ -79,6 +79,7 @@ export type Equipment = keyof typeof equipmentLabels;
 
 export type ExerciseDefinition = {
   id: string;
+  illustrationId?: string;
   name: string;
   aliases: string[];
   category: "strength";
@@ -815,6 +816,7 @@ export const officialExercises: ExerciseDefinition[] = rows.map(
     ];
     return {
       id: `official:${id}`,
+      illustrationId: `exercise-${id}`,
       name,
       aliases: aliases ? aliases.split("|") : [],
       category: "strength",
@@ -873,6 +875,12 @@ export function validateCatalog(definitions: readonly unknown[]): string[] {
     ids.add(id);
     if (typeof definition.name !== "string" || !definition.name.trim())
       errors.push(`Nom vide : ${id}`);
+    if (
+      definition.illustrationId !== undefined &&
+      (typeof definition.illustrationId !== "string" ||
+        !definition.illustrationId.trim())
+    )
+      errors.push(`Identifiant d'illustration invalide : ${id}`);
     if (
       !Array.isArray(definition.aliases) ||
       definition.aliases.some((alias) => typeof alias !== "string")

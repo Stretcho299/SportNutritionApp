@@ -57,6 +57,9 @@ import {
   reorder,
   saveWorkouts,
   saveCustomDefinitions,
+  saveCustomDefinitionAndUpdateTemplates,
+  replaceExerciseDefinition,
+  updateCustomDefinitionInWorkout,
   skipExecutedExercise,
   sort,
   startExecutedSetRest,
@@ -90,6 +93,13 @@ export default function App() {
   >([]);
   const [selectedDefinition, setSelectedDefinition] =
     useState<ExerciseDefinition | null>(null);
+  const [catalogMode, setCatalogMode] = useState<"add" | "replace">("add");
+  const [replacementExerciseId, setReplacementExerciseId] = useState<
+    string | null
+  >(null);
+  const [customEditReturn, setCustomEditReturn] = useState<
+    "catalog" | "detail"
+  >("catalog");
   const [catalogQuery, setCatalogQuery] = useState("");
   const [catalogMuscle, setCatalogMuscle] = useState<MuscleGroup | "">("");
   const [catalogEquipment, setCatalogEquipment] = useState<Equipment | "">("");
@@ -134,6 +144,12 @@ export default function App() {
   >(null);
   const exerciseTransitionTimeout = useRef<number | undefined>(undefined);
   const dialogCloseTimeout = useRef<number | undefined>(undefined);
+  const transitionDialog = (next: Dialog) => {
+    window.clearTimeout(dialogCloseTimeout.current);
+    dialogCloseTimeout.current = undefined;
+    setDialogClosing(false);
+    setDialog(next);
+  };
   const navigate = (next: Screen, direction: "forward" | "back") => {
     if (next !== screen) setScreenTransition(direction);
     setScreen(next);
@@ -210,13 +226,42 @@ export default function App() {
       equipment: catalogEquipment || undefined,
     },
   );
+  const openCatalog = (
+    mode: "add" | "replace" = "add",
+    occurrenceId: string | null = null,
+  ) => {
+    setCatalogMode(mode);
+    setReplacementExerciseId(occurrenceId);
+    transitionDialog("catalog");
+  };
   const selectDefinition = (definition: ExerciseDefinition) => {
+    if (
+      catalogMode === "replace" &&
+      replacementExerciseId &&
+      workout &&
+      !workout.execution
+    ) {
+      const nextWorkout = replaceExerciseDefinition(
+        workout,
+        replacementExerciseId,
+        definition,
+      );
+      update(
+        workouts.map((item) => (item.id === workout.id ? nextWorkout : item)),
+      );
+      close();
+      return;
+    }
     setSelectedDefinition(definition);
     setName(definition.name);
-    setDialog("exercise");
+    transitionDialog("exercise");
   };
-  const openCustomForm = (definition?: ExerciseDefinition) => {
+  const openCustomForm = (
+    definition?: ExerciseDefinition,
+    returnTo: "catalog" | "detail" = "catalog",
+  ) => {
     setSelectedDefinition(definition ?? null);
+    setCustomEditReturn(returnTo);
     setName(definition?.name ?? catalogQuery.trim());
     setCustomMuscle(
       definition?.muscleTargets.find((target) => target.role === "primary")
@@ -228,7 +273,7 @@ export default function App() {
         .map((target) => target.muscle) ?? [],
     );
     setCustomEquipment(definition?.equipment[0] ?? "");
-    setDialog(definition ? "editCustomExercise" : "customExercise");
+    transitionDialog(definition ? "editCustomExercise" : "customExercise");
   };
   const requestCustomDeletion = (definition: ExerciseDefinition) => {
     requestConfirmation({
@@ -323,7 +368,25 @@ export default function App() {
         ? (workout.sessionNotes?.[exercise.id] ?? "")
         : "",
     );
-    setDialog("exerciseNotes");
+    transitionDialog("exerciseNotes");
+  };
+  const editCurrentExercise = () => {
+    if (!exercise || execution) return;
+    const source = exercise.definitionSnapshot?.source;
+    if (source === "official") {
+      openCatalog("replace", exercise.id);
+      return;
+    }
+    if (source === "custom") {
+      const definition =
+        customDefinitions.find(
+          (item) => item.id === exercise.exerciseDefinitionId,
+        ) ?? exercise.definitionSnapshot;
+      openCustomForm(definition, "detail");
+      return;
+    }
+    setName(exercise.name);
+    transitionDialog("renameExercise");
   };
   const startRest = (targetExerciseId: string, targetSetId: string) => {
     if (!execution) return;
@@ -469,11 +532,14 @@ export default function App() {
     dialogCloseTimeout.current = window.setTimeout(() => {
       setDialog(null);
       setDialogClosing(false);
+      dialogCloseTimeout.current = undefined;
       setReorderDraftIds(null);
       setName("");
       setInitialSetCount(String(defaultInitialSetCount));
       setRest(String(defaultRestSeconds));
       setSelectedDefinition(null);
+      setCatalogMode("add");
+      setReplacementExerciseId(null);
       setCatalogQuery("");
       setCatalogMuscle("");
       setCatalogEquipment("");
@@ -533,18 +599,28 @@ export default function App() {
               ...officialExercises,
               ...customDefinitions,
             ]);
-      updateCustomDefinitions(
-        dialog === "editCustomExercise"
-          ? customDefinitions.map((item) =>
-              item.id === definition.id ? definition : item,
-            )
-          : [...customDefinitions, definition],
-      );
       if (dialog === "customExercise") {
+        updateCustomDefinitions([...customDefinitions, definition]);
         selectDefinition(definition);
         return;
       }
-      setDialog("catalog");
+      setCustomDefinitions((current) =>
+        current.some((item) => item.id === definition.id)
+          ? current.map((item) =>
+              item.id === definition.id ? definition : item,
+            )
+          : [...current, definition],
+      );
+      void saveCustomDefinitionAndUpdateTemplates(definition);
+      setWorkouts((current) =>
+        current.map((item) =>
+          item.execution
+            ? item
+            : updateCustomDefinitionInWorkout(item, definition),
+        ),
+      );
+      if (customEditReturn === "catalog") transitionDialog("catalog");
+      else close();
       return;
     }
     if (dialog === "renameExercise" && workout && exercise && name.trim())
@@ -802,7 +878,7 @@ export default function App() {
   const openReorderSheet = () => {
     if (!workout) return;
     setReorderDraftIds(sort(workout.exercises).map((item) => item.id));
-    setDialog("reorder");
+    transitionDialog("reorder");
   };
   const moveReorderDraft = (index: number, delta: -1 | 1) => {
     if (!reorderDraftIds || execution?.status === "completed") return;
@@ -1023,13 +1099,13 @@ export default function App() {
               <div className="control-actions">
                 <button
                   aria-label="Gérer les exercices"
-                  onClick={() => setDialog("addMenu")}
+                  onClick={() => transitionDialog("addMenu")}
                 >
                   <Icon name="plus" />
                 </button>
                 <button
                   aria-label="Réorganiser les exercices"
-                  onClick={() => setDialog("organizeMenu")}
+                  onClick={() => transitionDialog("organizeMenu")}
                 >
                   <Icon name="more" />
                 </button>
@@ -1116,7 +1192,7 @@ export default function App() {
             <button
               className="create-workout-icon"
               aria-label="Créer une séance"
-              onClick={() => setDialog("workout")}
+              onClick={() => transitionDialog("workout")}
             >
               <Icon name="plus" size={21} />
             </button>
@@ -1241,7 +1317,7 @@ export default function App() {
               <span>
                 Ajoutez votre premier exercice pour préparer cette séance.
               </span>
-              <button className="primary" onClick={() => setDialog("catalog")}>
+              <button className="primary" onClick={() => openCatalog()}>
                 Ajouter un exercice
               </button>
             </section>
@@ -1312,17 +1388,17 @@ export default function App() {
                     </div>
                   </div>
                   <div className="exercise-menu">
-                    {exercise.definitionSnapshot?.source !== "official" && (
-                      <button
-                        aria-label="Modifier l’exercice"
-                        onClick={() => {
-                          setName(exercise.name);
-                          setDialog("renameExercise");
-                        }}
-                      >
-                        <Icon name="edit" size={18} />
-                      </button>
-                    )}
+                    <button
+                      aria-label={
+                        exercise.definitionSnapshot?.source === "official"
+                          ? "Changer l’exercice"
+                          : "Modifier l’exercice"
+                      }
+                      disabled={!!execution}
+                      onClick={editCurrentExercise}
+                    >
+                      <Icon name="edit" size={18} />
+                    </button>
                     {execution?.status === "inProgress" ? (
                       <button
                         disabled={
@@ -1601,6 +1677,7 @@ export default function App() {
       )}
       {dialog && isMenu && workout && (
         <BottomSheet
+          key={dialog}
           title={
             dialog === "addMenu"
               ? "Actions de la séance"
@@ -1615,7 +1692,7 @@ export default function App() {
             <div className="action-sheet">
               <h2>Actions de la séance</h2>
               <div className="action-sheet-menu">
-                <button onClick={() => setDialog("catalog")}>
+                <button onClick={() => openCatalog()}>
                   <span className="action-sheet-icon" aria-hidden="true">
                     <Icon name="plus" size={19} />
                   </span>
@@ -1645,7 +1722,7 @@ export default function App() {
                 <button
                   onClick={() => {
                     setName(workout.name);
-                    setDialog("renameWorkout");
+                    transitionDialog("renameWorkout");
                   }}
                 >
                   <span className="action-sheet-icon" aria-hidden="true">
@@ -1720,12 +1797,22 @@ export default function App() {
       )}
       {dialog === "catalog" && (
         <BottomSheet
-          title="Catalogue d’exercices"
+          key={`catalog-${catalogMode}`}
+          title={
+            catalogMode === "replace"
+              ? "Changer l’exercice"
+              : "Catalogue d’exercices"
+          }
+          className="catalog-dialog"
           closing={dialogClosing}
           onClose={close}
         >
           <div className="catalog-sheet">
-            <h2>Ajouter un exercice</h2>
+            <h2>
+              {catalogMode === "replace"
+                ? "Changer l’exercice"
+                : "Ajouter un exercice"}
+            </h2>
             <label>
               Rechercher
               <input
@@ -1741,6 +1828,7 @@ export default function App() {
                 Muscle
                 <select
                   aria-label="Filtrer par muscle"
+                  className={catalogMuscle ? "is-filtered" : ""}
                   value={catalogMuscle}
                   onChange={(event) =>
                     setCatalogMuscle(event.target.value as MuscleGroup | "")
@@ -1758,6 +1846,7 @@ export default function App() {
                 Matériel
                 <select
                   aria-label="Filtrer par matériel"
+                  className={catalogEquipment ? "is-filtered" : ""}
                   value={catalogEquipment}
                   onChange={(event) =>
                     setCatalogEquipment(event.target.value as Equipment | "")
@@ -1826,6 +1915,7 @@ export default function App() {
       )}
       {(dialog === "customExercise" || dialog === "editCustomExercise") && (
         <BottomSheet
+          key={dialog}
           title={
             dialog === "customExercise"
               ? "Créer un exercice personnalisé"
@@ -1935,6 +2025,7 @@ export default function App() {
         dialog !== "customExercise" &&
         dialog !== "editCustomExercise" && (
           <BottomSheet
+            key={dialog}
             title={
               dialog === "exerciseNotes"
                 ? "Notes de l’exercice"
@@ -1999,16 +2090,38 @@ export default function App() {
                 </>
               ) : (
                 <>
-                  <label>
-                    Nom
-                    <input
-                      aria-label="Nom"
-                      value={name}
-                      readOnly={dialog === "exercise"}
-                      onChange={(event) => setName(event.target.value)}
-                      required
-                    />
-                  </label>
+                  {dialog === "exercise" ? (
+                    <section
+                      className="selected-exercise-card"
+                      aria-label="Exercice sélectionné"
+                    >
+                      <span>EXERCICE SÉLECTIONNÉ</span>
+                      <strong>{selectedDefinition?.name}</strong>
+                      <small>
+                        {selectedDefinition?.muscleTargets
+                          .filter((target) => target.role === "primary")
+                          .map((target) => muscleTargetLabels[target.muscle])
+                          .join(", ")}{" "}
+                        ·{" "}
+                        {selectedDefinition?.equipment
+                          .map((item) => equipmentLabels[item])
+                          .join(", ") || "Sans matériel"}
+                      </small>
+                      <button type="button" onClick={() => openCatalog()}>
+                        Changer
+                      </button>
+                    </section>
+                  ) : (
+                    <label>
+                      Nom
+                      <input
+                        aria-label="Nom"
+                        value={name}
+                        onChange={(event) => setName(event.target.value)}
+                        required
+                      />
+                    </label>
+                  )}
                   {dialog === "exercise" && (
                     <div className="compact-form-fields">
                       <SetValuePicker

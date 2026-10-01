@@ -215,6 +215,8 @@ La correction capture un timestamp unique dans `startRest`, synchronise immédia
 
 [Issue #59 — fondation catalogue d'exercices](https://github.com/Stretcho299/SportNutritionApp/issues/59) est la passe active. Elle ajoute un catalogue officiel local de 69 exercices consultables, un registre d'exercices personnalisés créables/modifiables/supprimables et deux niveaux de taxonomie musculaire. Les occurrences dans les templates et snapshots de sessions embarquent une copie de la définition au moment de l'ajout; les anciennes occurrences libres restent sans association automatique. La base IndexedDB reste en version 2 avec un champ optionnel `customDefinitions` dans l'enveloppe. Voir `docs/exercise-catalog-sources.md` pour les références et licences.
 
+La sélection catalogue distingue explicitement l’ajout et le remplacement. En préparation, remplacer un officiel conserve l’occurrence, sa position, ses séries et leurs repos, et efface ses anciennes charges/répétitions et notes. Modifier une définition custom propage son nom et son snapshot vers les occurrences de tous les templates, sans réécrire les sessions historiques. Les exercices officiels portent aussi un identifiant d’illustration local optionnel ; l’icône haltère reste le fallback jusqu’à une passe dédiée aux assets et licences.
+
 ### Étapes futures
 
 La passe active est l’issue #59 sur le catalogue local. Les autres axes ci-dessous restent futurs; aucun ordre après cette
