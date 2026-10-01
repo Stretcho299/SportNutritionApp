@@ -38,6 +38,7 @@ import {
 } from "./exercises/catalog";
 import {
   activateExecutedExercise,
+  canReplaceExecutedExercise,
   abandonWorkoutSession,
   addSetToExecution,
   addExercise,
@@ -246,7 +247,8 @@ export default function App() {
       catalogMode === "replace" &&
       replacementExerciseId &&
       workout &&
-      !workout.execution
+      (!workout.execution ||
+        canReplaceExecutedExercise(workout.execution, replacementExerciseId))
     ) {
       const nextWorkout = replaceExerciseDefinition(
         workout,
@@ -259,6 +261,7 @@ export default function App() {
       close();
       return;
     }
+    if (catalogMode === "replace") return;
     setSelectedDefinition(definition);
     setName(definition.name);
     transitionDialog("exercise");
@@ -378,8 +381,19 @@ export default function App() {
     transitionDialog("exerciseNotes");
   };
   const editCurrentExercise = () => {
-    if (!exercise || execution) return;
+    if (
+      !exercise ||
+      (execution && !canReplaceExecutedExercise(execution, exercise.id))
+    )
+      return;
     const source = exercise.definitionSnapshot?.source;
+    if (execution) {
+      // Legacy occurrences have no catalogue identity; keep them unchanged
+      // during execution rather than assigning one implicitly.
+      if (source === "official" || source === "custom")
+        openCatalog("replace", exercise.id);
+      return;
+    }
     if (source === "official") {
       openCatalog("replace", exercise.id);
       return;
@@ -1397,11 +1411,38 @@ export default function App() {
                   <div className="exercise-menu">
                     <button
                       aria-label={
-                        exercise.definitionSnapshot?.source === "official"
-                          ? "Changer l’exercice"
-                          : "Modifier l’exercice"
+                        execution &&
+                        exercise.definitionSnapshot?.source !== "official" &&
+                        exercise.definitionSnapshot?.source !== "custom"
+                          ? "Exercice non modifiable pendant la séance"
+                          : execution ||
+                              exercise.definitionSnapshot?.source === "official"
+                            ? "Changer l’exercice"
+                            : exercise.definitionSnapshot?.source === "custom"
+                              ? "Modifier l’exercice"
+                              : "Renommer l’exercice"
                       }
-                      disabled={!!execution}
+                      title={
+                        execution
+                          ? exercise.definitionSnapshot?.source !==
+                              "official" &&
+                            exercise.definitionSnapshot?.source !== "custom"
+                            ? "Exercice legacy non modifiable pendant la séance"
+                            : !canReplaceExecutedExercise(
+                                  execution,
+                                  exercise.id,
+                                )
+                              ? "Exercice non modifiable après validation d’une série"
+                              : undefined
+                          : undefined
+                      }
+                      disabled={
+                        !!execution &&
+                        (exercise.definitionSnapshot?.source !== "official" &&
+                        exercise.definitionSnapshot?.source !== "custom"
+                          ? true
+                          : !canReplaceExecutedExercise(execution, exercise.id))
+                      }
                       onClick={editCurrentExercise}
                     >
                       <Icon name="edit" size={18} />

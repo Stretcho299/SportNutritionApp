@@ -32,6 +32,21 @@ type StoredWorkouts = {
     templateId: string;
     status: string;
     snapshot: { exercises: StoredExercise[] };
+    execution: {
+      startedAt: number;
+      status: string;
+      exercises: Array<{
+        exerciseId: string;
+        status: string;
+        sets: Array<{
+          setId: string;
+          status: string;
+          weightKg: number | null;
+          repetitions: number | null;
+          restSeconds: number;
+        }>;
+      }>;
+    };
   }>;
   customDefinitions: Array<{
     id: string;
@@ -64,6 +79,171 @@ async function readWorkouts(page: Page): Promise<StoredWorkouts> {
         };
       }),
   );
+}
+
+for (const width of [320, 390]) {
+  test(`replaces upcoming and active exercises during one session at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await prepareEmptyWorkout(page);
+    await addResult(page, officialName);
+    const catalog = await openCatalog(page);
+    await catalog
+      .getByRole("list", { name: "Résultats du catalogue" })
+      .getByRole("button", { name: /Squat à la barre/ })
+      .click();
+    await page
+      .getByRole("dialog", { name: "Exercice" })
+      .getByRole("button", { name: "Enregistrer" })
+      .click();
+    await expect
+      .poll(
+        async () => (await readWorkouts(page)).templates[0].exercises.length,
+      )
+      .toBe(2);
+    const original = await readWorkouts(page);
+    await page.getByRole("button", { name: "Démarrer la séance" }).click();
+    const startedAt = (await readWorkouts(page)).sessions[0].execution
+      .startedAt;
+    await replaceCurrentWith(page, "Élévations latérales aux haltères");
+    await expect(
+      page.getByRole("heading", { name: "Élévations latérales aux haltères" }),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByRole("region", {
+          name: "Séries de Élévations latérales aux haltères",
+        })
+        .getByRole("listitem"),
+    ).toHaveCount(3);
+    const first = await readWorkouts(page);
+    expect(first.sessions[0].execution.startedAt).toBe(startedAt);
+    expect(first.sessions[0].snapshot.exercises[0].name).toBe(
+      "Élévations latérales aux haltères",
+    );
+    expect(first.sessions[0].execution.exercises[0].status).toBe("active");
+    expect(first.sessions[0].execution.exercises[0].sets[0].status).toBe(
+      "active",
+    );
+    expect(first.templates[0].exercises[0].id).toBe(
+      original.templates[0].exercises[0].id,
+    );
+    await page
+      .getByRole("list", { name: "Exercices" })
+      .getByRole("button")
+      .nth(1)
+      .click();
+    await replaceCurrentWith(page, "Développé épaules aux haltères");
+    const second = await readWorkouts(page);
+    expect(second.sessions[0].execution.exercises[1].status).toBe("upcoming");
+    expect(second.sessions[0].execution.startedAt).toBe(startedAt);
+    expect(second.sessions[0].snapshot.exercises[1].name).toBe(
+      "Développé épaules aux haltères",
+    );
+    expect(
+      second.templates[0].exercises[1].plannedSets.map((set) => set.id),
+    ).toEqual(
+      original.templates[0].exercises[1].plannedSets.map((set) => set.id),
+    );
+    await page.reload();
+    await page
+      .getByRole("button", { name: "Reprendre la séance Catalogue E2E" })
+      .click();
+    const resumed = await readWorkouts(page);
+    expect(resumed.sessions[0].execution.startedAt).toBe(startedAt);
+    expect(
+      resumed.sessions[0].snapshot.exercises.map((exercise) => exercise.name),
+    ).toEqual([
+      "Élévations latérales aux haltères",
+      "Développé épaules aux haltères",
+    ]);
+    expect(resumed.sessions[0].execution.exercises[0].sets[0].status).toBe(
+      "active",
+    );
+    expect(resumed.sessions[0].execution.exercises[1].status).toBe("upcoming");
+    await page
+      .getByRole("list", { name: "Exercices" })
+      .getByRole("button")
+      .first()
+      .click();
+    const activeRegion = page.getByRole("region", {
+      name: "Séries de Élévations latérales aux haltères",
+    });
+    await activeRegion
+      .getByRole("button", { name: "Lancer le repos" })
+      .first()
+      .click();
+    await expect(activeRegion).toContainText("Repos en cours");
+    expect((await readWorkouts(page)).sessions[0].execution.startedAt).toBe(
+      startedAt,
+    );
+  });
+
+  test(`locks replacement during rest and after a performed set at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await prepareEmptyWorkout(page);
+    await addResult(page, officialName);
+    await page.getByRole("button", { name: "Démarrer la séance" }).click();
+    const change = page.getByRole("button", { name: "Changer l’exercice" });
+    await expect(change).toBeEnabled();
+    const region = page.getByRole("region", {
+      name: `Séries de ${officialName}`,
+    });
+    await region
+      .getByRole("button", { name: "Lancer le repos" })
+      .first()
+      .click();
+    await expect(change).toBeDisabled();
+    await expect(
+      page.getByRole("dialog", { name: "Changer l’exercice" }),
+    ).toHaveCount(0);
+    await region.getByRole("button", { name: "Mettre fin au repos" }).click();
+    await page
+      .getByRole("alertdialog", { name: "Mettre fin au repos ?" })
+      .getByRole("button", { name: "Mettre fin" })
+      .click();
+    await expect(region.locator(".set-block").first()).toHaveClass(
+      /status-performed/,
+    );
+    await expect(change).toBeDisabled();
+    await expect(
+      page.getByRole("dialog", { name: "Changer l’exercice" }),
+    ).toHaveCount(0);
+  });
+
+  test(`changes a custom occurrence instead of editing its definition during execution at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await prepareEmptyWorkout(page);
+    const catalog = page.getByRole("dialog", { name: "Catalogue d’exercices" });
+    await catalog
+      .getByRole("button", { name: "+ Créer un exercice personnalisé" })
+      .click();
+    const custom = page.getByRole("dialog", {
+      name: "Créer un exercice personnalisé",
+    });
+    await custom.getByRole("textbox", { name: "Nom" }).fill("Presse perso");
+    await custom.getByRole("button", { name: "Enregistrer" }).click();
+    await page
+      .getByRole("dialog", { name: "Exercice" })
+      .getByRole("button", { name: "Enregistrer" })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Modifier l’exercice" }),
+    ).toBeEnabled();
+    await page.getByRole("button", { name: "Démarrer la séance" }).click();
+    await replaceCurrentWith(page, officialName);
+    await expect(
+      page.getByRole("dialog", { name: "Modifier un exercice personnalisé" }),
+    ).toHaveCount(0);
+    const store = await readWorkouts(page);
+    expect(store.customDefinitions[0].name).toBe("Presse perso");
+    expect(store.sessions[0].snapshot.exercises[0].name).toBe(officialName);
+  });
 }
 
 async function prepareEmptyWorkout(page: Page) {
@@ -106,6 +286,18 @@ async function addResult(page: Page, name: string) {
   await expect(form.getByText(name, { exact: true })).toBeVisible();
   await form.getByRole("button", { name: "Enregistrer" }).click();
   await expect(form).toHaveCount(0);
+}
+
+async function replaceCurrentWith(page: Page, name: string) {
+  await page.getByRole("button", { name: "Changer l’exercice" }).click();
+  const catalog = page.getByRole("dialog", { name: "Changer l’exercice" });
+  await expect(catalog).toBeVisible();
+  await catalog
+    .getByRole("list", { name: "Résultats du catalogue" })
+    .getByRole("button", { name: new RegExp(name) })
+    .first()
+    .click();
+  await expect(catalog).toHaveCount(0);
 }
 
 async function seedHistoricalSessionSnapshot(page: Page) {
@@ -517,7 +709,7 @@ for (const width of [320, 390]) {
     await page.getByRole("button", { name: "Démarrer la séance" }).click();
     await expect(
       page.getByRole("button", { name: "Changer l’exercice" }),
-    ).toBeDisabled();
+    ).toBeEnabled();
     await expect(
       region.getByRole("button", { name: "Lancer le repos" }).first(),
     ).toBeVisible();
@@ -526,6 +718,9 @@ for (const width of [320, 390]) {
       .first()
       .click();
     await expect(region).toContainText("Repos en cours");
+    await expect(
+      page.getByRole("button", { name: "Changer l’exercice" }),
+    ).toBeDisabled();
     await region.getByRole("button", { name: "Mettre fin au repos" }).click();
     await page
       .getByRole("alertdialog", { name: "Mettre fin au repos ?" })

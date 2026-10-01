@@ -54,8 +54,34 @@ export function replaceExerciseDefinition(
   exerciseId: string,
   definition: ExerciseDefinition,
 ): Workout {
+  if (!workout.exercises.some((exercise) => exercise.id === exerciseId))
+    return workout;
+  if (
+    workout.execution &&
+    !canReplaceExecutedExercise(workout.execution, exerciseId)
+  )
+    return workout;
   return {
     ...workout,
+    ...(workout.execution
+      ? {
+          execution: {
+            ...workout.execution,
+            exercises: workout.execution.exercises.map((exercise) =>
+              exercise.exerciseId === exerciseId
+                ? {
+                    ...exercise,
+                    sets: exercise.sets.map((set) => ({
+                      ...set,
+                      weightKg: null,
+                      repetitions: null,
+                    })),
+                  }
+                : exercise,
+            ),
+          },
+        }
+      : {}),
     exercises: workout.exercises.map((exercise) => {
       if (exercise.id !== exerciseId) return exercise;
       return {
@@ -369,9 +395,13 @@ const mergeSessionSnapshot = (
       (item) => item.id === exercise.id,
     );
     if (!previousExercise) return clone(exercise);
+    const replaced =
+      previousExercise.exerciseDefinitionId !== exercise.exerciseDefinitionId ||
+      previousExercise.name !== exercise.name;
     return {
       ...exercise,
       plannedSets: exercise.plannedSets.map((set) => {
+        if (replaced) return set;
         const previousSet = previousExercise.plannedSets.find(
           (item) => item.id === set.id,
         );
@@ -544,6 +574,25 @@ export type WorkoutExecution = {
   completedAt?: number;
   exercises: ExecutedExercise[];
   archivedExercises?: ExecutedExercise[];
+};
+export const canReplaceExecutedExercise = (
+  execution: WorkoutExecution,
+  exerciseId: string,
+): boolean => {
+  if (execution.status !== "inProgress") return false;
+  const exercise = execution.exercises.find(
+    (item) => item.exerciseId === exerciseId,
+  );
+  return Boolean(
+    exercise &&
+    (exercise.status === "upcoming" || exercise.status === "active") &&
+    exercise.sets.every(
+      (set) =>
+        set.status !== "performed" &&
+        set.status !== "skipped" &&
+        set.status !== "resting",
+    ),
+  );
 };
 const isTerminalSet = (set: ExecutedSet) =>
   set.status === "performed" || set.status === "skipped";

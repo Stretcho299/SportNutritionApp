@@ -6,6 +6,7 @@ import {
 } from "../exercises/catalog";
 import {
   activateExecutedExercise,
+  canReplaceExecutedExercise,
   abandonWorkoutSession,
   addExercise,
   addExerciseToExecution,
@@ -148,6 +149,177 @@ it("replaces an occurrence definition while preserving planned structure and cle
     restSeconds: 135,
   });
   expect(replaced.sessionNotes).toEqual({});
+});
+
+it("allows replacement only before an executed exercise has work or rest", () => {
+  const workout = addExercise(createWorkout("Push"), "Bench", 3, 90);
+  const id = workout.exercises[0].id;
+  const active = startWorkoutExecution(workout, 1000);
+  const upcoming = {
+    ...active,
+    exercises: active.exercises.map((exercise) => ({
+      ...exercise,
+      status: "upcoming" as const,
+      sets: exercise.sets.map((set) => ({
+        ...set,
+        status: "upcoming" as const,
+      })),
+    })),
+  };
+  expect(canReplaceExecutedExercise(upcoming, id)).toBe(true);
+  expect(canReplaceExecutedExercise(active, id)).toBe(true);
+  for (const status of ["performed", "skipped", "resting"] as const) {
+    const changed = {
+      ...active,
+      exercises: active.exercises.map((exercise) => ({
+        ...exercise,
+        sets: exercise.sets.map((set, index) =>
+          index === 0 ? { ...set, status } : set,
+        ),
+      })),
+    };
+    expect(canReplaceExecutedExercise(changed, id)).toBe(false);
+  }
+  expect(
+    canReplaceExecutedExercise({ ...active, status: "completed" }, id),
+  ).toBe(false);
+  expect(canReplaceExecutedExercise(active, "missing")).toBe(false);
+});
+
+it("replaces an active occurrence, execution and snapshot without changing completed history", async () => {
+  const bench = officialExercises.find(
+    (item) => item.id === "official:bench-press-barbell",
+  )!;
+  const shoulder = officialExercises.find(
+    (item) => item.id === "official:lateral-raise-dumbbell",
+  )!;
+  const workout = addExercise(createWorkout("Push"), bench.name, 3, 90, bench);
+  const original = workout.exercises[0];
+  original.position = 4;
+  original.permanentNote = "Ancien mouvement";
+  original.plannedSets[0] = {
+    ...original.plannedSets[0],
+    weightKg: 45,
+    repetitions: 8,
+    restSeconds: 135,
+  };
+  const session = createWorkoutSession(workout, 1000);
+  const current: Workout = {
+    ...workout,
+    execution: session.execution,
+    sessionNotes: { [original.id]: "Note de séance" },
+  };
+  await saveWorkouts([current]);
+  const completed = {
+    ...session,
+    id: "past",
+    status: "completed" as const,
+    completedAt: 900,
+    execution: {
+      ...session.execution,
+      sessionId: "past",
+      status: "completed" as const,
+      completedAt: 900,
+    },
+  };
+  const abandoned = {
+    ...session,
+    id: "abandoned",
+    status: "abandoned" as const,
+    abandonedAt: 950,
+    execution: { ...session.execution, sessionId: "abandoned" },
+  };
+  const before = await loadWorkoutStore();
+  await saveWorkoutStore({
+    ...before,
+    sessions: [completed, abandoned, ...before.sessions],
+  });
+  const replaced = replaceExerciseDefinition(current, original.id, shoulder);
+  expect(replaced.exercises[0]).toMatchObject({
+    id: original.id,
+    position: 4,
+    name: shoulder.name,
+    exerciseDefinitionId: shoulder.id,
+    definitionSnapshot: shoulder,
+  });
+  expect(replaced.exercises[0].permanentNote).toBeUndefined();
+  expect(replaced.sessionNotes).toEqual({});
+  expect(replaced.exercises[0].plannedSets.map((set) => set.id)).toEqual(
+    original.plannedSets.map((set) => set.id),
+  );
+  expect(
+    replaced.exercises[0].plannedSets.map((set) => set.restSeconds),
+  ).toEqual(original.plannedSets.map((set) => set.restSeconds));
+  expect(
+    replaced.exercises[0].plannedSets.every(
+      (set) => set.weightKg === null && set.repetitions === null,
+    ),
+  ).toBe(true);
+  expect(replaced.execution?.exercises[0].status).toBe("active");
+  expect(
+    replaced.execution?.exercises[0].sets.map((set) => set.status),
+  ).toEqual(session.execution.exercises[0].sets.map((set) => set.status));
+  expect(replaced.execution?.exercises[0].sets.map((set) => set.setId)).toEqual(
+    original.plannedSets.map((set) => set.id),
+  );
+  expect(
+    replaced.execution?.exercises[0].sets.every(
+      (set) => set.weightKg === null && set.repetitions === null,
+    ),
+  ).toBe(true);
+  await saveWorkouts([replaced]);
+  const stored = await loadWorkoutStore();
+  expect(
+    stored.sessions.find((item) => item.id === session.id)?.snapshot
+      .exercises[0],
+  ).toMatchObject({
+    name: shoulder.name,
+    exerciseDefinitionId: shoulder.id,
+    definitionSnapshot: shoulder,
+  });
+  expect(
+    stored.sessions.find((item) => item.id === session.id)?.snapshot
+      .exercises[0].plannedSets,
+  ).toEqual(replaced.exercises[0].plannedSets);
+  expect(
+    stored.sessions.find((item) => item.id === "past")?.snapshot.exercises[0],
+  ).toMatchObject({
+    name: bench.name,
+    exerciseDefinitionId: bench.id,
+    definitionSnapshot: bench,
+  });
+  expect(
+    stored.sessions.find((item) => item.id === "abandoned")?.snapshot
+      .exercises[0],
+  ).toMatchObject({
+    name: bench.name,
+    exerciseDefinitionId: bench.id,
+    definitionSnapshot: bench,
+  });
+  expect(
+    replaceExerciseDefinition(
+      {
+        ...current,
+        execution: {
+          ...current.execution!,
+          exercises: [
+            {
+              ...current.execution!.exercises[0],
+              sets: [
+                {
+                  ...current.execution!.exercises[0].sets[0],
+                  status: "performed",
+                },
+                ...current.execution!.exercises[0].sets.slice(1),
+              ],
+            },
+          ],
+        },
+      },
+      original.id,
+      shoulder,
+    ),
+  ).toMatchObject({ exercises: [{ name: bench.name }] });
 });
 
 it("updates custom definitions and template occurrences without changing historical snapshots", async () => {
