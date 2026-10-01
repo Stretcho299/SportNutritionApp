@@ -55,6 +55,7 @@ body {
   position: relative;
   width: 100%;
   max-width: 680px;
+  overflow-x: clip;
   background:
     linear-gradient(180deg, #ffffff03, transparent 22rem), var(--background);
 }
@@ -1628,13 +1629,6 @@ html {
   display: grid;
   gap: 12px;
   padding-bottom: calc(84px + env(safe-area-inset-bottom));
-  animation: page-fade-in 200ms ease-out both;
-}
-
-@keyframes page-fade-in {
-  from {
-    opacity: 0;
-  }
 }
 
 .preview-hero {
