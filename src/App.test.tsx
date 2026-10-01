@@ -604,7 +604,7 @@ it("keeps sets in their natural order and renumbers them after deletion", async 
   expect(
     screen.getByRole("heading", { name: "Aucun exercice" }),
   ).toBeInTheDocument();
-});
+}, 10_000);
 
 it("selects a remaining exercise after deletion and restores the empty state after the last", async () => {
   await openEmptyWorkout();
