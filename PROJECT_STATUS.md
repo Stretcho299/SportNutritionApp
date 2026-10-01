@@ -1,6 +1,6 @@
 # État du projet SportNutritionApp
 
-Dernière mise à jour : 30 septembre 2026
+Dernière mise à jour : 1er octobre 2026
 
 Ce document est la source de vérité de continuité pour le produit, son
 architecture, ses invariants et sa roadmap. En cas de divergence, vérifier
@@ -23,8 +23,8 @@ implémentée dans l’application. Les spikes Ciqual et Open Food Facts dans
 ## Baseline stable
 
 - Branche stable : `main`.
-- État : `main` inclut les PRs [#47](https://github.com/Stretcho299/SportNutritionApp/pull/47), [#50](https://github.com/Stretcho299/SportNutritionApp/pull/50), [#51](https://github.com/Stretcho299/SportNutritionApp/pull/51) et [#56](https://github.com/Stretcho299/SportNutritionApp/pull/56), au 30 septembre 2026.
-- Commit de référence : `8d73232a18f45f8049ac10f019142a89fb0dcccf` — merge de la PR #56, qui clôt l’issue #55.
+- État : `main` inclut les passes #57 et #58, au 1er octobre 2026.
+- Commit de référence : `99c2a5230914818741da5d0e96528eef84af1806`.
 - CI de référence : Web CI #105 réussie sur la PR #56. Le job Ubuntu / Node 20 exécute format, lint, Vitest et build; il ne lance pas Playwright.
 - Référence Vitest après #56 : 125 tests passent. `npm run lint` conserve un avertissement Fast Refresh préexistant dans `src/OrientationGuard.tsx`, sans erreur.
 - Validation Playwright rapportée pour #56 : E2E ciblés Chromium et WebKit réussis. La suite complète termine à 132/134; les deux échecs étaient des crashes de cible WebKit hors timer, et chacun a réussi au rejeu isolé sans changement de timeout.
@@ -82,8 +82,8 @@ pas leur lecture lorsqu’un changement les concerne.
 - Chrono global dérivé de `startedAt`, incluant le repos, resynchronisé au retour
   au premier plan/pageshow/visibilité. Une session complétée fige sa durée avec
   `completedAt`; le compteur n’est pas une source de vérité incrémentale.
-- BottomSheets avec backdrop sans fermeture au tap, fermeture par glissement
-  vers le bas de la poignée, gestion du focus et contenu défilant.
+- BottomSheets avec fermeture au tap sur le backdrop ou par glissement
+  vers le bas de la poignée, gestion du focus et contenu défilant (#59).
 - Gestion iPhone du clavier via `visualViewport`; `useBodyScrollLock` verrouille
   le fond et restaure les positions et styles mémorisés, y compris les
   conteneurs imbriqués.
@@ -154,7 +154,7 @@ ultérieurs du template.
 
 IndexedDB : base `sport-nutrition`, version 2, object store `data`, clé
 `sport-nutrition-workouts`. `WorkoutStore` est versionné et contient
-`templates` et `sessions`. Les tableaux d’anciens objets Workout sont migrés
+`templates`, `sessions` et, depuis #59, des `customDefinitions` optionnelles. Les tableaux d’anciens objets Workout sont migrés
 vers cette enveloppe lors du chargement. Si IndexedDB n’est pas disponible,
 l’application utilise localStorage avec la même clé logique et le format v2.
 Préserver les données legacy et l’idempotence de migration; aucun changement de
@@ -185,8 +185,8 @@ schéma sans issue et tests dédiés.
 - ExerciseNavigator : conserver les gestes touch/pointer, long press,
   auto-scroll et restrictions de reorder selon l’exécution. La sélection d’un
   exercice n’active pas son avancement.
-- Les feuilles et pickers gardent leur backdrop NO-OP au tap; ne pas remplacer
-  le drag de poignée par une fermeture au clic.
+- Les BottomSheets se ferment au tap direct sur leur backdrop; un tap interne
+  ne ferme pas la feuille. Le drag de poignée reste disponible.
 
 ## État actuel et roadmap
 
@@ -202,7 +202,7 @@ stabilisées restent gelées : BottomSheet, clavier/visualViewport,
 lifecycle, stockage, cascade KG/REPS/REPOS, glass/lens, offsets et
 `100lvh`/`100dvh`, sauf nécessité directement démontrée.
 
-### Issue #52 reportée ; #55/#56 livrées ; passe active #57
+### Issue #52 reportée ; #55/#56 et #57/#58 livrées ; passe active #59
 
 [Issue #52 — évaluer les retours haptiques pour la PWA](https://github.com/Stretcho299/SportNutritionApp/issues/52) est **CLOSED / not planned** pour la PWA actuelle. WebKit sur iPhone ne fournit pas la Web Vibration API standard utilisée par l’expérimentation : `navigator.vibrate` est absent dans le WebKit local et l’essai physique de la PWA standalone n’a produit aucune vibration.
 
@@ -212,12 +212,13 @@ La [PR #54](https://github.com/Stretcho299/SportNutritionApp/pull/54) a été fe
 
 La correction capture un timestamp unique dans `startRest`, synchronise immédiatement le `clock` avec lui et transmet ce même instant à `startExecutedSetRest`, qui conserve la deadline absolue persistée `restEndsAt`. La durée réelle et la transition à l’échéance restent inchangées. Les resynchronisations foreground, `pageshow`, `visibilitychange`, le verrouillage, le reload et la reprise continuent de s’appuyer sur la deadline persistée existante. Vitest passe 125/125; les scénarios E2E du compteur et de persistance/reload passent dans Chromium et WebKit. La validation physique iPhone est terminée et acceptée, avec la réserve de 2 secondes décrite ci-dessus.
 
-[Issue #57 — unifier le mouvement des écrans et la continuité visuelle](https://github.com/Stretcho299/SportNutritionApp/issues/57) est la passe active. La navigation reste immédiate; cette passe conserve les animations existantes et complète la continuité de Preview et Detail.
+[Issue #57 — unifier le mouvement des écrans et la continuité visuelle](https://github.com/Stretcho299/SportNutritionApp/issues/57) et #58 sont livrées dans `main@99c2a5230914818741da5d0e96528eef84af1806`.
+
+[Issue #59 — fondation catalogue d'exercices](https://github.com/Stretcho299/SportNutritionApp/issues/59) est la passe active. Elle ajoute un catalogue officiel local de 69 exercices consultables, un registre d'exercices personnalisés créables/modifiables/supprimables et deux niveaux de taxonomie musculaire. Les occurrences dans les templates et snapshots de sessions embarquent une copie de la définition au moment de l'ajout; les anciennes occurrences libres restent sans association automatique. La base IndexedDB reste en version 2 avec un champ optionnel `customDefinitions` dans l'enveloppe. Voir `docs/exercise-catalog-sources.md` pour les références et licences.
 
 ### Étapes futures
 
-La passe active est l’issue #57 sur le mouvement des écrans et la continuité
-visuelle. Les autres axes ci-dessous restent futurs; aucun ordre après cette
+La passe active est l’issue #59 sur le catalogue local. Les autres axes ci-dessous restent futurs; aucun ordre après cette
 passe n’est confirmé :
 
 - Résumé enrichi de fin de séance et consultation UI de l’historique. L’écran
@@ -226,8 +227,8 @@ passe n’est confirmé :
 - Statistiques agrégées et progression dans le temps. La progression de la
   séance en cours existe déjà.
 - Calendrier et trophées.
-- Catalogue/gestion globale d’exercices; les exercices sont actuellement gérés
-  dans les templates.
+- Bilan et historique enrichis, carte musculaire, Preview enrichie et Performances
+  à partir des snapshots autonomes.
 - Supersets, trisets et circuits.
 - Module Nutrition. Aucune recherche alimentaire n’est intégrée; les documents
   Ciqual/Open Food Facts sont des spikes exploratoires.

@@ -1,4 +1,5 @@
 import { IDBFactory } from "fake-indexeddb";
+import { createCustomExercise, officialExercises } from "../exercises/catalog";
 import {
   activateExecutedExercise,
   abandonWorkoutSession,
@@ -23,6 +24,7 @@ import {
   reorder,
   saveWorkouts,
   saveWorkoutStore,
+  saveCustomDefinitions,
   skipExecutedExercise,
   startExecutedSetRest,
   startWorkoutExecution,
@@ -35,6 +37,81 @@ import {
 
 beforeEach(() => vi.stubGlobal("indexedDB", new IDBFactory()));
 afterEach(() => vi.unstubAllGlobals());
+
+it("keeps definition snapshots in templates and sessions after a custom definition is deleted", async () => {
+  const custom = createCustomExercise({
+    name: "Tirage personnel",
+    primaryMuscle: "grand_dorsal",
+    equipment: ["poulie"],
+  });
+  await saveCustomDefinitions([custom]);
+  const workout = addExercise(createWorkout("Dos"), custom.name, 2, 60, custom);
+  const session = createWorkoutSession(workout, 1234);
+  await saveWorkoutStore({
+    version: 2,
+    templates: [workout],
+    sessions: [session],
+    customDefinitions: [custom],
+  });
+  await saveCustomDefinitions([]);
+  const stored = await loadWorkoutStore();
+  expect(stored.customDefinitions).toEqual([]);
+  expect(stored.templates[0].exercises[0].definitionSnapshot).toEqual(custom);
+  expect(stored.sessions[0].snapshot.exercises[0].definitionSnapshot).toEqual(
+    custom,
+  );
+  expect(stored.sessions[0].snapshot.exercises[0].name).toBe(
+    "Tirage personnel",
+  );
+});
+
+it("keeps a just-created custom definition when a localStorage workout is saved immediately", async () => {
+  vi.stubGlobal("indexedDB", undefined);
+  localStorage.clear();
+  const custom = createCustomExercise({
+    name: "Row local",
+    primaryMuscle: "grand_dorsal",
+  });
+  void saveCustomDefinitions([custom]);
+  await saveWorkouts([
+    addExercise(createWorkout("Dos"), custom.name, 1, 30, custom),
+  ]);
+  const stored = await loadWorkoutStore();
+  expect(stored.customDefinitions).toEqual([custom]);
+  expect(stored.templates[0].exercises[0].definitionSnapshot).toEqual(custom);
+});
+
+it("freezes official muscle metadata when a session starts", () => {
+  const definition = officialExercises[0];
+  const workout = addExercise(
+    createWorkout("Push"),
+    definition.name,
+    3,
+    90,
+    definition,
+  );
+  const session = createWorkoutSession(workout, 1234);
+  workout.exercises[0].definitionSnapshot!.muscleTargets[0].muscle = "biceps";
+  expect(
+    session.snapshot.exercises[0].definitionSnapshot?.muscleTargets[0].muscle,
+  ).toBe("grand_pectoral");
+  expect(session.snapshot.exercises[0].exerciseDefinitionId).toBe(
+    definition.id,
+  );
+});
+
+it("preserves legacy names without linking them to official IDs during v2 loading", async () => {
+  const workout = addExercise(
+    createWorkout("Ancien"),
+    "Développé couché",
+    1,
+    90,
+  );
+  await saveWorkoutStore({ version: 2, templates: [workout], sessions: [] });
+  const stored = await loadWorkoutStore();
+  expect(stored.templates[0].exercises[0].name).toBe("Développé couché");
+  expect(stored.templates[0].exercises[0].exerciseDefinitionId).toBeUndefined();
+});
 
 it("round-trips blank and subsequently edited sets through IndexedDB", async () => {
   const workout = addExercise(createWorkout("Push"), "Bench", 4, 120);

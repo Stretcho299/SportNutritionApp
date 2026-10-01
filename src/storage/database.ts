@@ -1,3 +1,5 @@
+import type { ExerciseDefinition } from "../exercises/catalog";
+
 export type PlannedSet = {
   id: string;
   position: number;
@@ -8,6 +10,8 @@ export type PlannedSet = {
 export type Exercise = {
   id: string;
   name: string;
+  exerciseDefinitionId?: string;
+  definitionSnapshot?: ExerciseDefinition;
   position: number;
   plannedSets: PlannedSet[];
   defaultRestSeconds?: number;
@@ -42,6 +46,7 @@ export type WorkoutStore = {
   version: 2;
   templates: WorkoutTemplate[];
   sessions: WorkoutSession[];
+  customDefinitions?: ExerciseDefinition[];
 };
 export const defaultInitialSetCount = 3;
 export const defaultRestSeconds = 150;
@@ -68,6 +73,7 @@ export const addExercise = (
   name: string,
   initialSetCount = defaultInitialSetCount,
   restSeconds = defaultRestSeconds,
+  definition?: ExerciseDefinition,
 ): Workout => {
   if (!Number.isSafeInteger(initialSetCount) || initialSetCount <= 0)
     throw new RangeError(
@@ -80,6 +86,12 @@ export const addExercise = (
       {
         id: id(),
         name,
+        ...(definition
+          ? {
+              exerciseDefinitionId: definition.id,
+              definitionSnapshot: clone(definition),
+            }
+          : {}),
         position: w.exercises.length,
         defaultRestSeconds: restSeconds,
         plannedSets: Array.from({ length: initialSetCount }, (_, position) =>
@@ -175,6 +187,7 @@ const migrateStore = (raw: unknown): WorkoutStore => {
       version: 2,
       templates: store.templates ?? [],
       sessions: store.sessions ?? [],
+      customDefinitions: store.customDefinitions ?? [],
     };
   }
   if (!Array.isArray(raw)) return emptyStore();
@@ -240,6 +253,7 @@ export async function saveWorkoutStore(store: WorkoutStore) {
     version: 2,
     templates: store.templates,
     sessions: store.sessions,
+    customDefinitions: store.customDefinitions ?? [],
   };
   if (!globalThis.indexedDB) {
     localStorage.setItem(key, JSON.stringify(normalized));
@@ -383,7 +397,12 @@ async function persistWorkouts(workouts: Workout[]) {
     if (index >= 0) sessions[index] = session;
     else sessions.push(session);
   }
-  const nextStore = { version: 2 as const, templates, sessions };
+  const nextStore = {
+    version: 2 as const,
+    templates,
+    sessions,
+    customDefinitions: existing.customDefinitions ?? [],
+  };
   if (!globalThis.indexedDB) {
     await saveWorkoutStore(nextStore);
     return;
@@ -396,6 +415,22 @@ let saveWorkoutsQueue: Promise<void> = Promise.resolve();
 export function saveWorkouts(workouts: Workout[]) {
   if (!globalThis.indexedDB) return persistWorkouts(workouts);
   saveWorkoutsQueue = saveWorkoutsQueue.then(() => persistWorkouts(workouts));
+  return saveWorkoutsQueue;
+}
+
+export function saveCustomDefinitions(definitions: ExerciseDefinition[]) {
+  if (!globalThis.indexedDB) {
+    const store = migrateStore(JSON.parse(localStorage.getItem(key) ?? "[]"));
+    localStorage.setItem(
+      key,
+      JSON.stringify({ ...store, customDefinitions: clone(definitions) }),
+    );
+    return Promise.resolve();
+  }
+  saveWorkoutsQueue = saveWorkoutsQueue.then(async () => {
+    const store = await loadWorkoutStore();
+    await saveWorkoutStore({ ...store, customDefinitions: clone(definitions) });
+  });
   return saveWorkoutsQueue;
 }
 

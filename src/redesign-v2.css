@@ -511,6 +511,7 @@ html {
 
 .exercise-heading h2 {
   max-height: 46px;
+  overflow-wrap: anywhere;
   color: var(--text);
   font-size: 23px;
   text-transform: uppercase;
@@ -2037,6 +2038,12 @@ html {
   grid-template-columns: 44px minmax(0, auto);
 }
 
+.exercise-menu:has(> button:only-child) {
+  display: flex;
+  width: 70px;
+  min-width: 70px;
+}
+
 .exercise-menu > button:first-child {
   display: inline-grid;
   place-items: center;
@@ -2064,6 +2071,14 @@ html {
   background: #29272a;
   color: #f0aa88;
   box-shadow: inset 0 1px 4px #00000040;
+}
+
+.exercise-menu > button:first-child:only-child {
+  box-sizing: border-box;
+  width: 70px;
+  min-width: 70px;
+  padding: 0 7px;
+  font-size: 10px;
 }
 
 button,
@@ -2702,6 +2717,90 @@ body,
 }
 
 /* Prevent iOS Safari's automatic focus zoom in every sheet form. */
+.catalog-sheet h2 {
+  margin: 0 0 12px;
+}
+.catalog-sheet label,
+.custom-exercise-form label {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.catalog-sheet input,
+.catalog-sheet select,
+.custom-exercise-form select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  border: 1px solid #45454d;
+  border-radius: 10px;
+  background: #24242b;
+  color: #fff;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 16px;
+}
+.catalog-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+.catalog-count {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.catalog-results {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+  max-height: min(38vh, 330px);
+  overflow-y: auto;
+}
+.catalog-results li {
+  border-bottom: 1px solid #34343b;
+}
+.catalog-result {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 2px;
+  text-align: left;
+  background: transparent;
+  color: inherit;
+  border: 0;
+}
+.catalog-result strong {
+  font-size: 15px;
+}
+.catalog-result small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.catalog-actions {
+  display: flex;
+  gap: 12px;
+  padding-bottom: 8px;
+}
+.catalog-actions button,
+.catalog-create {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+}
+.catalog-create {
+  display: block;
+  padding: 12px 0;
+  text-align: left;
+  font-weight: 700;
+}
+.custom-exercise-form select {
+  margin-top: 2px;
+}
 .modal input,
 .modal textarea,
 .modal select,

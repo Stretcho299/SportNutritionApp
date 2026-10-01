@@ -21,6 +21,22 @@ import { ExerciseNavigator } from "./ExerciseNavigator";
 import { OrientationGuard } from "./OrientationGuard";
 import { pickerValues } from "./pickerValues";
 import {
+  officialExercises,
+  searchExercises,
+  muscleGroupLabels,
+  equipmentLabels,
+  defaultMuscleTargetForGroup,
+  muscleTargetLabels,
+  muscleTargetGroup,
+  createCustomExercise,
+  updateCustomExercise,
+  deleteCustomExercise,
+  type ExerciseDefinition,
+  type MuscleGroup,
+  type MuscleTarget,
+  type Equipment,
+} from "./exercises/catalog";
+import {
   activateExecutedExercise,
   abandonWorkoutSession,
   addSetToExecution,
@@ -40,6 +56,7 @@ import {
   removeExecutedSet,
   reorder,
   saveWorkouts,
+  saveCustomDefinitions,
   skipExecutedExercise,
   sort,
   startExecutedSetRest,
@@ -57,6 +74,9 @@ type Dialog =
   | null
   | "workout"
   | "exercise"
+  | "catalog"
+  | "customExercise"
+  | "editCustomExercise"
   | "renameWorkout"
   | "renameExercise"
   | "addMenu"
@@ -65,6 +85,19 @@ type Dialog =
   | "reorder";
 export default function App() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [customDefinitions, setCustomDefinitions] = useState<
+    ExerciseDefinition[]
+  >([]);
+  const [selectedDefinition, setSelectedDefinition] =
+    useState<ExerciseDefinition | null>(null);
+  const [catalogQuery, setCatalogQuery] = useState("");
+  const [catalogMuscle, setCatalogMuscle] = useState<MuscleGroup | "">("");
+  const [catalogEquipment, setCatalogEquipment] = useState<Equipment | "">("");
+  const [customMuscle, setCustomMuscle] = useState<MuscleTarget>(
+    defaultMuscleTargetForGroup.pectoraux,
+  );
+  const [customSecondary, setCustomSecondary] = useState<MuscleTarget | "">("");
+  const [customEquipment, setCustomEquipment] = useState<Equipment | "">("");
   const [completedTemplateIds, setCompletedTemplateIds] = useState<string[]>(
     [],
   );
@@ -105,6 +138,7 @@ export default function App() {
   };
   useEffect(() => {
     void loadWorkoutStore().then((store: WorkoutStore) => {
+      setCustomDefinitions(store.customDefinitions ?? []);
       setCompletedTemplateIds(
         store.templates
           .filter((template) =>
@@ -162,6 +196,51 @@ export default function App() {
     setWorkouts(next);
     void saveWorkouts(next);
   }, []);
+  const updateCustomDefinitions = (next: ExerciseDefinition[]) => {
+    setCustomDefinitions(next);
+    void saveCustomDefinitions(next);
+  };
+  const catalogResults = searchExercises(
+    [...officialExercises, ...customDefinitions],
+    {
+      query: catalogQuery,
+      muscleGroup: catalogMuscle || undefined,
+      equipment: catalogEquipment || undefined,
+    },
+  );
+  const selectDefinition = (definition: ExerciseDefinition) => {
+    setSelectedDefinition(definition);
+    setName(definition.name);
+    setDialog("exercise");
+  };
+  const openCustomForm = (definition?: ExerciseDefinition) => {
+    setSelectedDefinition(definition ?? null);
+    setName(definition?.name ?? catalogQuery.trim());
+    setCustomMuscle(
+      definition?.muscleTargets.find((target) => target.role === "primary")
+        ?.muscle ?? defaultMuscleTargetForGroup.pectoraux,
+    );
+    setCustomSecondary(
+      definition?.muscleTargets.find((target) => target.role === "secondary")
+        ?.muscle ?? "",
+    );
+    setCustomEquipment(definition?.equipment[0] ?? "");
+    setDialog(definition ? "editCustomExercise" : "customExercise");
+  };
+  const requestCustomDeletion = (definition: ExerciseDefinition) => {
+    requestConfirmation({
+      title: "Supprimer cet exercice personnalisé ?",
+      description: `« ${definition.name} » disparaîtra du catalogue. Les séances et exercices déjà ajoutés seront conservés.`,
+      confirmLabel: "Supprimer",
+      onConfirm: () => {
+        updateCustomDefinitions(
+          deleteCustomExercise(customDefinitions, definition.id),
+        );
+        if (selectedDefinition?.id === definition.id)
+          setSelectedDefinition(null);
+      },
+    });
+  };
   const workout = workouts.find((w) => w.id === workoutId);
   const activeWorkout = workouts.find(
     (item) =>
@@ -391,6 +470,10 @@ export default function App() {
       setName("");
       setInitialSetCount(String(defaultInitialSetCount));
       setRest(String(defaultRestSeconds));
+      setSelectedDefinition(null);
+      setCatalogQuery("");
+      setCatalogMuscle("");
+      setCatalogEquipment("");
     }, bottomSheetCloseDuration);
   };
   const submit = (e: React.FormEvent) => {
@@ -403,7 +486,7 @@ export default function App() {
           w.id === workout!.id ? { ...w, name: name.trim() } : w,
         ),
       );
-    if (dialog === "exercise" && workout && name.trim()) {
+    if (dialog === "exercise" && workout && selectedDefinition) {
       if (
         !Number.isSafeInteger(Number(initialSetCount)) ||
         Number(initialSetCount) <= 0
@@ -411,9 +494,10 @@ export default function App() {
         return;
       const nextWorkout = addExercise(
         workout,
-        name.trim(),
+        selectedDefinition.name,
         Number(initialSetCount),
         Number(rest),
+        selectedDefinition,
       );
       const addedExercise = nextWorkout.exercises.at(-1)!;
       const nextExecution =
@@ -428,6 +512,40 @@ export default function App() {
         ),
       );
       if (!exercise) setExerciseId(addedExercise.id);
+    }
+    if (
+      (dialog === "customExercise" || dialog === "editCustomExercise") &&
+      name.trim()
+    ) {
+      const input = {
+        name: name.trim(),
+        primaryMuscle: customMuscle,
+        secondaryMuscles:
+          customSecondary && customSecondary !== customMuscle
+            ? [customSecondary]
+            : [],
+        equipment: customEquipment ? [customEquipment] : [],
+      };
+      const definition =
+        dialog === "editCustomExercise" && selectedDefinition
+          ? updateCustomExercise(selectedDefinition, input)
+          : createCustomExercise(input, [
+              ...officialExercises,
+              ...customDefinitions,
+            ]);
+      updateCustomDefinitions(
+        dialog === "editCustomExercise"
+          ? customDefinitions.map((item) =>
+              item.id === definition.id ? definition : item,
+            )
+          : [...customDefinitions, definition],
+      );
+      if (dialog === "customExercise") {
+        selectDefinition(definition);
+        return;
+      }
+      setDialog("catalog");
+      return;
     }
     if (dialog === "renameExercise" && workout && exercise && name.trim())
       update(
@@ -1123,7 +1241,7 @@ export default function App() {
               <span>
                 Ajoutez votre premier exercice pour préparer cette séance.
               </span>
-              <button className="primary" onClick={() => setDialog("exercise")}>
+              <button className="primary" onClick={() => setDialog("catalog")}>
                 Ajouter un exercice
               </button>
             </section>
@@ -1194,15 +1312,17 @@ export default function App() {
                     </div>
                   </div>
                   <div className="exercise-menu">
-                    <button
-                      aria-label="Modifier l’exercice"
-                      onClick={() => {
-                        setName(exercise.name);
-                        setDialog("renameExercise");
-                      }}
-                    >
-                      <Icon name="edit" size={18} />
-                    </button>
+                    {exercise.definitionSnapshot?.source !== "official" && (
+                      <button
+                        aria-label="Modifier l’exercice"
+                        onClick={() => {
+                          setName(exercise.name);
+                          setDialog("renameExercise");
+                        }}
+                      >
+                        <Icon name="edit" size={18} />
+                      </button>
+                    )}
                     {execution?.status === "inProgress" ? (
                       <button
                         disabled={
@@ -1495,7 +1615,7 @@ export default function App() {
             <div className="action-sheet">
               <h2>Actions de la séance</h2>
               <div className="action-sheet-menu">
-                <button onClick={() => setDialog("exercise")}>
+                <button onClick={() => setDialog("catalog")}>
                   <span className="action-sheet-icon" aria-hidden="true">
                     <Icon name="plus" size={19} />
                   </span>
@@ -1598,131 +1718,328 @@ export default function App() {
           )}
         </BottomSheet>
       )}
-      {dialog && !isMenu && (
+      {dialog === "catalog" && (
+        <BottomSheet
+          title="Catalogue d’exercices"
+          closing={dialogClosing}
+          onClose={close}
+        >
+          <div className="catalog-sheet">
+            <h2>Ajouter un exercice</h2>
+            <label>
+              Rechercher
+              <input
+                aria-label="Rechercher un exercice"
+                type="search"
+                value={catalogQuery}
+                onChange={(event) => setCatalogQuery(event.target.value)}
+                autoComplete="off"
+              />
+            </label>
+            <div className="catalog-filters">
+              <label>
+                Muscle
+                <select
+                  aria-label="Filtrer par muscle"
+                  value={catalogMuscle}
+                  onChange={(event) =>
+                    setCatalogMuscle(event.target.value as MuscleGroup | "")
+                  }
+                >
+                  <option value="">Tous</option>
+                  {Object.entries(muscleGroupLabels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Matériel
+                <select
+                  aria-label="Filtrer par matériel"
+                  value={catalogEquipment}
+                  onChange={(event) =>
+                    setCatalogEquipment(event.target.value as Equipment | "")
+                  }
+                >
+                  <option value="">Tous</option>
+                  {Object.entries(equipmentLabels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <p className="catalog-count">{catalogResults.length} exercices</p>
+            <ul className="catalog-results" aria-label="Résultats du catalogue">
+              {catalogResults.map((definition) => (
+                <li key={definition.id}>
+                  <button
+                    type="button"
+                    className="catalog-result"
+                    onClick={() => selectDefinition(definition)}
+                  >
+                    <strong>{definition.name}</strong>
+                    <small>
+                      {definition.muscleTargets
+                        .filter((target) => target.role === "primary")
+                        .map((target) => muscleTargetLabels[target.muscle])
+                        .join(", ")}{" "}
+                      ·{" "}
+                      {definition.equipment
+                        .map((equipment) => equipmentLabels[equipment])
+                        .join(", ") || "Sans matériel"}
+                    </small>
+                  </button>
+                  {definition.source === "custom" && (
+                    <div className="catalog-actions">
+                      <button
+                        type="button"
+                        aria-label={`Modifier ${definition.name}`}
+                        onClick={() => openCustomForm(definition)}
+                      >
+                        Modifier
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Supprimer ${definition.name}`}
+                        onClick={() => requestCustomDeletion(definition)}
+                      >
+                        Supprimer
+                      </button>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              className="catalog-create"
+              onClick={() => openCustomForm()}
+            >
+              + Créer un exercice personnalisé
+            </button>
+          </div>
+        </BottomSheet>
+      )}
+      {(dialog === "customExercise" || dialog === "editCustomExercise") && (
         <BottomSheet
           title={
-            dialog === "exerciseNotes"
-              ? "Notes de l’exercice"
-              : dialog === "exercise" || dialog === "renameExercise"
-                ? "Exercice"
-                : "Séance"
+            dialog === "customExercise"
+              ? "Créer un exercice personnalisé"
+              : "Modifier un exercice personnalisé"
           }
           closing={dialogClosing}
           onClose={close}
         >
-          <form
-            className={
-              dialog === "exerciseNotes"
-                ? "sheet-form notes-form"
-                : "sheet-form"
-            }
-            onSubmit={submit}
-          >
+          <form className="sheet-form custom-exercise-form" onSubmit={submit}>
             <h2>
-              {dialog === "exerciseNotes"
-                ? "Notes de l’exercice"
-                : dialog === "exercise" || dialog === "renameExercise"
-                  ? "Exercice"
-                  : "Séance"}
+              {dialog === "customExercise"
+                ? "Créer un exercice personnalisé"
+                : "Modifier un exercice personnalisé"}
             </h2>
-            {dialog === "exerciseNotes" ? (
-              <>
-                <div className="exercise-note-field">
-                  <label htmlFor="exercise-permanent-note">
-                    NOTE PERMANENTE
-                  </label>
-                  <textarea
-                    id="exercise-permanent-note"
-                    rows={2}
-                    value={permanentNoteDraft}
-                    disabled={execution?.status === "completed"}
-                    onChange={(event) =>
-                      setPermanentNoteDraft(event.target.value)
+            <label>
+              Nom
+              <input
+                aria-label="Nom"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              Muscle principal
+              <select
+                aria-label="Muscle principal"
+                value={customMuscle}
+                onChange={(event) =>
+                  setCustomMuscle(event.target.value as MuscleTarget)
+                }
+                required
+              >
+                {Object.entries(muscleTargetLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label} (
+                    {
+                      muscleGroupLabels[
+                        muscleTargetGroup[value as MuscleTarget]
+                      ]
                     }
-                  />
-                  <small>Reprise dans les prochaines séances</small>
-                </div>
-                <div className="exercise-note-field">
-                  <label htmlFor="exercise-session-note">
-                    NOTE DE CETTE SÉANCE
-                  </label>
-                  <textarea
-                    id="exercise-session-note"
-                    rows={2}
-                    value={sessionNoteDraft}
-                    disabled={!execution || execution.status === "completed"}
-                    onChange={(event) =>
-                      setSessionNoteDraft(event.target.value)
-                    }
-                  />
-                  <small>
-                    {execution && execution.status !== "completed"
-                      ? "Uniquement pour cette séance"
-                      : "Disponible pendant une séance"}
-                  </small>
-                </div>
-              </>
-            ) : (
-              <>
-                <label>
-                  Nom
-                  <input
-                    aria-label="Nom"
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                    required
-                  />
-                </label>
-                {dialog === "exercise" && (
-                  <div className="compact-form-fields">
-                    <SetValuePicker
-                      onOverlayChange={setPickerOpen}
-                      label="Nombre de séries initiales"
-                      displayLabel="Séries"
-                      value={Number(initialSetCount)}
-                      columns={[
-                        {
-                          label: "Séries",
-                          values: pickerValues.sets,
-                          value: Number(initialSetCount),
-                        },
-                      ]}
-                      formatValue={(value) => String(value ?? 1)}
-                      onSave={(value) => setInitialSetCount(String(value))}
-                    />
-                    <SetValuePicker
-                      onOverlayChange={setPickerOpen}
-                      label="Repos par défaut"
-                      displayLabel="Repos"
-                      value={Number(rest)}
-                      columns={[
-                        {
-                          label: "Minutes",
-                          values: pickerValues.minutes,
-                          value: Math.min(6, Math.floor(Number(rest) / 60)),
-                        },
-                        {
-                          label: "Secondes",
-                          values: pickerValues.seconds,
-                          value: Number(rest) % 60,
-                        },
-                      ]}
-                      formatValue={(value) => formatRest(value ?? 0)}
-                      onSave={(value) => setRest(String(value))}
-                    />
-                  </div>
-                )}
-              </>
-            )}
-            <button
-              className="primary"
-              disabled={execution?.status === "completed"}
-            >
-              {dialog === "exerciseNotes" ? "ENREGISTRER" : "Enregistrer"}
-            </button>
+                    )
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Muscle secondaire
+              <select
+                aria-label="Muscle secondaire"
+                value={customSecondary}
+                onChange={(event) =>
+                  setCustomSecondary(event.target.value as MuscleTarget | "")
+                }
+              >
+                <option value="">Aucun</option>
+                {Object.entries(muscleTargetLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Matériel
+              <select
+                aria-label="Matériel"
+                value={customEquipment}
+                onChange={(event) =>
+                  setCustomEquipment(event.target.value as Equipment | "")
+                }
+              >
+                <option value="">Aucun</option>
+                {Object.entries(equipmentLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button className="primary">Enregistrer</button>
           </form>
         </BottomSheet>
       )}
+      {dialog &&
+        !isMenu &&
+        dialog !== "catalog" &&
+        dialog !== "customExercise" &&
+        dialog !== "editCustomExercise" && (
+          <BottomSheet
+            title={
+              dialog === "exerciseNotes"
+                ? "Notes de l’exercice"
+                : dialog === "exercise" || dialog === "renameExercise"
+                  ? "Exercice"
+                  : "Séance"
+            }
+            closing={dialogClosing}
+            onClose={close}
+          >
+            <form
+              className={
+                dialog === "exerciseNotes"
+                  ? "sheet-form notes-form"
+                  : "sheet-form"
+              }
+              onSubmit={submit}
+            >
+              <h2>
+                {dialog === "exerciseNotes"
+                  ? "Notes de l’exercice"
+                  : dialog === "exercise" || dialog === "renameExercise"
+                    ? "Exercice"
+                    : "Séance"}
+              </h2>
+              {dialog === "exerciseNotes" ? (
+                <>
+                  <div className="exercise-note-field">
+                    <label htmlFor="exercise-permanent-note">
+                      NOTE PERMANENTE
+                    </label>
+                    <textarea
+                      id="exercise-permanent-note"
+                      rows={2}
+                      value={permanentNoteDraft}
+                      disabled={execution?.status === "completed"}
+                      onChange={(event) =>
+                        setPermanentNoteDraft(event.target.value)
+                      }
+                    />
+                    <small>Reprise dans les prochaines séances</small>
+                  </div>
+                  <div className="exercise-note-field">
+                    <label htmlFor="exercise-session-note">
+                      NOTE DE CETTE SÉANCE
+                    </label>
+                    <textarea
+                      id="exercise-session-note"
+                      rows={2}
+                      value={sessionNoteDraft}
+                      disabled={!execution || execution.status === "completed"}
+                      onChange={(event) =>
+                        setSessionNoteDraft(event.target.value)
+                      }
+                    />
+                    <small>
+                      {execution && execution.status !== "completed"
+                        ? "Uniquement pour cette séance"
+                        : "Disponible pendant une séance"}
+                    </small>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <label>
+                    Nom
+                    <input
+                      aria-label="Nom"
+                      value={name}
+                      readOnly={dialog === "exercise"}
+                      onChange={(event) => setName(event.target.value)}
+                      required
+                    />
+                  </label>
+                  {dialog === "exercise" && (
+                    <div className="compact-form-fields">
+                      <SetValuePicker
+                        onOverlayChange={setPickerOpen}
+                        label="Nombre de séries initiales"
+                        displayLabel="Séries"
+                        value={Number(initialSetCount)}
+                        columns={[
+                          {
+                            label: "Séries",
+                            values: pickerValues.sets,
+                            value: Number(initialSetCount),
+                          },
+                        ]}
+                        formatValue={(value) => String(value ?? 1)}
+                        onSave={(value) => setInitialSetCount(String(value))}
+                      />
+                      <SetValuePicker
+                        onOverlayChange={setPickerOpen}
+                        label="Repos par défaut"
+                        displayLabel="Repos"
+                        value={Number(rest)}
+                        columns={[
+                          {
+                            label: "Minutes",
+                            values: pickerValues.minutes,
+                            value: Math.min(6, Math.floor(Number(rest) / 60)),
+                          },
+                          {
+                            label: "Secondes",
+                            values: pickerValues.seconds,
+                            value: Number(rest) % 60,
+                          },
+                        ]}
+                        formatValue={(value) => formatRest(value ?? 0)}
+                        onSave={(value) => setRest(String(value))}
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+              <button
+                className="primary"
+                disabled={execution?.status === "completed"}
+              >
+                {dialog === "exerciseNotes" ? "ENREGISTRER" : "Enregistrer"}
+              </button>
+            </form>
+          </BottomSheet>
+        )}
       <BottomNavigation
         onWorkouts={handleWorkoutsTab}
         isModalOpen={isOverlayOpen}

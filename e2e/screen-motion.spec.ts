@@ -43,7 +43,15 @@ async function addExercise(page: Page, name: string) {
     .getByRole("dialog", { name: "Actions de la séance" })
     .getByRole("button", { name: "Ajouter un exercice", exact: true })
     .click();
-  await page.getByRole("textbox", { name: "Nom" }).fill(name);
+  await page
+    .getByRole("dialog", { name: "Catalogue d’exercices" })
+    .getByRole("button", { name: "+ Créer un exercice personnalisé" })
+    .click();
+  const custom = page.getByRole("dialog", {
+    name: "Créer un exercice personnalisé",
+  });
+  await custom.getByRole("textbox", { name: "Nom" }).fill(name);
+  await custom.getByRole("button", { name: "Enregistrer" }).click();
   await chooseValue(page, "Nombre de séries initiales", 1);
   const form = page.getByRole("dialog", { name: "Exercice" });
   await form.getByRole("button", { name: "Enregistrer" }).click();
@@ -92,47 +100,45 @@ async function expectPageMotion(
   direction: "forward" | "back",
 ): Promise<PageMotionProfile> {
   await expect(target).toHaveClass(new RegExp(`page-${direction}`));
+  let profile: PageMotionProfile | null = null;
   await expect
-    .poll(() =>
-      target.evaluate((element) => getComputedStyle(element).animationName),
-    )
-    .toBe(`page-${direction}-in`);
-  await expect
-    .poll(() =>
-      target.evaluate(
-        (element, animationName) =>
-          element
-            .getAnimations()
-            .some(
-              (animation) =>
-                (animation as CSSAnimation).animationName === animationName,
-            ),
-        `page-${direction}-in`,
-      ),
-    )
+    .poll(async () => {
+      const current = await target.evaluate((element, direction) => {
+        const computed = getComputedStyle(element);
+        const animationName = `page-${direction}-in`;
+        const animation = element
+          .getAnimations()
+          .find(
+            (item) => (item as CSSAnimation).animationName === animationName,
+          );
+        return {
+          animationName: computed.animationName,
+          duration: computed.animationDuration,
+          easing: computed.animationTimingFunction,
+          targetClassName: element.getAttribute("class") ?? "",
+          targetParentClassName:
+            element.parentElement?.getAttribute("class") ?? "",
+          keyframes:
+            animation?.effect?.getKeyframes().map((frame) => ({
+              opacity: String(frame.opacity),
+              translateX:
+                frame.transform === "none"
+                  ? 0
+                  : new DOMMatrixReadOnly(frame.transform ?? "none").m41,
+            })) ?? [],
+        };
+      }, direction);
+      if (
+        current.animationName === `page-${direction}-in` &&
+        current.keyframes.length
+      ) {
+        profile = current;
+        return true;
+      }
+      return false;
+    })
     .toBe(true);
-  const profile = await target.evaluate((element, direction) => {
-    const computed = getComputedStyle(element);
-    const animationName = `page-${direction}-in`;
-    const animation = element
-      .getAnimations()
-      .find((item) => (item as CSSAnimation).animationName === animationName);
-    return {
-      animationName: computed.animationName,
-      duration: computed.animationDuration,
-      easing: computed.animationTimingFunction,
-      targetClassName: element.getAttribute("class") ?? "",
-      targetParentClassName: element.parentElement?.getAttribute("class") ?? "",
-      keyframes:
-        animation?.effect?.getKeyframes().map((frame) => ({
-          opacity: String(frame.opacity),
-          translateX:
-            frame.transform === "none"
-              ? 0
-              : new DOMMatrixReadOnly(frame.transform ?? "none").m41,
-        })) ?? [],
-    };
-  }, direction);
+  if (!profile) throw new Error("Page motion profile was not captured");
   expect(profile).toMatchObject({
     animationName: `page-${direction}-in`,
     duration: "0.22s",

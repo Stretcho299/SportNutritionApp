@@ -26,8 +26,16 @@ async function addExercise(
   await actions
     .getByRole("button", { name: "Ajouter un exercice", exact: true })
     .click();
+  await page
+    .getByRole("dialog", { name: "Catalogue d’exercices" })
+    .getByRole("button", { name: "+ Créer un exercice personnalisé" })
+    .click();
+  const custom = page.getByRole("dialog", {
+    name: "Créer un exercice personnalisé",
+  });
+  await custom.getByRole("textbox", { name: "Nom" }).fill(name);
+  await custom.getByRole("button", { name: "Enregistrer" }).click();
   const form = page.getByRole("dialog", { name: "Exercice" });
-  await form.getByRole("textbox", { name: "Nom" }).fill(name);
   if (options.sets !== undefined)
     await choosePickerValue(page, "Nombre de séries initiales", options.sets);
   if (options.rest !== undefined)
