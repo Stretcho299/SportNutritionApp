@@ -89,6 +89,12 @@ async function openCatalog(page: Page) {
   return page.getByRole("dialog", { name: "Catalogue d’exercices" });
 }
 
+async function openCustomActions(page: Page, name: string) {
+  const catalog = page.getByRole("dialog", { name: "Catalogue d’exercices" });
+  await catalog.getByRole("button", { name: `Options ${name}` }).click();
+  return catalog.getByRole("menu", { name: `Actions ${name}` });
+}
+
 async function addResult(page: Page, name: string) {
   const catalog = page.getByRole("dialog", { name: "Catalogue d’exercices" });
   await catalog
@@ -225,6 +231,19 @@ for (const width of [320, 390]) {
     expect(ctaBounds!.y + ctaBounds!.height).toBeLessThanOrEqual(
       catalogBounds!.y + catalogBounds!.height,
     );
+    const resultsScroller = catalog.locator(".catalog-results");
+    const scrollState = await resultsScroller.evaluate((element) => {
+      const node = element as HTMLElement;
+      node.scrollTop = node.scrollHeight;
+      return {
+        top: node.scrollTop,
+        max: node.scrollHeight - node.clientHeight,
+      };
+    });
+    expect(scrollState.max).toBeGreaterThan(0);
+    expect(scrollState.top).toBe(scrollState.max);
+    await expect(customCta).toBeVisible();
+    expect((await customCta.boundingBox())?.y).toBe(ctaBounds?.y);
     await catalog
       .getByRole("list", { name: "Résultats du catalogue" })
       .getByRole("button", { name: new RegExp(officialName) })
@@ -446,7 +465,7 @@ for (const width of [320, 390]) {
       .fill("Presse convergente");
     await expect(
       updatedCatalog.getByRole("button", {
-        name: "Modifier Presse convergente",
+        name: "Options Presse convergente",
       }),
     ).toBeVisible();
     await expectNoHorizontalOverflow(page);
@@ -546,8 +565,76 @@ for (const width of [320, 390]) {
       name: "Rechercher un exercice",
     });
     await search.fill(customName);
+    await expect(
+      catalog.getByRole("heading", { name: "Mes exercices" }),
+    ).toBeVisible();
+    await expect(
+      catalog.getByRole("heading", { name: "Catalogue" }),
+    ).toHaveCount(0);
+    await expect(catalog.locator(".catalog-section-heading span")).toHaveText([
+      "1",
+    ]);
+    await search.fill("presse");
     await catalog
-      .getByRole("button", { name: `Modifier ${customName}` })
+      .getByRole("combobox", { name: "Filtrer par muscle" })
+      .selectOption("jambes");
+    await catalog
+      .getByRole("combobox", { name: "Filtrer par matériel" })
+      .selectOption("machine");
+    await expect(
+      catalog.getByRole("heading", { name: "Mes exercices" }),
+    ).toBeVisible();
+    await expect(
+      catalog.getByRole("heading", { name: "Catalogue" }),
+    ).toBeVisible();
+    const sectionCounts = await catalog
+      .locator(".catalog-section")
+      .evaluateAll((sections) =>
+        sections.map((section) => ({
+          title: section.querySelector("h3")?.textContent,
+          visibleCount: Number(
+            section.querySelector(".catalog-section-heading span")?.textContent,
+          ),
+          rowCount: section.querySelectorAll(".catalog-section-list > li")
+            .length,
+        })),
+      );
+    const customSection = sectionCounts.find(
+      (section) => section.title === "Mes exercices",
+    );
+    const officialSection = sectionCounts.find(
+      (section) => section.title === "Catalogue",
+    );
+    expect(customSection?.visibleCount).toBe(customSection?.rowCount);
+    expect(officialSection?.visibleCount).toBe(officialSection?.rowCount);
+    const customCount = customSection?.rowCount ?? 0;
+    const officialCount = officialSection?.rowCount ?? 0;
+    expect(customCount).toBe(1);
+    expect(officialCount).toBeGreaterThan(0);
+    await search.fill("mouvement-introuvable");
+    await expect(catalog.locator(".catalog-section")).toHaveCount(0);
+    await expect(catalog.getByText("Aucun exercice trouvé")).toBeVisible();
+    await expect(
+      catalog.getByRole("button", {
+        name: "+ Créer un exercice personnalisé",
+      }),
+    ).toBeVisible();
+    await search.fill(customName);
+    await catalog
+      .getByRole("combobox", { name: "Filtrer par muscle" })
+      .selectOption("");
+    await catalog
+      .getByRole("combobox", { name: "Filtrer par matériel" })
+      .selectOption("");
+    const initialCustomMenu = await openCustomActions(page, customName);
+    await expect(
+      initialCustomMenu.getByRole("menuitem", {
+        name: `Modifier ${customName}`,
+      }),
+    ).toBeVisible();
+    await expect(catalog).toBeVisible();
+    await initialCustomMenu
+      .getByRole("menuitem", { name: `Modifier ${customName}` })
       .click();
     const editForm = page.getByRole("dialog", {
       name: "Modifier un exercice personnalisé",
@@ -558,33 +645,38 @@ for (const width of [320, 390]) {
     await editForm.getByRole("button", { name: "Enregistrer" }).click();
     await search.fill(renamedCustomName);
     await expect(
-      catalog.getByRole("button", { name: `Modifier ${renamedCustomName}` }),
+      catalog.getByRole("heading", { name: "Catalogue" }),
+    ).toHaveCount(0);
+    await expect(
+      catalog.getByRole("button", { name: `Options ${renamedCustomName}` }),
     ).toBeVisible();
 
-    await catalog
-      .getByRole("button", { name: `Supprimer ${renamedCustomName}` })
+    let customMenu = await openCustomActions(page, renamedCustomName);
+    await customMenu
+      .getByRole("menuitem", { name: `Supprimer ${renamedCustomName}` })
       .click();
     const confirmation = page.getByRole("alertdialog", {
       name: "Supprimer cet exercice personnalisé ?",
     });
     await confirmation.getByRole("button", { name: "Annuler" }).click();
     await expect(
-      catalog.getByRole("button", { name: `Supprimer ${renamedCustomName}` }),
+      catalog.getByRole("button", { name: `Options ${renamedCustomName}` }),
     ).toBeVisible();
-    await catalog
-      .getByRole("button", { name: `Supprimer ${renamedCustomName}` })
+    customMenu = await openCustomActions(page, renamedCustomName);
+    await customMenu
+      .getByRole("menuitem", { name: `Supprimer ${renamedCustomName}` })
       .click();
     await confirmation.getByRole("button", { name: "Supprimer" }).click();
     await expect(
-      catalog.getByRole("button", { name: `Supprimer ${renamedCustomName}` }),
+      catalog.getByRole("button", { name: `Options ${renamedCustomName}` }),
     ).toHaveCount(0);
 
     await search.fill("Bench press");
     const official = catalog
-      .getByRole("listitem")
+      .locator(".catalog-section-list li")
       .filter({ hasText: officialName });
     await expect(
-      official.getByRole("button", { name: /Supprimer/ }),
+      official.getByRole("button", { name: /Options|Modifier|Supprimer/ }),
     ).toHaveCount(0);
     await addResult(page, officialName);
     await expect(
@@ -676,9 +768,10 @@ for (const width of [320, 390]) {
         ?.muscleTargets,
     ).toEqual(targets);
 
-    const editCatalog = await openCatalog(page);
-    await editCatalog
-      .getByRole("button", { name: "Modifier Press multi-muscles" })
+    await openCatalog(page);
+    const multiMenu = await openCustomActions(page, "Press multi-muscles");
+    await multiMenu
+      .getByRole("menuitem", { name: "Modifier Press multi-muscles" })
       .click();
     const edit = page.getByRole("dialog", {
       name: "Modifier un exercice personnalisé",

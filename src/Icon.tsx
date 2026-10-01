@@ -22,9 +22,16 @@ type IconName =
   | "trophy"
   | "edit"
   | "file-text"
-  | "chevron-right";
+  | "chevron-right"
+  | "search";
 
 const paths: Record<IconName, ReactElement> = {
+  search: (
+    <>
+      <circle cx="10.8" cy="10.8" r="6.3" />
+      <path d="m16 16 4.2 4.2" />
+    </>
+  ),
   "arrow-left": <path d="m15 18-6-6 6-6" />,
   plus: (
     <>

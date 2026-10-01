@@ -217,6 +217,8 @@ La correction capture un timestamp unique dans `startRest`, synchronise immédia
 
 La sélection catalogue distingue explicitement l’ajout et le remplacement. En préparation, remplacer un officiel conserve l’occurrence, sa position, ses séries et leurs repos, et efface ses anciennes charges/répétitions et notes. Modifier une définition custom propage son nom et son snapshot vers les occurrences de tous les templates, sans réécrire les sessions historiques. Les exercices officiels portent aussi un identifiant d’illustration local optionnel ; l’icône haltère reste le fallback jusqu’à une passe dédiée aux assets et licences.
 
+Le catalogue présente désormais les exercices personnels et officiels dans deux sections filtrées indépendamment par la même recherche. Chaque résultat réserve un emplacement visuel réutilisable avec l’icône haltère en fallback ; les assets réels restent reportés à une passe dédiée aux illustrations et licences.
+
 ### Étapes futures
 
 La passe active est l’issue #59 sur le catalogue local. Les autres axes ci-dessous restent futurs; aucun ordre après cette

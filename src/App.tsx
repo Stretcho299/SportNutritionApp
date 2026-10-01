@@ -103,6 +103,7 @@ export default function App() {
   const [catalogQuery, setCatalogQuery] = useState("");
   const [catalogMuscle, setCatalogMuscle] = useState<MuscleGroup | "">("");
   const [catalogEquipment, setCatalogEquipment] = useState<Equipment | "">("");
+  const [customMenuId, setCustomMenuId] = useState<string | null>(null);
   const [customMuscle, setCustomMuscle] = useState<MuscleTarget>(
     defaultMuscleTargetForGroup.pectoraux,
   );
@@ -225,6 +226,12 @@ export default function App() {
       muscleGroup: catalogMuscle || undefined,
       equipment: catalogEquipment || undefined,
     },
+  );
+  const customCatalogResults = catalogResults.filter(
+    (definition) => definition.source === "custom",
+  );
+  const officialCatalogResults = catalogResults.filter(
+    (definition) => definition.source === "official",
   );
   const openCatalog = (
     mode: "add" | "replace" = "add",
@@ -1813,8 +1820,11 @@ export default function App() {
                 ? "Changer l’exercice"
                 : "Ajouter un exercice"}
             </h2>
-            <label>
+            <label className="catalog-search-label">
               Rechercher
+              <span className="catalog-search-icon">
+                <Icon name="search" size={17} />
+              </span>
               <input
                 aria-label="Rechercher un exercice"
                 type="search"
@@ -1834,7 +1844,7 @@ export default function App() {
                     setCatalogMuscle(event.target.value as MuscleGroup | "")
                   }
                 >
-                  <option value="">Tous</option>
+                  <option value="">Tous les muscles</option>
                   {Object.entries(muscleGroupLabels).map(([value, label]) => (
                     <option key={value} value={value}>
                       {label}
@@ -1852,7 +1862,7 @@ export default function App() {
                     setCatalogEquipment(event.target.value as Equipment | "")
                   }
                 >
-                  <option value="">Tous</option>
+                  <option value="">Tout le matériel</option>
                   {Object.entries(equipmentLabels).map(([value, label]) => (
                     <option key={value} value={value}>
                       {label}
@@ -1861,47 +1871,129 @@ export default function App() {
                 </select>
               </label>
             </div>
-            <p className="catalog-count">{catalogResults.length} exercices</p>
             <ul className="catalog-results" aria-label="Résultats du catalogue">
-              {catalogResults.map((definition) => (
-                <li key={definition.id}>
-                  <button
-                    type="button"
-                    className="catalog-result"
-                    onClick={() => selectDefinition(definition)}
-                  >
-                    <strong>{definition.name}</strong>
-                    <small>
-                      {definition.muscleTargets
-                        .filter((target) => target.role === "primary")
-                        .map((target) => muscleTargetLabels[target.muscle])
-                        .join(", ")}{" "}
-                      ·{" "}
-                      {definition.equipment
-                        .map((equipment) => equipmentLabels[equipment])
-                        .join(", ") || "Sans matériel"}
-                    </small>
-                  </button>
-                  {definition.source === "custom" && (
-                    <div className="catalog-actions">
-                      <button
-                        type="button"
-                        aria-label={`Modifier ${definition.name}`}
-                        onClick={() => openCustomForm(definition)}
-                      >
-                        Modifier
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={`Supprimer ${definition.name}`}
-                        onClick={() => requestCustomDeletion(definition)}
-                      >
-                        Supprimer
-                      </button>
+              {[
+                { title: "Mes exercices", items: customCatalogResults },
+                { title: "Catalogue", items: officialCatalogResults },
+              ]
+                .filter((section) => section.items.length > 0)
+                .map((section) => (
+                  <li className="catalog-section" key={section.title}>
+                    <div className="catalog-section-heading">
+                      <h3>{section.title}</h3>
+                      <span>{section.items.length}</span>
                     </div>
-                  )}
-                </li>
-              ))}
+                    <ul className="catalog-section-list">
+                      {section.items.map((definition) => (
+                        <li key={definition.id}>
+                          <div className="catalog-card">
+                            <button
+                              type="button"
+                              className="catalog-result"
+                              aria-label={`${definition.name}, ${definition.muscleTargets
+                                .filter((target) => target.role === "primary")
+                                .map(
+                                  (target) => muscleTargetLabels[target.muscle],
+                                )
+                                .join(", ")} · ${
+                                definition.equipment
+                                  .map(
+                                    (equipment) => equipmentLabels[equipment],
+                                  )
+                                  .join(", ") || "Sans matériel"
+                              }`}
+                              onClick={() => selectDefinition(definition)}
+                            >
+                              <span
+                                className="catalog-exercise-visual"
+                                data-illustration-id={definition.illustrationId}
+                                aria-hidden="true"
+                              >
+                                <Icon name="dumbbell" size={24} />
+                              </span>
+                              <span className="catalog-result-copy">
+                                <strong>{definition.name}</strong>
+                                <small>
+                                  {definition.muscleTargets
+                                    .filter(
+                                      (target) => target.role === "primary",
+                                    )
+                                    .map(
+                                      (target) =>
+                                        muscleTargetLabels[target.muscle],
+                                    )
+                                    .join(", ")}{" "}
+                                  ·{" "}
+                                  {definition.equipment
+                                    .map(
+                                      (equipment) => equipmentLabels[equipment],
+                                    )
+                                    .join(", ") || "Sans matériel"}
+                                </small>
+                              </span>
+                            </button>
+                            {definition.source === "custom" && (
+                              <div
+                                className="catalog-custom-menu-wrap"
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                <button
+                                  type="button"
+                                  className="catalog-custom-menu-trigger"
+                                  aria-label={`Options ${definition.name}`}
+                                  aria-haspopup="menu"
+                                  aria-expanded={customMenuId === definition.id}
+                                  onClick={() =>
+                                    setCustomMenuId((current) =>
+                                      current === definition.id
+                                        ? null
+                                        : definition.id,
+                                    )
+                                  }
+                                >
+                                  <Icon name="more" size={19} />
+                                </button>
+                                {customMenuId === definition.id && (
+                                  <div
+                                    className="catalog-custom-menu"
+                                    role="menu"
+                                    aria-label={`Actions ${definition.name}`}
+                                  >
+                                    <button
+                                      type="button"
+                                      role="menuitem"
+                                      aria-label={`Modifier ${definition.name}`}
+                                      onClick={() => {
+                                        setCustomMenuId(null);
+                                        openCustomForm(definition);
+                                      }}
+                                    >
+                                      Modifier
+                                    </button>
+                                    <button
+                                      type="button"
+                                      role="menuitem"
+                                      aria-label={`Supprimer ${definition.name}`}
+                                      onClick={() => {
+                                        setCustomMenuId(null);
+                                        requestCustomDeletion(definition);
+                                      }}
+                                    >
+                                      Supprimer
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              {catalogResults.length === 0 && (
+                <li className="catalog-empty">Aucun exercice trouvé</li>
+              )}
             </ul>
             <button
               type="button"
