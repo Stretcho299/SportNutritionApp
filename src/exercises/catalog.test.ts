@@ -45,6 +45,44 @@ describe("local exercise catalog", () => {
     );
   });
 
+  it("keeps multiple secondary targets on obvious compound movements", () => {
+    const bench = officialExercises.find(
+      (exercise) => exercise.id === "official:bench-press-barbell",
+    );
+    expect(bench?.muscleTargets).toEqual([
+      { muscle: "grand_pectoral", role: "primary" },
+      { muscle: "triceps", role: "secondary" },
+      { muscle: "deltoide_anterieur", role: "secondary" },
+    ]);
+    expect(validateCatalog(officialExercises)).toEqual([]);
+  });
+
+  it("rejects repeated targets and more than one primary", () => {
+    const bench = officialExercises[0];
+    expect(
+      validateCatalog([
+        {
+          ...bench,
+          muscleTargets: [
+            ...bench.muscleTargets,
+            { muscle: "triceps", role: "secondary" },
+          ],
+        },
+      ]),
+    ).toContain(`Muscle répété : ${bench.id}`);
+    expect(
+      validateCatalog([
+        {
+          ...bench,
+          muscleTargets: [
+            ...bench.muscleTargets,
+            { muscle: "biceps", role: "primary" },
+          ],
+        },
+      ]),
+    ).toContain(`Un seul muscle principal requis : ${bench.id}`);
+  });
+
   it("searches names and aliases without accent or case sensitivity", () => {
     expect(
       searchExercises(officialExercises, { query: "developpe couche" }).length,
@@ -104,6 +142,44 @@ describe("custom exercise definitions", () => {
     expect(() =>
       createCustomExercise({ name: "X", primaryMuscle: "" as "biceps" }),
     ).toThrow();
+  });
+
+  it("deduplicates several custom secondaries and excludes the primary", () => {
+    const custom = createCustomExercise({
+      name: "Press personnel",
+      primaryMuscle: "grand_pectoral",
+      secondaryMuscles: [
+        "triceps",
+        "deltoide_anterieur",
+        "triceps",
+        "grand_pectoral",
+      ],
+    });
+    expect(custom.muscleTargets).toEqual([
+      { muscle: "grand_pectoral", role: "primary" },
+      { muscle: "triceps", role: "secondary" },
+      { muscle: "deltoide_anterieur", role: "secondary" },
+    ]);
+    expect(custom.muscleGroups).toEqual(["pectoraux", "bras", "epaules"]);
+    expect(validateCatalog([custom])).toEqual([]);
+  });
+
+  it("preserves multiple secondaries on update and removes a new primary from them", () => {
+    const custom = createCustomExercise({
+      name: "Press personnel",
+      primaryMuscle: "grand_pectoral",
+      secondaryMuscles: ["triceps", "deltoide_anterieur"],
+    });
+    const renamed = updateCustomExercise(custom, { name: "Press modifié" });
+    expect(renamed.muscleTargets).toEqual(custom.muscleTargets);
+    const changedPrimary = updateCustomExercise(renamed, {
+      primaryMuscle: "triceps",
+    });
+    expect(changedPrimary.muscleTargets).toEqual([
+      { muscle: "triceps", role: "primary" },
+      { muscle: "deltoide_anterieur", role: "secondary" },
+    ]);
+    expect(validateCatalog([changedPrimary])).toEqual([]);
   });
 
   it("updates details while preserving ID and refusing official edits", () => {

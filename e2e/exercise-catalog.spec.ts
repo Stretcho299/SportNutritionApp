@@ -18,6 +18,7 @@ type StoredExercise = {
 type StoredWorkouts = {
   templates: Array<{ exercises: StoredExercise[] }>;
   sessions: Array<{ snapshot: { exercises: StoredExercise[] } }>;
+  customDefinitions: Array<{ name: string; muscleTargets: unknown[] }>;
 };
 
 async function readWorkouts(page: Page): Promise<StoredWorkouts> {
@@ -259,6 +260,73 @@ for (const width of [320, 390]) {
     expect(snapshot?.definitionSnapshot?.muscleTargets).toEqual([
       { muscle: "quadriceps", role: "primary" },
     ]);
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test(`custom exercise stores several secondary muscles at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await prepareEmptyWorkout(page);
+    const catalog = page.getByRole("dialog", { name: "Catalogue d’exercices" });
+    await catalog
+      .getByRole("button", { name: "+ Créer un exercice personnalisé" })
+      .click();
+    const form = page.getByRole("dialog", {
+      name: "Créer un exercice personnalisé",
+    });
+    await form
+      .getByRole("textbox", { name: "Nom" })
+      .fill("Press multi-muscles");
+    await form
+      .getByRole("combobox", { name: "Muscle principal" })
+      .selectOption("grand_pectoral");
+    await form.getByText("Muscles secondaires (0)").click();
+    const choices = form.getByRole("group", { name: "Muscles secondaires" });
+    await choices.getByRole("checkbox", { name: "Triceps" }).check();
+    await choices.getByRole("checkbox", { name: "Deltoïde antérieur" }).check();
+    await expect(form.getByText("Muscles secondaires (2)")).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    await form.getByRole("button", { name: "Enregistrer" }).click();
+    await page
+      .getByRole("dialog", { name: "Exercice" })
+      .getByRole("button", { name: "Enregistrer" })
+      .click();
+    const targets = [
+      { muscle: "grand_pectoral", role: "primary" },
+      { muscle: "triceps", role: "secondary" },
+      { muscle: "deltoide_anterieur", role: "secondary" },
+    ];
+    await expect
+      .poll(
+        async () =>
+          (await readWorkouts(page)).customDefinitions[0]?.muscleTargets,
+      )
+      .toEqual(targets);
+    expect(
+      (await readWorkouts(page)).templates[0].exercises[0].definitionSnapshot
+        ?.muscleTargets,
+    ).toEqual(targets);
+
+    const editCatalog = await openCatalog(page);
+    await editCatalog
+      .getByRole("button", { name: "Modifier Press multi-muscles" })
+      .click();
+    const edit = page.getByRole("dialog", {
+      name: "Modifier un exercice personnalisé",
+    });
+    await edit.getByText("Muscles secondaires (2)").click();
+    await expect(edit.getByRole("checkbox", { name: "Triceps" })).toBeChecked();
+    await expect(
+      edit.getByRole("checkbox", { name: "Deltoïde antérieur" }),
+    ).toBeChecked();
+    await edit
+      .getByRole("combobox", { name: "Muscle principal" })
+      .selectOption("triceps");
+    await expect(edit.getByText("Muscles secondaires (1)")).toBeVisible();
+    await expect(edit.getByRole("checkbox", { name: "Triceps" })).toHaveCount(
+      0,
+    );
     await expectNoHorizontalOverflow(page);
   });
 }

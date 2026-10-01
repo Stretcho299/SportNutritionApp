@@ -23,12 +23,11 @@ implémentée dans l’application. Les spikes Ciqual et Open Food Facts dans
 ## Baseline stable
 
 - Branche stable : `main`.
-- État : `main` inclut les passes #57 et #58, au 1er octobre 2026.
+- État : l’issue #57 est fermée et la PR #58 est mergée dans `main`, au 1er octobre 2026.
 - Commit de référence : `99c2a5230914818741da5d0e96528eef84af1806`.
-- CI de référence : Web CI #105 réussie sur la PR #56. Le job Ubuntu / Node 20 exécute format, lint, Vitest et build; il ne lance pas Playwright.
-- Référence Vitest après #56 : 125 tests passent. `npm run lint` conserve un avertissement Fast Refresh préexistant dans `src/OrientationGuard.tsx`, sans erreur.
-- Validation Playwright rapportée pour #56 : E2E ciblés Chromium et WebKit réussis. La suite complète termine à 132/134; les deux échecs étaient des crashes de cible WebKit hors timer, et chacun a réussi au rejeu isolé sans changement de timeout.
-- Validation physique iPhone de #56 : validée par l’utilisateur. La réserve acceptée est que, sur le cas artificiel de 2 secondes, le cercle de repos ne se ferme pas complètement et la première décrémentation visible survient après environ une seconde; aucun défaut gênant n’a été observé sur des repos réalistes.
+- CI de référence : Web CI post-merge #110 réussie sur ce commit. Le job Ubuntu / Node 20 exécute format, lint, Vitest et build; il ne lance pas Playwright.
+- Référence Vitest de la PR #58 : 127/127. `npm run lint` conserve un avertissement Fast Refresh préexistant dans `src/OrientationGuard.tsx`, sans erreur.
+- Validation Playwright de la PR #58 : scénarios ciblés mouvement Chromium et WebKit 12/12 à 320 et 390 px. La suite complète n’a pas été relancée pour son dernier diff ; le run précédent était à 143/146, les cas restants ayant réussi au rejeu documenté.
 
 ## Stack et points d’entrée
 
@@ -210,7 +209,7 @@ La [PR #54](https://github.com/Stretcho299/SportNutritionApp/pull/54) a été fe
 
 [Issue #55 — synchroniser le compte à rebours du repos au démarrage](https://github.com/Stretcho299/SportNutritionApp/issues/55) est **livrée** dans `main` via la [PR #56](https://github.com/Stretcho299/SportNutritionApp/pull/56), merge `8d73232a18f45f8049ac10f019142a89fb0dcccf`. Le bug avait été observé physiquement sur iPhone avec un repos de 2 secondes : l’affichage pouvait commencer à 3, puis passer à 2 et 1 avant la fin. `Math.ceil` n’était pas intrinsèquement fautif : le `clock` d’affichage pouvait être ancien de plusieurs centaines de millisecondes lorsque `restEndsAt` était créé au clic, ce qui faisait calculer plus que la durée réellement restante.
 
-La correction capture un timestamp unique dans `startRest`, synchronise immédiatement le `clock` avec lui et transmet ce même instant à `startExecutedSetRest`, qui conserve la deadline absolue persistée `restEndsAt`. La durée réelle et la transition à l’échéance restent inchangées. Les resynchronisations foreground, `pageshow`, `visibilitychange`, le verrouillage, le reload et la reprise continuent de s’appuyer sur la deadline persistée existante. Vitest passe 125/125; les scénarios E2E du compteur et de persistance/reload passent dans Chromium et WebKit. La validation physique iPhone est terminée et acceptée, avec la réserve de 2 secondes décrite ci-dessus.
+La correction capture un timestamp unique dans `startRest`, synchronise immédiatement le `clock` avec lui et transmet ce même instant à `startExecutedSetRest`, qui conserve la deadline absolue persistée `restEndsAt`. La durée réelle et la transition à l’échéance restent inchangées. Les resynchronisations foreground, `pageshow`, `visibilitychange`, le verrouillage, le reload et la reprise continuent de s’appuyer sur la deadline persistée existante. La Web CI #105 sur la PR #56 réussit, Vitest passe 125/125 et les scénarios E2E ciblés du compteur et de persistance/reload passent dans Chromium et WebKit. La suite complète #56 termine à 132/134 : deux crashes de cible WebKit hors timer réussissent chacun au rejeu isolé sans changement de timeout. La validation physique iPhone est terminée et acceptée, avec la réserve de 2 secondes décrite ci-dessus.
 
 [Issue #57 — unifier le mouvement des écrans et la continuité visuelle](https://github.com/Stretcho299/SportNutritionApp/issues/57) et #58 sont livrées dans `main@99c2a5230914818741da5d0e96528eef84af1806`.
 

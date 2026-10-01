@@ -96,7 +96,9 @@ export default function App() {
   const [customMuscle, setCustomMuscle] = useState<MuscleTarget>(
     defaultMuscleTargetForGroup.pectoraux,
   );
-  const [customSecondary, setCustomSecondary] = useState<MuscleTarget | "">("");
+  const [customSecondaries, setCustomSecondaries] = useState<MuscleTarget[]>(
+    [],
+  );
   const [customEquipment, setCustomEquipment] = useState<Equipment | "">("");
   const [completedTemplateIds, setCompletedTemplateIds] = useState<string[]>(
     [],
@@ -220,9 +222,10 @@ export default function App() {
       definition?.muscleTargets.find((target) => target.role === "primary")
         ?.muscle ?? defaultMuscleTargetForGroup.pectoraux,
     );
-    setCustomSecondary(
-      definition?.muscleTargets.find((target) => target.role === "secondary")
-        ?.muscle ?? "",
+    setCustomSecondaries(
+      definition?.muscleTargets
+        .filter((target) => target.role === "secondary")
+        .map((target) => target.muscle) ?? [],
     );
     setCustomEquipment(definition?.equipment[0] ?? "");
     setDialog(definition ? "editCustomExercise" : "customExercise");
@@ -520,10 +523,7 @@ export default function App() {
       const input = {
         name: name.trim(),
         primaryMuscle: customMuscle,
-        secondaryMuscles:
-          customSecondary && customSecondary !== customMuscle
-            ? [customSecondary]
-            : [],
+        secondaryMuscles: customSecondaries,
         equipment: customEquipment ? [customEquipment] : [],
       };
       const definition =
@@ -1854,9 +1854,13 @@ export default function App() {
               <select
                 aria-label="Muscle principal"
                 value={customMuscle}
-                onChange={(event) =>
-                  setCustomMuscle(event.target.value as MuscleTarget)
-                }
+                onChange={(event) => {
+                  const nextPrimary = event.target.value as MuscleTarget;
+                  setCustomMuscle(nextPrimary);
+                  setCustomSecondaries((current) =>
+                    current.filter((muscle) => muscle !== nextPrimary),
+                  );
+                }}
                 required
               >
                 {Object.entries(muscleTargetLabels).map(([value, label]) => (
@@ -1872,23 +1876,38 @@ export default function App() {
                 ))}
               </select>
             </label>
-            <label>
-              Muscle secondaire
-              <select
-                aria-label="Muscle secondaire"
-                value={customSecondary}
-                onChange={(event) =>
-                  setCustomSecondary(event.target.value as MuscleTarget | "")
-                }
+            <details className="custom-secondary-picker">
+              <summary>
+                Muscles secondaires ({customSecondaries.length})
+              </summary>
+              <div
+                className="custom-secondary-options"
+                role="group"
+                aria-label="Muscles secondaires"
               >
-                <option value="">Aucun</option>
-                {Object.entries(muscleTargetLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
+                {Object.entries(muscleTargetLabels)
+                  .filter(([value]) => value !== customMuscle)
+                  .map(([value, label]) => {
+                    const muscle = value as MuscleTarget;
+                    return (
+                      <label key={muscle}>
+                        <input
+                          type="checkbox"
+                          checked={customSecondaries.includes(muscle)}
+                          onChange={(event) =>
+                            setCustomSecondaries((current) =>
+                              event.target.checked
+                                ? [...new Set([...current, muscle])]
+                                : current.filter((item) => item !== muscle),
+                            )
+                          }
+                        />
+                        <span>{label}</span>
+                      </label>
+                    );
+                  })}
+              </div>
+            </details>
             <label>
               Matériel
               <select
