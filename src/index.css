@@ -21,22 +21,7 @@
     sans-serif;
   color: var(--text);
   background: var(--background);
-  color-scheme: dark;
   font-synthesis: none;
-  --background: #101012;
-  --surface: #1c1b1e;
-  --surface-raised: #27262a;
-  --surface-inset: #141316;
-  --line: #3e3b40;
-  --text: #f5f1ef;
-  --muted: #b7b0ae;
-  --accent: #ff5708;
-  --accent-soft: #ffb77f;
-  --accent-ink: #351000;
-  --success: #a8d8ba;
-  --danger: #ff5258;
-  --danger-soft: #351719;
-  --danger-border: #8c3035;
   --radius: 16px;
   --display: "Bebas Neue", "Arial Narrow", sans-serif;
 }
