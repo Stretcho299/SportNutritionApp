@@ -46,6 +46,15 @@ async function saveSheet(page: Page, title: string, expectedName: string) {
   await expect(sheet).toHaveCount(0);
 }
 
+async function saveExerciseSheet(page: Page, expectedName: string) {
+  const sheet = page.getByRole("dialog", { name: "Exercice" });
+  await expect(
+    sheet.getByRole("region", { name: "Exercice sélectionné" }),
+  ).toContainText(expectedName);
+  await sheet.getByRole("button", { name: "Enregistrer", exact: true }).click();
+  await expect(sheet).toHaveCount(0);
+}
+
 async function dragDismissSheet(page: Page) {
   const handle = page.getByRole("button", { name: "Fermer le panneau" });
   await handle.scrollIntoViewIfNeeded();
@@ -82,7 +91,7 @@ async function addExercise(page: Page, name: string, count = "1", rest = 30) {
   await openCustomExercise(page, name);
   await chooseValue(page, "Nombre de séries initiales", Number(count));
   await chooseValue(page, "Repos par défaut", rest);
-  await saveSheet(page, "Exercice", name);
+  await saveExerciseSheet(page, name);
 }
 
 async function expectPickerSave(picker: Locator) {
@@ -259,7 +268,7 @@ test("keeps exercise options distinct and reachable beside finish at phone width
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 844 });
     const options = page.getByRole("button", {
-      name: "Modifier l’exercice",
+      name: "Changer l’exercice",
     });
     const finish = page.getByRole("button", { name: "Terminer l’exercice" });
     await expect(options).toBeVisible();
@@ -294,13 +303,15 @@ test("keeps exercise options distinct and reachable beside finish at phone width
     expect(geometry.overlap).toBe(false);
   }
 
-  await page.getByRole("button", { name: "Modifier l’exercice" }).click();
-  await expect(page.getByRole("dialog", { name: "Exercice" })).toBeVisible();
-  await saveSheet(
-    page,
-    "Exercice",
-    "Développé incliné avec haltères et prise neutre",
-  );
+  await page.getByRole("button", { name: "Changer l’exercice" }).click();
+  const replacementCatalog = page.getByRole("dialog", {
+    name: "Changer l’exercice",
+  });
+  await expect(replacementCatalog).toBeVisible();
+  await replacementCatalog
+    .getByRole("button", { name: "Fermer le panneau" })
+    .press("Enter");
+  await expect(replacementCatalog).toHaveCount(0);
   await page.getByRole("button", { name: "Terminer l’exercice" }).click();
   await expect(
     page.getByRole("alertdialog", { name: "Mettre fin à cet exercice ?" }),
