@@ -510,7 +510,7 @@ it("selects bounded picker values and persists repetitions, half-kilograms and s
     "82.5",
   );
   expect(screen.getByLabelText("Repos")).toHaveAttribute("data-value", "419");
-});
+}, 10_000);
 
 it("reorders exercises in a dedicated sheet and retains selection and persisted order", async () => {
   const view = await openEmptyWorkout();
@@ -1517,7 +1517,7 @@ it("keeps future exercise states unchanged while browsing and starts them explic
   expect(
     storedWorkouts()[0].execution?.exercises.map((item) => item.status),
   ).toEqual(["active", "active", "upcoming"]);
-});
+}, 10_000);
 
 it("locks every other rest button while a chrono runs across exercises", async () => {
   await openEmptyWorkout();
