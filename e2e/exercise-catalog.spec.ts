@@ -421,8 +421,13 @@ for (const width of [320, 390]) {
     ).toBeVisible();
     await expect(catalog.getByRole("heading", { name: "Exercices" })).toHaveCSS(
       "font-size",
-      "18px",
+      "36px",
     );
+    expect(
+      await catalog
+        .getByRole("heading", { name: "Exercices" })
+        .evaluate((element) => element.scrollWidth <= element.clientWidth),
+    ).toBe(true);
     await expect(catalog.locator(".catalog-section-heading")).toHaveCount(0);
     await expect(catalog.locator(".catalog-section")).toHaveCount(0);
     await expect(
@@ -641,7 +646,7 @@ for (const width of [320, 390]) {
       name: "Changer l’exercice",
     });
     await expect(heading).toBeVisible();
-    await expect(heading).toHaveCSS("font-size", "18px");
+    await expect(heading).toHaveCSS("font-size", "36px");
     expect(
       await heading.evaluate(
         (element) => element.scrollWidth <= element.clientWidth,
