@@ -1,0 +1,96 @@
+import { readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+
+const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const readSource = (path: string) =>
+  readFileSync(join(projectRoot, path), "utf8");
+const appCss = readSource("src/App.css");
+const indexCss = readSource("src/index.css");
+const entrySource = readSource("src/main.tsx");
+const redesignCss = readSource("src/redesign-v2.css");
+const themeCss = readSource("src/theme.css");
+const componentCss = [indexCss, appCss, redesignCss];
+const themeTokens = [...themeCss.matchAll(/^\s*(--[\w-]+):/gm)].map(
+  (match) => match[1],
+);
+
+function tokenValue(token: string) {
+  return themeCss.match(new RegExp(`${token}:\\s*([^;]+);`))?.[1].trim();
+}
+
+function isOrangeAccent(hex: string) {
+  let digits = hex.slice(1);
+  if (digits.length === 3 || digits.length === 4)
+    digits = [...digits.slice(0, 3)].map((part) => part + part).join("");
+  if (digits.length !== 6 && digits.length !== 8) return false;
+
+  const [red, green, blue] = [0, 2, 4].map(
+    (index) => Number.parseInt(digits.slice(index, index + 2), 16) / 255,
+  );
+  const max = Math.max(red, green, blue);
+  const min = Math.min(red, green, blue);
+  const lightness = (max + min) / 2;
+  const delta = max - min;
+  if (delta === 0) return false;
+
+  let hue: number;
+  if (max === red) hue = ((green - blue) / delta) % 6;
+  else if (max === green) hue = (blue - red) / delta + 2;
+  else hue = (red - green) / delta + 4;
+  hue = (((hue * 60) % 360) + 360) % 360;
+  const saturation = delta / (1 - Math.abs(2 * lightness - 1));
+  return hue >= 8 && hue <= 42 && saturation > 0.45 && lightness > 0.28;
+}
+
+describe("semantic theme token contract", () => {
+  it("keeps the shared palette in one source imported before component styles", () => {
+    const required = [
+      "--background",
+      "--surface",
+      "--surface-raised",
+      "--surface-inset",
+      "--line",
+      "--text",
+      "--muted",
+      "--accent",
+      "--accent-soft",
+      "--accent-ink",
+      "--success",
+      "--danger",
+      "--danger-soft",
+      "--danger-border",
+    ];
+
+    expect(new Set(themeTokens).size).toBe(themeTokens.length);
+    for (const token of [...required, ...themeTokens]) {
+      expect(themeCss.match(new RegExp(`${token}:`, "g"))).toHaveLength(1);
+      for (const css of componentCss)
+        expect(css).not.toMatch(new RegExp(`${token}\\s*:`));
+    }
+
+    const themeImport = entrySource.indexOf('import "./theme.css";');
+    const baseImport = entrySource.indexOf('import "./index.css";');
+    const appImport = entrySource.indexOf('import App from "./App";');
+    expect(themeImport).toBeGreaterThanOrEqual(0);
+    expect(entrySource.match(/import "\.\/theme\.css";/g)).toHaveLength(1);
+    expect(themeImport).toBeLessThan(baseImport);
+    expect(baseImport).toBeLessThan(appImport);
+  });
+
+  it("keeps danger and success independent from the accent", () => {
+    expect(tokenValue("--danger")).toBe("#ff5258");
+    expect(tokenValue("--danger-soft")).toBe("#351719");
+    expect(tokenValue("--danger-border")).toBe("#8c3035");
+    expect(tokenValue("--success")).toBe("#55e68b");
+    expect(themeCss).not.toMatch(/--(?:danger|success):\s*var\(--accent\)/);
+  });
+
+  it("keeps orange accent literals in the palette source", () => {
+    for (const css of componentCss) {
+      const colors = css.match(/#[\da-fA-F]{3,8}\b/g) ?? [];
+      expect(colors.filter(isOrangeAccent)).toEqual([]);
+    }
+  });
+});

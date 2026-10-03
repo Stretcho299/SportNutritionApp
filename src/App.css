@@ -4,7 +4,11 @@
   margin: auto;
   padding: calc(12px + env(safe-area-inset-top)) 16px
     calc(64px + env(safe-area-inset-bottom));
-  background: radial-gradient(ellipse at 100% 0, #ff57080d, transparent 340px);
+  background: radial-gradient(
+    ellipse at 100% 0,
+    var(--accent-surface-subtle),
+    transparent 340px
+  );
 }
 .workout-control {
   display: grid;
@@ -86,7 +90,7 @@
   color: var(--accent-ink);
   font-weight: 800;
   font-size: 14px;
-  box-shadow: 0 4px 20px #ff570819;
+  box-shadow: 0 4px 20px var(--accent-surface);
 }
 .primary:active {
   filter: brightness(0.9);
@@ -129,7 +133,7 @@
   height: 100%;
   border: 0;
   background: var(--danger);
-  color: #1b090b;
+  color: var(--danger-ink);
   font-weight: 800;
 }
 .workout-card {
@@ -162,7 +166,7 @@
   display: inline-block;
   border-radius: 5px;
   padding: 3px 6px;
-  background: #ffffff09;
+  background: var(--chrome-highlight-soft);
   color: var(--muted);
   font-size: 9px;
   font-weight: 800;
@@ -172,11 +176,11 @@
 .workout-badge.inProgress,
 .workout-badge.readyToFinish {
   color: var(--accent-soft);
-  background: #ff570818;
+  background: var(--accent-surface);
 }
 .workout-badge.completed {
   color: var(--success);
-  background: #a8d8ba0e;
+  background: var(--success-wash-soft);
 }
 .row-arrow {
   position: absolute;
@@ -270,13 +274,13 @@
 .execution-active .exercise-tab-circle {
   border-color: var(--accent);
   color: var(--accent);
-  background: #392218;
-  box-shadow: 0 0 12px #ff570822;
+  background: var(--accent-deep-surface);
+  box-shadow: 0 0 12px var(--accent-glow);
 }
 .execution-completed .exercise-tab-circle {
   color: var(--success);
-  background: #223029;
-  border-color: #42624e;
+  background: var(--success-surface-selected);
+  border-color: var(--success-border-muted);
 }
 .exercise-tabs .selected .exercise-tab-circle {
   outline: 2px solid var(--accent-soft);
@@ -360,7 +364,11 @@
   padding: 10px 12px;
   margin-bottom: 8px;
   border-radius: 12px;
-  background: linear-gradient(110deg, #322017, var(--surface));
+  background: linear-gradient(
+    110deg,
+    var(--accent-deep-surface-strong),
+    var(--surface)
+  );
 }
 .progress-copy {
   flex: 1;
@@ -488,23 +496,27 @@ progress::-moz-progress-bar {
   font-size: 9px;
   font-weight: 800;
   color: var(--muted);
-  background: #ffffff08;
+  background: var(--chrome-highlight-soft);
 }
 .status-active,
 .status-resting {
   border-color: var(--accent);
-  background: linear-gradient(130deg, #33231b, var(--surface) 65%);
+  background: linear-gradient(
+    130deg,
+    var(--accent-deep-surface-strong),
+    var(--surface) 65%
+  );
   box-shadow:
     inset 3px 0 var(--accent),
-    0 3px 15px #ff57080b;
+    0 3px 15px var(--accent-surface-subtle);
 }
 .status-active .set-status,
 .status-resting .set-status {
   color: var(--accent-soft);
-  background: #ff570818;
+  background: var(--accent-surface);
 }
 .status-performed {
-  border-color: #3b5244;
+  border-color: var(--success-border-muted);
 }
 .status-performed .set-status {
   color: var(--success);
@@ -548,7 +560,7 @@ progress::-moz-progress-bar {
   min-width: 0;
   height: 46px;
   padding: 6px 8px;
-  border: 1px solid #514138;
+  border: 1px solid var(--accent-deep-border-muted);
   border-radius: 8px;
   background: var(--surface-inset);
   color: var(--text);
@@ -563,13 +575,13 @@ progress::-moz-progress-bar {
   margin: 0;
 }
 .set-field input::placeholder {
-  color: #847c77;
+  color: var(--muted);
 }
 .set-field input:disabled {
   opacity: 1;
   color: var(--muted);
   border-color: transparent;
-  background: #ffffff04;
+  background: var(--chrome-highlight-subtle);
   -webkit-text-fill-color: var(--muted);
 }
 .set-field input:invalid {
@@ -584,7 +596,7 @@ progress::-moz-progress-bar {
   min-width: 0;
   height: 46px;
   padding: 6px 8px;
-  border: 1px solid #514138;
+  border: 1px solid var(--accent-deep-border-muted);
   border-radius: 8px;
   background: var(--surface-inset);
   color: var(--text);
@@ -596,7 +608,7 @@ progress::-moz-progress-bar {
   opacity: 1;
   color: var(--muted);
   border-color: transparent;
-  background: #ffffff04;
+  background: var(--chrome-highlight-subtle);
 }
 .picker-trigger-chevron {
   color: var(--accent-soft);
@@ -617,11 +629,11 @@ progress::-moz-progress-bar {
   border-radius: 50%;
   background: var(--accent);
   color: var(--accent-ink);
-  box-shadow: 0 0 14px #ff57084d;
+  box-shadow: 0 0 14px var(--accent-glow-strong);
   font-size: 15px;
 }
 .rest-stop-button {
-  background: #4a261b;
+  background: var(--accent-deep-surface-strong);
   color: var(--accent-soft);
   border: 1px solid var(--accent);
   font-size: 13px;
@@ -668,7 +680,7 @@ progress::-moz-progress-bar {
 }
 .add-set {
   background: transparent;
-  border: 1px dashed #70513e;
+  border: 1px dashed var(--accent-deep-border);
   color: var(--accent-soft);
   box-shadow: none;
   margin-bottom: 0;
@@ -686,7 +698,7 @@ nav:not(.bottom-navigation) {
   gap: 8px;
   padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--line);
-  background: #141316f2;
+  background: var(--chrome-scrim-strong);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 }
@@ -706,7 +718,7 @@ nav:not(.bottom-navigation) button {
   letter-spacing: 0.08em;
 }
 nav:not(.bottom-navigation) button.active {
-  background: #ff570813;
+  background: var(--accent-surface-subtle);
   color: var(--accent-soft);
   box-shadow: inset 0 2px var(--accent);
 }
@@ -748,7 +760,7 @@ nav:not(.bottom-navigation) button.active {
   width: 32px;
   height: 3px;
   border-radius: 3px;
-  background: #716864;
+  background: var(--muted);
   margin: -8px auto 18px;
 }
 .modal h2 {
@@ -831,12 +843,16 @@ nav:not(.bottom-navigation) button.active {
 .confirmation-dialog {
   width: min(100%, 400px);
   padding: 24px 20px 20px;
-  border: 1px solid #654632;
+  border: 1px solid var(--accent-deep-border);
   border-radius: 22px;
-  background: linear-gradient(150deg, #29221f, var(--surface) 45%);
+  background: linear-gradient(
+    150deg,
+    var(--accent-deep-surface-strong),
+    var(--surface) 45%
+  );
   box-shadow:
     0 20px 80px #000b,
-    0 0 30px #ff570814;
+    0 0 30px var(--accent-surface-subtle);
 }
 .confirmation-mark {
   display: grid;
@@ -909,7 +925,11 @@ nav:not(.bottom-navigation) button.active {
   border: 1px solid var(--line);
   border-bottom: 0;
   border-radius: 24px 24px 0 0;
-  background: linear-gradient(160deg, #292321, var(--surface) 35%);
+  background: linear-gradient(
+    160deg,
+    var(--accent-deep-surface-strong),
+    var(--surface) 35%
+  );
   box-shadow: 0 -18px 60px #0009;
 }
 .picker-header {
@@ -1002,7 +1022,7 @@ nav:not(.bottom-navigation) button.active {
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: #8e8782;
+  color: var(--muted);
   font-family: var(--display);
   font-size: 24px;
   font-variant-numeric: tabular-nums;
@@ -1011,7 +1031,7 @@ nav:not(.bottom-navigation) button.active {
 .picker-wheel .picker-wheel-option[aria-selected="true"] {
   color: var(--accent-soft);
   font-size: 30px;
-  text-shadow: 0 0 16px #ff570844;
+  text-shadow: 0 0 16px var(--accent-glow-strong);
 }
 .picker-selection {
   position: absolute;
@@ -1019,9 +1039,9 @@ nav:not(.bottom-navigation) button.active {
   left: 4px;
   right: 4px;
   height: 44px;
-  border-top: 1px solid #ffb77f77;
-  border-bottom: 1px solid #ffb77f77;
-  background: #ff57080b;
+  border-top: 1px solid var(--accent-border-strong);
+  border-bottom: 1px solid var(--accent-border-strong);
+  background: var(--accent-surface-subtle);
   pointer-events: none;
 }
 .picker-fade {
@@ -1066,17 +1086,17 @@ nav:not(.bottom-navigation) button.active {
   align-items: center;
   gap: 8px;
   padding: 0 10px;
-  border: 1px solid #393940;
+  border: 1px solid var(--line-strong);
   border-radius: 999px !important;
-  background: #202025;
-  color: #c1c1c8;
+  background: var(--surface-soft);
+  color: var(--text-secondary);
   font-size: 11px !important;
   font-weight: 700;
 }
 .picker-following-toggle.is-enabled {
-  border-color: #ed784b88;
-  background: #ed784b1c;
-  color: #ffad8c;
+  border-color: var(--accent-border-strong);
+  background: var(--accent-surface);
+  color: var(--accent-contrast-soft);
 }
 .picker-following-indicator {
   position: relative;
@@ -1084,7 +1104,7 @@ nav:not(.bottom-navigation) button.active {
   height: 14px;
   flex: 0 0 24px;
   border-radius: 999px;
-  background: #55555e;
+  background: var(--surface-control-muted);
   transition: background-color 160ms ease;
 }
 .picker-following-indicator::after {
@@ -1094,18 +1114,18 @@ nav:not(.bottom-navigation) button.active {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #eeeef0;
+  background: var(--text);
   content: "";
   transition: transform 160ms ease;
 }
 .picker-following-toggle.is-enabled .picker-following-indicator {
-  background: #e9784d;
+  background: var(--accent-active);
 }
 .picker-following-toggle.is-enabled .picker-following-indicator::after {
   transform: translateX(10px);
 }
 .picker-following-control small {
-  color: #85858e;
+  color: var(--muted);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
@@ -1119,8 +1139,8 @@ nav:not(.bottom-navigation) button.active {
 .set-block {
   margin-bottom: 8px;
   padding: 11px 12px 10px;
-  border-color: #2b3038;
-  background: #17191d;
+  border-color: var(--line);
+  background: var(--surface-panel);
   transition:
     border-color 180ms ease,
     background-color 180ms ease,
@@ -1128,23 +1148,31 @@ nav:not(.bottom-navigation) button.active {
     transform 140ms ease;
 }
 .set-block.status-upcoming {
-  background: #15171b;
-  border-color: #262b33;
+  background: var(--surface-panel);
+  border-color: var(--line);
 }
 .set-block.status-active,
 .set-block.status-resting {
-  border-color: #ff8a5c;
-  background: linear-gradient(125deg, #30221d 0%, #1a1b1f 72%);
+  border-color: var(--accent-soft);
+  background: linear-gradient(
+    125deg,
+    var(--accent-deep-surface-strong) 0%,
+    var(--surface-raised) 72%
+  );
   box-shadow:
-    inset 3px 0 #ff7a45,
-    0 4px 16px #ff6a3214;
+    inset 3px 0 var(--accent-active),
+    0 4px 16px var(--accent-surface-subtle);
 }
 .set-block.status-performed {
-  border-color: #3f604c;
-  background: linear-gradient(125deg, #1b2722 0%, #171b1d 74%);
+  border-color: var(--success-border-muted);
+  background: linear-gradient(
+    125deg,
+    var(--success-surface-strong) 0%,
+    var(--surface-panel) 74%
+  );
 }
 .set-block h3 {
-  color: #f6f2ed;
+  color: var(--text);
   font-size: 24px;
   letter-spacing: 0.06em;
 }
@@ -1153,16 +1181,16 @@ nav:not(.bottom-navigation) button.active {
   align-items: center;
   min-height: 22px;
   padding: 3px 7px;
-  border: 1px solid #ffffff0b;
+  border: 1px solid var(--chrome-highlight-soft);
   border-radius: 999px;
   letter-spacing: 0.04em;
 }
 .status-performed .set-status {
-  background: #6aa77d18;
-  border-color: #6aa77d35;
+  background: var(--success-status-surface);
+  border-color: var(--success-status-border);
 }
 .status-skipped .set-status {
-  background: #ffffff08;
+  background: var(--chrome-highlight-soft);
 }
 .status-performed .set-status::before,
 .status-skipped .set-status::before {
@@ -1184,10 +1212,10 @@ nav:not(.bottom-navigation) button.active {
   justify-content: center;
   height: 44px;
   padding: 5px 20px 5px 6px;
-  border-color: #343943;
+  border-color: var(--line-subtle);
   border-radius: 10px;
-  background: #111318;
-  color: #f1ede8;
+  background: var(--surface-field);
+  color: var(--text);
   text-align: center;
   transition:
     border-color 160ms ease,
@@ -1196,8 +1224,8 @@ nav:not(.bottom-navigation) button.active {
 }
 .set-picker-trigger:active {
   transform: scale(0.98);
-  border-color: #ff8a5c;
-  background: #1e1b1a;
+  border-color: var(--accent-soft);
+  background: var(--accent-deep-surface);
 }
 .picker-trigger-chevron {
   position: absolute;
@@ -1205,18 +1233,18 @@ nav:not(.bottom-navigation) button.active {
   opacity: 0.5;
 }
 .rest-timer {
-  color: #9da3ad;
+  color: var(--muted-strong);
   letter-spacing: 0.02em;
 }
 .status-resting .rest-timer {
-  color: #ffb08e;
+  color: var(--accent-contrast-soft);
   font-weight: 700;
 }
 .rest-icon-button {
   width: 38px;
   height: 38px;
   min-height: 38px;
-  box-shadow: 0 0 12px #ff57083d;
+  box-shadow: 0 0 12px var(--accent-glow-strong);
   transition:
     transform 140ms ease,
     filter 160ms ease,
@@ -1225,10 +1253,10 @@ nav:not(.bottom-navigation) button.active {
 .rest-icon-button:hover,
 .rest-icon-button:focus-visible {
   filter: brightness(1.12);
-  box-shadow: 0 0 16px #ff570866;
+  box-shadow: 0 0 16px var(--accent-glow-strong);
 }
 .rest-stop-button {
-  background: #30201c;
+  background: var(--accent-deep-surface);
 }
 .set-block .order button {
   color: var(--danger);
@@ -1274,8 +1302,12 @@ nav:not(.bottom-navigation) button.active {
   display: block;
 }
 .exercise-hero {
-  border-color: #2e333c;
-  background: linear-gradient(120deg, #1b1e24, #15171b);
+  border-color: var(--line);
+  background: linear-gradient(
+    120deg,
+    var(--surface-raised),
+    var(--surface-panel)
+  );
   box-shadow: 0 5px 18px #00000026;
 }
 .control-actions button,
@@ -1324,7 +1356,7 @@ nav:not(.bottom-navigation) button svg {
 .workout-detail .workout-control {
   gap: 8px;
   padding-bottom: 4px;
-  border-bottom: 1px solid #252a33;
+  border-bottom: 1px solid var(--line);
 }
 .workout-detail .workout-control h1 {
   font-family: var(--display);
@@ -1335,7 +1367,7 @@ nav:not(.bottom-navigation) button svg {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: #aeb4bf;
+  color: var(--text-secondary);
   transition:
     color 160ms ease,
     transform 140ms ease;
@@ -1355,14 +1387,14 @@ nav:not(.bottom-navigation) button svg {
 .control-actions button {
   width: 40px;
   min-height: 40px;
-  border-color: #303641;
-  background: #1a1d23;
-  color: #b7bec9;
+  border-color: var(--line-strong);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
 }
 .control-actions button:hover,
 .control-actions button:focus-visible {
   color: var(--accent-soft);
-  border-color: #76513e;
+  border-color: var(--accent-deep-border);
 }
 .exercise-tabs {
   gap: 20px;
@@ -1375,34 +1407,34 @@ nav:not(.bottom-navigation) button svg {
   left: 42px;
   width: 20px;
   height: 1px;
-  background: linear-gradient(90deg, #4a4f5a, #292e38);
+  background: linear-gradient(90deg, var(--line-strong), var(--line));
 }
 .exercise-tab-circle {
   width: 42px;
   height: 42px;
-  border-color: #343a45;
-  background: #16191f;
+  border-color: var(--line-subtle);
+  background: var(--surface-panel);
 }
 .exercise-tabs li.execution-upcoming .exercise-tab-circle {
-  color: #737b89;
+  color: var(--muted-subtle);
 }
 .exercise-tabs li.execution-upcoming:not(.selected) .exercise-tab-circle {
   opacity: 0.82;
 }
 .execution-active .exercise-tab-circle {
   border-width: 1.5px;
-  background: #2a211e;
-  box-shadow: 0 0 14px #ff74431f;
+  background: var(--accent-deep-surface);
+  box-shadow: 0 0 14px var(--accent-surface);
 }
 .exercise-completed .exercise-tab-circle {
-  background: #1b2722;
+  background: var(--success-surface-strong);
 }
 .exercise-tabs .selected .exercise-tab-circle {
   outline: 1px solid var(--accent-soft);
   outline-offset: 3px;
 }
 .exercise-tabs .selected .exercise-tab-index {
-  box-shadow: 0 0 0 2px #131519;
+  box-shadow: 0 0 0 2px var(--surface-subtle);
 }
 .exercise-hero {
   gap: 6px 10px;
@@ -1410,7 +1442,7 @@ nav:not(.bottom-navigation) button svg {
   border-radius: 14px;
 }
 .exercise-heading p {
-  color: #cc8164;
+  color: var(--accent-soft);
 }
 .exercise-heading h2 {
   font-family: var(--display);
@@ -1420,22 +1452,26 @@ nav:not(.bottom-navigation) button svg {
   gap: 5px;
 }
 .exercise-menu button {
-  border-color: #303641;
-  background: #1a1d23;
-  color: #aeb4bf;
+  border-color: var(--line-strong);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
 }
 .exercise-menu button:last-child {
-  color: #d99a7f;
-  background: #2b211f;
+  color: var(--accent-soft);
+  background: var(--accent-deep-surface);
 }
 .advanced {
   min-height: 34px;
-  color: #8d96a4;
+  color: var(--muted);
   letter-spacing: 0.02em;
 }
 .workout-progress {
-  border: 1px solid #3b302b;
-  background: linear-gradient(110deg, #2b211d, #191b20 78%);
+  border: 1px solid var(--accent-deep-border);
+  background: linear-gradient(
+    110deg,
+    var(--accent-deep-surface),
+    var(--surface-raised) 78%
+  );
 }
 
 @media (max-width: 350px) {
