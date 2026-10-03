@@ -34,7 +34,9 @@
   --accent-soft: #ffb77f;
   --accent-ink: #351000;
   --success: #a8d8ba;
-  --danger: #ffb4ab;
+  --danger: #ff5258;
+  --danger-soft: #351719;
+  --danger-border: #8c3035;
   --radius: 16px;
   --display: "Bebas Neue", "Arial Narrow", sans-serif;
 }

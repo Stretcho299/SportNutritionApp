@@ -11,7 +11,9 @@
   --accent-ink: #170600;
   --success: #55e68b;
   --success-soft: #9af3b9;
-  --danger: #ff7068;
+  --danger: #ff5258;
+  --danger-soft: #351719;
+  --danger-border: #8c3035;
   --bottom-navigation-safe-inset: env(safe-area-inset-bottom, 0px);
   --bottom-navigation-system-clearance: max(
     6px,
@@ -195,7 +197,7 @@ html {
 
 .workout-swipe {
   border-radius: 18px;
-  background: #9e2f2a;
+  background: var(--danger);
 }
 
 .workout-card {
@@ -539,10 +541,13 @@ html {
   color: #b1b1b9;
 }
 
-.exercise-menu button:last-child:not(:first-child) {
+.exercise-menu button:last-child:not(:first-child):not(.danger) {
   min-height: 34px;
   padding: 5px 8px;
   color: #ff9873;
+}
+.exercise-menu button:last-child.danger {
+  color: var(--danger);
 }
 
 .advanced {
@@ -871,7 +876,8 @@ html {
   min-height: 40px;
   justify-content: center;
   padding: 0;
-  color: #8e5e57;
+  color: var(--danger);
+  opacity: 1;
 }
 
 .set-block .order button span {
@@ -2969,6 +2975,9 @@ body,
 }
 .catalog-custom-menu button:last-child {
   color: #ff9a7d;
+}
+.catalog-custom-menu button.danger {
+  color: var(--danger);
 }
 .catalog-empty {
   display: grid;

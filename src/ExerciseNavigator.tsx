@@ -12,6 +12,7 @@ type TimelineGesture = {
   button: HTMLButtonElement;
   startX: number;
   startY: number;
+  grabOffsetX: number;
   lastX: number;
   mode: "pending" | "cancelled" | "reordering";
 };
@@ -84,11 +85,8 @@ export function ExerciseNavigator({
     const active = gesture.current ?? touchGesture.current;
     if (!list || !active) return from;
     const items = Array.from(list.children) as HTMLElement[];
-    const source = items[from];
-    if (!source) return from;
-    const sourceBounds = source.getBoundingClientRect();
-    const dragCenter =
-      sourceBounds.left + sourceBounds.width / 2 + (clientX - active.startX);
+    if (!items[from]) return from;
+    const dragCenter = clientX - active.grabOffsetX;
     const centers = items.map((item) => {
       const bounds = item.getBoundingClientRect();
       return bounds.left + bounds.width / 2;
@@ -159,6 +157,7 @@ export function ExerciseNavigator({
       return;
     active.mode = "reordering";
     const bounds = button.getBoundingClientRect();
+    active.grabOffsetX = active.startX - (bounds.left + bounds.width / 2);
     setDraggingIndex(index);
     setDropIndex(index);
     setDragPosition({
@@ -221,6 +220,7 @@ export function ExerciseNavigator({
       button,
       startX: touch.clientX,
       startY: touch.clientY,
+      grabOffsetX: 0,
       lastX: touch.clientX,
       mode: "pending",
     };
@@ -232,6 +232,7 @@ export function ExerciseNavigator({
         return;
       current.mode = "reordering";
       const bounds = button.getBoundingClientRect();
+      current.grabOffsetX = current.startX - (bounds.left + bounds.width / 2);
       setDraggingIndex(index);
       setDropIndex(index);
       setDragPosition({
@@ -292,6 +293,7 @@ export function ExerciseNavigator({
       button: event.currentTarget,
       startX: event.clientX,
       startY: event.clientY,
+      grabOffsetX: 0,
       lastX: event.clientX,
       mode: "pending",
     };

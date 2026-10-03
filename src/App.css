@@ -118,7 +118,8 @@
   position: relative;
   overflow: hidden;
   border-radius: var(--radius);
-  background: #963d36;
+  background: var(--danger);
+  touch-action: pan-y;
 }
 .workout-delete {
   position: absolute;
@@ -127,8 +128,8 @@
   width: 6.4rem;
   height: 100%;
   border: 0;
-  background: #963d36;
-  color: var(--text);
+  background: var(--danger);
+  color: #1b090b;
   font-weight: 800;
 }
 .workout-card {
@@ -144,6 +145,9 @@
   text-align: left;
   transition: transform 180ms ease;
   touch-action: pan-y;
+}
+.workout-swipe.is-dragging .workout-card {
+  transition: none;
 }
 .workout-card strong {
   display: block;
@@ -181,10 +185,6 @@
   color: var(--accent);
   font-size: 28px;
 }
-.workout-swipe.open .workout-card {
-  transform: translateX(-6.4rem);
-}
-
 /* Fixed preparation zones, independent series scroll, safe-area navigation. */
 .workout-detail {
   display: flex;
@@ -789,7 +789,7 @@ nav:not(.bottom-navigation) button.active {
   width: 100%;
   text-align: left;
 }
-.modal .danger {
+.danger {
   color: var(--danger);
 }
 .modal .primary {
@@ -882,6 +882,16 @@ nav:not(.bottom-navigation) button.active {
   border: 1px solid transparent;
   background: var(--accent);
   color: var(--accent-ink);
+}
+.confirmation-submit.danger {
+  border-color: var(--danger-border);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.confirmation-dialog.is-destructive .confirmation-mark {
+  border-color: var(--danger-border);
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 .picker-backdrop {
   z-index: 5;
@@ -1221,8 +1231,8 @@ nav:not(.bottom-navigation) button.active {
   background: #30201c;
 }
 .set-block .order button {
-  color: #a7776a;
-  opacity: 0.72;
+  color: var(--danger);
+  opacity: 1;
   transition:
     color 160ms ease,
     opacity 160ms ease,
@@ -1231,9 +1241,9 @@ nav:not(.bottom-navigation) button.active {
 .set-block .order button:hover,
 .set-block .order button:focus-visible,
 .set-block .order button:active {
-  color: #ff8a72;
+  color: var(--danger);
   opacity: 1;
-  background: #ff5d3d12;
+  background: var(--danger-soft);
 }
 .advanced {
   opacity: 0.82;
