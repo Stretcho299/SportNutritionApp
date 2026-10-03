@@ -83,8 +83,16 @@ describe("semantic theme token contract", () => {
     expect(tokenValue("--danger")).toBe("#ff5258");
     expect(tokenValue("--danger-soft")).toBe("#351719");
     expect(tokenValue("--danger-border")).toBe("#8c3035");
-    expect(tokenValue("--success")).toBe("#55e68b");
+    expect(tokenValue("--success")).toBe("#a8d8ba");
     expect(themeCss).not.toMatch(/--(?:danger|success):\s*var\(--accent\)/);
+  });
+
+  it("preserves the primary workout CTA gradient endpoint as an accent token", () => {
+    expect(tokenValue("--accent-cta-start")).toBe("#ff5a1f");
+    expect(tokenValue("--accent-gradient-end")).toBe("#ff3f25");
+    expect(redesignCss).toMatch(
+      /linear-gradient\(\s*105deg,\s*var\(--accent-cta-start\),\s*var\(--accent-gradient-end\)\s*\)/,
+    );
   });
 
   it("keeps orange accent literals in the palette source", () => {

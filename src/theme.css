@@ -2,11 +2,11 @@
    :root[data-theme] and :root[data-accent] without changing component rules. */
 :root {
   color-scheme: dark;
-  --background: #0d0d0f;
+  --background: #101012;
   --background-deep: #09090b;
-  --surface: #151518;
-  --surface-raised: #1b1b1f;
-  --surface-inset: #101012;
+  --surface: #1c1b1e;
+  --surface-raised: #27262a;
+  --surface-inset: #141316;
   --surface-subtle: #121215;
   --surface-panel: #17171b;
   --surface-field: #111114;
@@ -14,18 +14,20 @@
   --surface-control: #24242b;
   --surface-control-muted: #55555e;
   --surface-overlay: #252429;
-  --line: #2b2b31;
+  --line: #3e3b40;
   --line-subtle: #34343b;
   --line-strong: #45454d;
-  --text: #f7f7f4;
+  --text: #f5f1ef;
   --text-soft: #d5d1cf;
   --text-secondary: #b9b9c0;
-  --muted: #8c8c96;
+  --muted: #b7b0ae;
   --muted-strong: #a5a5ad;
   --muted-subtle: #777780;
-  --accent: #ff5a1f;
-  --accent-soft: #ff9a6c;
-  --accent-ink: #170600;
+  --accent: #ff5708;
+  --accent-cta-start: #ff5a1f;
+  --accent-gradient-end: #ff3f25;
+  --accent-soft: #ffb77f;
+  --accent-ink: #351000;
   --accent-active: #ff7a45;
   --accent-highlight: #ff6b3b;
   --accent-highlight-soft: #ff946c;
@@ -51,7 +53,7 @@
   --accent-deep-surface-hover: #34231d;
   --accent-deep-border: #79442f;
   --accent-deep-border-muted: #514138;
-  --success: #55e68b;
+  --success: #a8d8ba;
   --success-surface: #172019;
   --success-surface-strong: #1b2722;
   --success-surface-selected: #223029;
@@ -81,4 +83,338 @@
   --chrome-highlight-intense: #ffffff88;
   --chrome-border: #ffffff17;
   --chrome-border-strong: #ffffff24;
+
+  /* Semantic roles preserve distinct baseline values through the migration. */
+  --accent-border-action-sheet-icon: 1px solid #ff6b3b42;
+  --accent-border-active-workout-capsule: #ff9a6c55;
+  --accent-border-add-set: 1px dashed #70513e;
+  --accent-border-add-set-variant-2: #674032;
+  --accent-border-catalog-create: 1px solid #ff6b3b70;
+  --accent-border-catalog-result: #ff5a1f85;
+  --accent-border-catalog-section-heading: 1px solid #ff5a1f2b;
+  --accent-border-catalog-sheet-catalog-filters: #ff6b3b80;
+  --accent-border-confirmation-dialog: 1px solid #654632;
+  --accent-border-control-actions: #76513e;
+  --accent-border-create-workout: #ff6a36b8;
+  --accent-border-create-workout-icon: 1px solid #ff6b3c75;
+  --accent-border-empty-icon: 1px solid #3b322f;
+  --accent-border-exercise-menu: 1px solid #594033;
+  --accent-border-exercise-menu-variant-2: #81553f;
+  --accent-border-exercise-note-field: #9b573e;
+  --accent-border-exercise-tab-drag-clone: 1px solid #ff6933;
+  --accent-border-exercise-tabs-selected: #ff6933;
+  --accent-border-picker-following-toggle-is-enabled: #ed784b88;
+  --accent-border-picker-selection: 1px solid #ffb77f77;
+  --accent-border-picker-selection-variant-2: #ff7a4566;
+  --accent-border-preview-art: 1px solid #ff71414d;
+  --accent-border-rest-stop-button: #ff6b3566;
+  --accent-border-sessions-tile: #ff693d69;
+  --accent-border-set-block-status-active: #ff8a5c;
+  --accent-border-set-block-status-active-variant-2: #ff6b35;
+  --accent-border-status-active-set-status: #ff6b3540;
+  --accent-border-workout-card-active: #ff6d3b80;
+  --accent-border-workout-progress: 1px solid #3b302b;
+  --accent-glow-50: 0 0 0 6px #ff5a1f12, 0 0 20px #ff5a1fe0;
+  --accent-glow-50-variant-2: 0 0 0 7px #ff5a1f09, 0 0 23px #ff5a1fff;
+  --accent-glow-active-session-dot: 0 0 0 5px #ff5a1f22, 0 0 17px #ff5a1fd1;
+  --accent-glow-catalog-sheet-catalog-search-label: 0 0 0 3px #ff5a1f20;
+  --accent-glow-compact-rest-ring-rest-ring-value: drop-shadow(
+    0 0 5px #ff5a1f80
+  );
+  --accent-glow-confirmation-dialog: 0 20px 80px #000b, 0 0 30px #ff570814;
+  --accent-glow-create-workout: inset 0 0 18px #ff5a1f08;
+  --accent-glow-dashboard-tile-art: drop-shadow(0 0 15px #ff5a1f4f);
+  --accent-glow-execution-active-exercise-tab-circle: 0 0 12px #ff570822;
+  --accent-glow-execution-active-exercise-tab-circle-variant-2: 0 0 14px
+    #ff74431f;
+  --accent-glow-exercise-tab-drag-clone: 0 10px 24px #0008, 0 0 0 2px #ff5a1f2e;
+  --accent-glow-exercise-tabs-selected: 0 0 0 1px #ff693333, 0 0 11px #ff5a1f24;
+  --accent-glow-picker-wheel-picker-wheel-option: 0 0 16px #ff570844;
+  --accent-glow-preview-art: inset 0 0 22px #ff5a1f0b;
+  --accent-glow-primary: 0 4px 20px #ff570819;
+  --accent-glow-rest-icon-button: 0 0 14px #ff57084d;
+  --accent-glow-rest-icon-button-variant-2: 0 0 12px #ff57083d;
+  --accent-glow-rest-icon-button-variant-3: 0 0 16px #ff570866;
+  --accent-glow-set-block-status-active:
+    inset 3px 0 #ff7a45, 0 4px 16px #ff6a3214;
+  --accent-glow-set-block-status-active-variant-2:
+    inset 3px 0 #ff5a1f, 0 0 18px #ff5a1f17;
+  --accent-glow-status-active: inset 3px 0 #ff5708, 0 3px 15px #ff57080b;
+  --accent-surface-active: #ff570813;
+  --accent-surface-active-session-dot: #ff632f;
+  --accent-surface-active-workout-capsule:
+    linear-gradient(135deg, #ffffff12, #ffffff04 56%),
+    linear-gradient(120deg, #ff8b5d0d, #17171b2b 62%);
+  --accent-surface-add-set: #ff5a1f08;
+  --accent-surface-app-shell: radial-gradient(
+    ellipse at 100% 0,
+    #ff57080d,
+    transparent 340px
+  );
+  --accent-surface-body:
+    radial-gradient(circle at 80% -10%, #ff5a1f17, transparent 34rem), #09090b;
+  --accent-surface-bottom-navigation-surface: linear-gradient(
+    112deg,
+    #ffffff0d,
+    transparent 45%,
+    #ff9a6c08
+  );
+  --accent-surface-catalog-create: linear-gradient(
+    135deg,
+    #ff6b3b26,
+    #ff6b3b10
+  );
+  --accent-surface-catalog-create-variant-2: #ff6b3b3d;
+  --accent-surface-catalog-custom-menu: #ff5a1f20;
+  --accent-surface-catalog-exercise-visual: radial-gradient(
+    circle at 50% 38%,
+    #ff5a1f1c,
+    #18181c 72%
+  );
+  --accent-surface-compact-rest-ring-rest-ring-value: #ff642e;
+  --accent-surface-confirmation-dialog: linear-gradient(
+    150deg,
+    #29221f,
+    #1c1b1e 45%
+  );
+  --accent-surface-create-workout: #ff5a1f0d;
+  --accent-surface-create-workout-icon: #ff5a1f10;
+  --accent-surface-execution-active-exercise-tab-circle: #392218;
+  --accent-surface-execution-active-exercise-tab-circle-variant-2: #2a211e;
+  --accent-surface-exercise-menu: #2b211f;
+  --accent-surface-exercise-tabs-selected: linear-gradient(
+    145deg,
+    #2b1b15,
+    #191518
+  );
+  --accent-surface-picker-dialog: linear-gradient(160deg, #292321, #1c1b1e 35%);
+  --accent-surface-picker-following-toggle-is-enabled: #ed784b1c;
+  --accent-surface-picker-following-toggle-is-enabled-variant-2: #e9784d;
+  --accent-surface-picker-selection: #ff57080b;
+  --accent-surface-preview-hero:
+    radial-gradient(circle at 90% 12%, #ff5a1f24, transparent 48%),
+    linear-gradient(140deg, #201c1d, #111114 72%);
+  --accent-surface-progress-track: linear-gradient(90deg, #ff4b1f, #ff7c36);
+  --accent-surface-rest-stop-button: #4a261b;
+  --accent-surface-rest-stop-button-variant-2: #30201c;
+  --accent-surface-selected-exercise-card: linear-gradient(
+    135deg,
+    #ff6b3b15,
+    #1b1b20 55%
+  );
+  --accent-surface-sessions-tile:
+    radial-gradient(circle at 75% 12%, #ff5a1f2d, transparent 45%),
+    linear-gradient(145deg, #261a17, #111216 72%);
+  --accent-surface-set-block-status-active: linear-gradient(
+    125deg,
+    #30221d 0%,
+    #1a1b1f 72%
+  );
+  --accent-surface-set-block-status-active-variant-2: linear-gradient(
+    120deg,
+    #2b1b16,
+    #141416 72%
+  );
+  --accent-surface-set-picker-trigger: #1e1b1a;
+  --accent-surface-status-active: linear-gradient(130deg, #33231b, #1c1b1e 65%);
+  --accent-surface-status-active-set-status: #ff5a1f12;
+  --accent-surface-workout-badge-inProgress: #ff570818;
+  --accent-surface-workout-card:
+    radial-gradient(circle at 100% 0, #ff5a1f0f, transparent 52%),
+    linear-gradient(145deg, #1d1d22, #121215);
+  --accent-surface-workout-card-active:
+    radial-gradient(circle at 100% 0, #ff5a1f22, transparent 55%),
+    linear-gradient(145deg, #231a17, #121215 68%);
+  --accent-surface-workout-card-progress: linear-gradient(
+    90deg,
+    #ff5a1f,
+    #ff873d
+  );
+  --accent-surface-workout-card-variant-2: linear-gradient(
+    90deg,
+    transparent,
+    #ff5a1f66,
+    transparent
+  );
+  --accent-surface-workout-progress: linear-gradient(110deg, #322017, #1c1b1e);
+  --accent-surface-workout-progress-variant-2: linear-gradient(
+    110deg,
+    #2b211d,
+    #191b20 78%
+  );
+  --accent-text-action-sheet-icon: #ff895d;
+  --accent-text-active-session-heading: #ff9a72;
+  --accent-text-add-set: #ff956b;
+  --accent-text-bottom-navigation-tab-active: #ffae8a;
+  --accent-text-catalog-create: #ff976f;
+  --accent-text-catalog-custom-menu: #ff9a7d;
+  --accent-text-create-workout: #ff9a6c;
+  --accent-text-create-workout-icon: #ff8c60;
+  --accent-text-dashboard-tile-art: #ff7545;
+  --accent-text-dashboard-tile-art-variant-2: #ffad8b;
+  --accent-text-exercise-heading: #cc8164;
+  --accent-text-exercise-menu: #d99a7f;
+  --accent-text-exercise-menu-variant-2: #ff9873;
+  --accent-text-exercise-menu-variant-3: #e0a083;
+  --accent-text-exercise-menu-variant-4: #f0aa88;
+  --accent-text-exercise-tabs-selected: #ff986a;
+  --accent-text-module-heading: #ff8858;
+  --accent-text-picker-wheel-picker-wheel-option: #ff7846;
+  --accent-text-preview-art: #ff8154;
+  --accent-text-preview-metrics: #ff8556;
+  --accent-text-rest-icon-button: #190600;
+  --accent-text-selected-exercise-card: #ff986d;
+  --accent-text-sessions-tile: #ff956c;
+  --accent-text-status-active: #ff7c49;
+  --accent-text-status-active-set-status: #ff9a74;
+  --accent-text-status-resting-rest-timer: #ffb08e;
+  --accent-text-workout-card-art: #ff7948;
+  --accent-ink-workout-primary: #160500;
+  --chrome-app-shell:
+    linear-gradient(180deg, #ffffff03, transparent 22rem), #101012;
+  --chrome-catalog-section-heading: inset 0 -1px #ffffff05;
+  --chrome-dashboard-tile:
+    radial-gradient(circle at 85% 10%, #ffffff08, transparent 48%),
+    linear-gradient(145deg, #1a1b20, #101114);
+  --chrome-exercise-menu: inset 0 1px 0 #ffffff0b, 0 3px 9px #00000030;
+  --chrome-nav-not-bottom-navigation: #141316f2;
+  --chrome-preview-first-session: #ffffff06;
+  --chrome-progress-track: linear-gradient(
+    90deg,
+    transparent,
+    #fff8,
+    transparent
+  );
+  --chrome-set-status: 1px solid #ffffff0b;
+  --chrome-set-status-variant-2: #ffffff0a;
+  --chrome-set-status-variant-3: #ffffff05;
+  --chrome-workout-badge: #ffffff09;
+  --line-action-sheet-menu: 1px solid #2e2f36;
+  --line-action-sheet-menu-variant-2: 1px solid #292a30;
+  --line-catalog-custom-menu: 1px solid #47434a;
+  --line-catalog-result: 1px solid #36353c;
+  --line-catalog-sheet-catalog-search-label: #414047;
+  --line-control-actions: #303641;
+  --line-dashboard-tile: 1px solid #2f3037;
+  --line-empty: #2d2d33;
+  --line-exercise-hero: #2e333c;
+  --line-exercise-menu: #33333a;
+  --line-exercise-note-field: 1px solid #35353d;
+  --line-exercise-tab-circle: #343a45;
+  --line-exercise-tabs: linear-gradient(90deg, #4a4f5a, #292e38);
+  --line-exercise-tabs-variant-2: #36363d;
+  --line-future-tile-icon: 1px solid #33343b;
+  --line-link: 1px solid #2e2e34;
+  --line-link-variant-2: #2e2e34;
+  --line-picker-following-toggle: 1px solid #393940;
+  --line-preview-edit: 1px solid #303037;
+  --line-preview-exercises: 1px solid #29292f;
+  --line-preview-hero: 1px solid #383238;
+  --line-progress-track: #303036;
+  --line-sessions-library-heading: 1px solid #2e2f35;
+  --line-sessions-module: 1px solid #2d2d34;
+  --line-set-block: #2b3038;
+  --line-set-block-status-upcoming: #262b33;
+  --line-set-block-variant-2: #29292f;
+  --line-set-picker-trigger: #343943;
+  --line-workout-card: #303037;
+  --line-workout-card-art: 1px solid #393941;
+  --line-workout-detail-workout-control: 1px solid #252a33;
+  --line-workout-progress: 1px solid #2b2b31;
+  --muted-action-sheet-menu: #696a73;
+  --muted-advanced: #8d96a4;
+  --muted-advanced-variant-2: #797983;
+  --muted-bottom-navigation-tab: #a5a5ae;
+  --muted-bottom-navigation-tab-variant-2: #92929b;
+  --muted-dashboard-tile: #8c8c95;
+  --muted-dashboard-tile-variant-2: #85858f;
+  --muted-exercise-art: #6e6e77;
+  --muted-exercise-heading: #8f8f98;
+  --muted-exercise-note-trigger: #92929a;
+  --muted-exercise-tab-circle: #686871;
+  --muted-exercise-tabs-execution-upcoming: #737b89;
+  --muted-future-tile-icon: #777983;
+  --muted-modal: #716864;
+  --muted-picker-following-control: #85858e;
+  --muted-picker-trigger-value: #888891;
+  --muted-picker-wheel-picker-wheel-option: #8e8782;
+  --muted-preview-first-session: #9a9aa2;
+  --muted-preview-metric-unavailable: #6f7079;
+  --muted-progress-label: #a1a1a9;
+  --muted-rest-timer: #9da3ad;
+  --muted-sessions-library-heading: #84848d;
+  --muted-set-block: #5f5f68;
+  --muted-set-field: #847c77;
+  --muted-sheet-handle-zone: #65656e;
+  --shadow-exercise-tabs-selected: 0 0 0 2px #131519;
+  --success-border-execution-completed-exercise-tab-circle: #42624e;
+  --success-border-set-block-status-performed: #347b4d;
+  --success-border-status-performed: #3b5244;
+  --success-surface-set-block-status-performed: linear-gradient(
+    125deg,
+    #1b2722 0%,
+    #171b1d 74%
+  );
+  --success-surface-set-block-status-performed-variant-2: linear-gradient(
+    120deg,
+    #15241a,
+    #121615 72%
+  );
+  --success-surface-set-block-status-performed-variant-3: inset 3px 0 #55e68b;
+  --surface-action-sheet-menu: #121316;
+  --surface-catalog-result: linear-gradient(115deg, #232329, #1c1c21);
+  --surface-catalog-sheet-catalog-search-label: linear-gradient(
+    120deg,
+    #202025,
+    #18181d
+  );
+  --surface-control-actions: #1a1d23;
+  --surface-empty: linear-gradient(145deg, #18181c, #111113);
+  --surface-exercise-art: #101012;
+  --surface-exercise-hero: linear-gradient(120deg, #1b1e24, #15171b);
+  --surface-exercise-hero-variant-2: linear-gradient(
+    125deg,
+    #1e1e23,
+    #131316 72%
+  );
+  --surface-exercise-menu: #18181c;
+  --surface-exercise-menu-variant-2: linear-gradient(145deg, #252830, #1b1e24);
+  --surface-exercise-menu-variant-3: #29272a;
+  --surface-exercise-tab-circle: #16191f;
+  --surface-link: #242429;
+  --surface-picker-dialog: linear-gradient(165deg, #1c1c21, #0f0f11 42%);
+  --surface-picker-fade-bottom: linear-gradient(transparent, #0b0b0d);
+  --surface-picker-fade-top: linear-gradient(#0b0b0d, transparent);
+  --surface-picker-wheel-frame: #0b0b0d;
+  --surface-preview-exercises: #141417;
+  --surface-preview-metrics: #151518;
+  --surface-sessions-library-heading: linear-gradient(145deg, #1a1b20, #111216);
+  --surface-sessions-module: linear-gradient(145deg, #18181d, #101012);
+  --surface-set-block: #17191d;
+  --surface-set-block-status-upcoming: #15171b;
+  --surface-set-block-variant-2: linear-gradient(125deg, #18181c, #121215);
+  --surface-set-picker-trigger: #111318;
+  --surface-set-picker-trigger-variant-2: #0f0f11;
+  --surface-workout-card-art: linear-gradient(145deg, #24242a, #131316);
+  --surface-workout-progress: #131316;
+  --text-action-sheet-menu: #e6e6e8;
+  --text-active-workout-capsule-duration: #c8c4c3;
+  --text-active-workout-capsule-name: #f4f1ef;
+  --text-active-workout-capsule-progress: #b9b5b4;
+  --text-catalog-custom-menu-trigger: #b8b5b4;
+  --text-compact-rest-ring: #fff1e9;
+  --text-control-actions: #b7bec9;
+  --text-exercise-menu: #b1b1b9;
+  --text-exercise-navigator-copy: #c0c0c6;
+  --text-future-tile: #a4a4ac;
+  --text-future-tile-variant-2: #b7b7be;
+  --text-link: #aeb4bf;
+  --text-picker-following-indicator: #eeeef0;
+  --text-picker-following-toggle: #c1c1c8;
+  --text-progress-label: #fff;
+  --text-session-duration: #c4c4cb;
+  --text-set-block: #f6f2ed;
+  --text-set-picker-trigger: #f1ede8;
+  --text-set-picker-trigger-variant-2: #e9e9e6;
+  --text-workout-badge: #aaaab3;
 }

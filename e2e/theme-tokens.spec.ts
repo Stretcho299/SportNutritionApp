@@ -13,6 +13,8 @@ async function expectThemeApplied(page: Page) {
         "--text",
         "--muted",
         "--accent",
+        "--accent-cta-start",
+        "--accent-gradient-end",
         "--accent-soft",
         "--accent-ink",
         "--danger",
@@ -21,18 +23,20 @@ async function expectThemeApplied(page: Page) {
     );
   });
   expect(palette).toMatchObject({
-    "--background": "#0d0d0f",
-    "--surface": "#151518",
-    "--surface-raised": "#1b1b1f",
-    "--surface-inset": "#101012",
-    "--line": "#2b2b31",
-    "--text": "#f7f7f4",
-    "--muted": "#8c8c96",
-    "--accent": "#ff5a1f",
-    "--accent-soft": "#ff9a6c",
-    "--accent-ink": "#170600",
+    "--background": "#101012",
+    "--surface": "#1c1b1e",
+    "--surface-raised": "#27262a",
+    "--surface-inset": "#141316",
+    "--line": "#3e3b40",
+    "--text": "#f5f1ef",
+    "--muted": "#b7b0ae",
+    "--accent": "#ff5708",
+    "--accent-cta-start": "#ff5a1f",
+    "--accent-gradient-end": "#ff3f25",
+    "--accent-soft": "#ffb77f",
+    "--accent-ink": "#351000",
     "--danger": "#ff5258",
-    "--success": "#55e68b",
+    "--success": "#a8d8ba",
   });
 
   const themedElements = await page.evaluate(() =>
@@ -180,7 +184,7 @@ for (const width of [320, 390]) {
     await expect(performedSet).toBeVisible();
     await expect(performedSet.locator(".set-status")).toHaveCSS(
       "color",
-      "rgb(85, 230, 139)",
+      "rgb(168, 216, 186)",
     );
     await expect(page.getByRole("navigation")).toBeVisible();
     await expectThemeApplied(page);
