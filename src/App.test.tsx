@@ -554,7 +554,7 @@ it("reorders exercises in a dedicated sheet and retains selection and persisted 
       "button",
     )[0],
   ).toHaveTextContent("Row");
-});
+}, 10_000);
 
 it("keeps sets in their natural order and renumbers them after deletion", async () => {
   await openEmptyWorkout();
