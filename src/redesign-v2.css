@@ -2619,6 +2619,329 @@ button:active,
   }
 }
 
+/* Completed session history and read-only workout recap. */
+.session-history,
+.session-summary,
+.session-summary-empty {
+  min-width: 0;
+  padding-bottom: 28px;
+}
+
+.session-history-groups {
+  display: grid;
+  gap: 24px;
+}
+
+.session-history-group h2,
+.session-summary-exercises > h3,
+.session-summary-comparison h3 {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.session-history-group ul {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  border-top: 1px solid var(--line-subtle);
+}
+
+.session-history-group li + li {
+  border-top: 1px solid var(--line-subtle);
+}
+
+.session-history-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 76px;
+  padding: 10px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.session-history-day {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--surface-inset);
+  color: var(--text-secondary);
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-history-copy {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.session-history-copy strong {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-history-copy small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-history-chevron {
+  color: var(--muted);
+  font-size: 24px;
+  line-height: 1;
+  text-align: right;
+}
+
+.session-history-empty {
+  padding: 34px 18px;
+  border: 1px solid var(--line-subtle);
+  border-radius: 18px;
+  background: var(--surface);
+  text-align: center;
+}
+
+.session-history-empty h2 {
+  margin: 0 0 8px;
+  color: var(--text);
+  font-size: 20px;
+}
+
+.session-history-empty p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.session-summary {
+  display: grid;
+  gap: 16px;
+}
+
+.session-summary-hero {
+  display: grid;
+  gap: 7px;
+  padding: 17px;
+  border: 1px solid var(--line-subtle);
+  border-radius: 19px;
+  background: linear-gradient(145deg, var(--surface-raised), var(--surface));
+}
+
+.session-summary-date {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  text-transform: capitalize;
+}
+
+.session-summary-hero h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: clamp(22px, 6vw, 28px);
+  line-height: 1.05;
+}
+
+.session-summary-hero > strong {
+  color: var(--accent-soft);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-summary-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.session-summary-metrics > div {
+  display: grid;
+  min-width: 0;
+  min-height: 76px;
+  align-content: center;
+  justify-items: center;
+  gap: 5px;
+  padding: 8px 4px;
+  border: 1px solid var(--line-subtle);
+  border-radius: 15px;
+  background: var(--surface);
+}
+
+.session-summary-metrics strong {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text);
+  font-size: clamp(15px, 4.7vw, 21px);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-summary-metrics span {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.session-summary-comparison {
+  padding: 14px 16px;
+  border: 1px solid var(--line-subtle);
+  border-radius: 16px;
+  background: var(--surface-inset);
+}
+
+.session-summary-comparison h3 {
+  margin-bottom: 8px;
+}
+
+.session-summary-comparison p {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-summary-comparison p strong {
+  color: var(--text);
+  font-size: 19px;
+}
+
+.session-summary-comparison .session-summary-first {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.session-summary-exercises > h3 {
+  margin-bottom: 4px;
+}
+
+.session-summary-exercise {
+  padding: 15px 2px;
+  border-top: 1px solid var(--line-subtle);
+}
+
+.session-summary-exercise > header h4 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.session-summary-exercise > header p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.session-summary-exercise ol {
+  display: grid;
+  gap: 1px;
+  padding: 0;
+  margin: 12px 0 0;
+  list-style: none;
+}
+
+.session-summary-exercise li {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  border-bottom: 1px solid var(--line-subtle);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-summary-exercise li > span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.session-summary-exercise li > strong {
+  color: var(--text-secondary);
+  font-weight: 650;
+}
+
+.session-summary-exercise li.is-skipped > strong {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.session-summary-note {
+  padding: 11px 12px;
+  margin-top: 10px;
+  border-left: 2px solid var(--accent-border-strong);
+  border-radius: 0 10px 10px 0;
+  background: var(--accent-surface);
+}
+
+.session-summary-note.is-permanent {
+  border-left-color: var(--line-strong);
+  background: var(--surface-inset);
+}
+
+.session-summary-note span {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.session-summary-note p {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.session-summary-return {
+  margin-top: 0;
+}
+
+.session-summary-empty {
+  text-align: center;
+}
+
+.session-summary-empty h2 {
+  color: var(--text);
+}
+
+.session-storage-error {
+  color: var(--danger);
+  font-size: 12px;
+}
+
 .exercise-tabs {
   touch-action: auto;
   user-select: none;

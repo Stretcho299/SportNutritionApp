@@ -1102,11 +1102,44 @@ it("keeps a completed workout final after returning home and reloading", async (
       screen.getByRole("alertdialog", { name: "Terminer la séance ?" }),
     ).getByRole("button", { name: "Terminer" }),
   );
-  expect(screen.getByText("Démarrer la séance")).toBeInTheDocument();
+  const summary = await screen.findByRole("region", { name: "Bilan de Push" });
+  expect(within(summary).getByText("Squat")).toBeInTheDocument();
+  expect(storedWorkouts()[0].execution?.status).toBe("completed");
+  expect(
+    JSON.parse(localStorage.getItem(__storageKey) ?? "{}").sessions,
+  ).toHaveLength(1);
+  fireEvent.click(
+    within(summary).getByRole("button", { name: "RETOUR AUX SÉANCES" }),
+  );
+  expect(
+    screen.getByRole("region", { name: "Mes séances" }),
+  ).toBeInTheDocument();
   fireEvent.click(screen.getByLabelText("Retour aux séances"));
+  expect(
+    screen.getByRole("region", { name: "Entraînement" }),
+  ).toBeInTheDocument();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Ouvrir Historique, 1 séance" }),
+  );
+  expect(
+    screen.getByRole("region", { name: "Historique" }),
+  ).toBeInTheDocument();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Ouvrir le bilan de Push" }),
+  );
+  expect(
+    screen.getByRole("region", { name: "Bilan de Push" }),
+  ).toBeInTheDocument();
+  fireEvent.click(screen.getByLabelText("Retour à l’historique"));
+  expect(
+    screen.getByRole("region", { name: "Historique" }),
+  ).toBeInTheDocument();
+  fireEvent.click(screen.getByLabelText("Retour à l’entraînement"));
+  fireEvent.click(screen.getByRole("button", { name: "Ouvrir Mes séances" }));
+  fireEvent.click(screen.getByText("Push").closest("button")!);
   const preview = screen.getByRole("region", { name: "Aperçu de Push" });
   expect(preview).toBeInTheDocument();
-  expect(preview).toHaveClass("page-back");
+  expect(preview).toHaveClass("page-forward");
   expect(within(preview).getByText("Durée moyenne")).toBeInTheDocument();
   expect(within(preview).getByText("Calories moyennes")).toBeInTheDocument();
   expect(within(preview).getAllByText("Pas encore de données")).toHaveLength(2);

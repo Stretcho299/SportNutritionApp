@@ -19,6 +19,8 @@ import { BottomNavigation } from "./BottomNavigation";
 import { BottomSheet, bottomSheetCloseDuration } from "./BottomSheet";
 import { ExerciseNavigator } from "./ExerciseNavigator";
 import { OrientationGuard } from "./OrientationGuard";
+import { SessionHistory } from "./SessionHistory";
+import { SessionSummary } from "./SessionSummary";
 import { pickerValues } from "./pickerValues";
 import {
   officialExercises,
@@ -44,7 +46,7 @@ import {
   addExercise,
   addExerciseToExecution,
   addSet,
-  completeWorkoutExecution,
+  completeWorkoutSession,
   createWorkout,
   defaultInitialSetCount,
   defaultRestSeconds,
@@ -70,9 +72,11 @@ import {
   updatePlannedSetValues,
   type ExecutedSet,
   type WorkoutExecution,
+  type WorkoutSession,
   type Workout,
 } from "./storage/database";
-type Screen = "list" | "workouts" | "preview" | "detail";
+type Screen =
+  "list" | "workouts" | "preview" | "detail" | "history" | "sessionSummary";
 const timestampNow = () => Date.now();
 type Dialog =
   | null
@@ -116,6 +120,15 @@ export default function App() {
   const [completedTemplateIds, setCompletedTemplateIds] = useState<string[]>(
     [],
   );
+  const [sessions, setSessions] = useState<WorkoutSession[]>([]);
+  const [sessionsLoaded, setSessionsLoaded] = useState(false);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
+    null,
+  );
+  const [summaryReturnTo, setSummaryReturnTo] = useState<
+    "history" | "workouts"
+  >("workouts");
+  const [finishError, setFinishError] = useState("");
   const [screen, setScreen] = useState<Screen>("list");
   const [workoutId, setWorkoutId] = useState("");
   const [exerciseId, setExerciseId] = useState("");
@@ -160,6 +173,8 @@ export default function App() {
   useEffect(() => {
     void loadWorkoutStore().then((store: WorkoutStore) => {
       setCustomDefinitions(store.customDefinitions ?? []);
+      setSessions(store.sessions);
+      setSessionsLoaded(true);
       setCompletedTemplateIds(
         store.templates
           .filter((template) =>
@@ -258,6 +273,12 @@ export default function App() {
   const update = useCallback((next: Workout[]) => {
     setWorkouts(next);
     void saveWorkouts(next);
+  }, []);
+  const refreshSessions = useCallback(async () => {
+    const store = await loadWorkoutStore();
+    setSessions(store.sessions);
+    setSessionsLoaded(true);
+    return store.sessions;
   }, []);
   const updateCustomDefinitions = (next: ExerciseDefinition[]) => {
     setCustomDefinitions(next);
@@ -549,23 +570,47 @@ export default function App() {
     return () => window.clearInterval(interval);
   }, [execution, updateExecution]);
   const finishWorkout = () => {
-    if (execution)
-      requestConfirmation({
-        title: "Terminer la séance ?",
-        description: "Cette séance sera clôturée définitivement.",
-        confirmLabel: "Terminer",
-        onConfirm: () => {
-          updateExecution(completeWorkoutExecution(execution));
-          setCompletedTemplateIds((current) =>
-            current.includes(workoutId) ? current : [...current, workoutId],
-          );
-          setWorkouts((current) =>
-            current.map((item) =>
-              item.id === workoutId ? { ...item, execution: undefined } : item,
-            ),
-          );
-        },
-      });
+    if (!execution?.sessionId || execution.status !== "readyToFinish") return;
+    const sessionId = execution.sessionId;
+    const finishedWorkoutId = workoutId;
+    setFinishError("");
+    requestConfirmation({
+      title: "Terminer la séance ?",
+      description: "Cette séance sera clôturée définitivement.",
+      confirmLabel: "Terminer",
+      onConfirm: () => {
+        void completeWorkoutSession(sessionId)
+          .then((completedSession) => {
+            setSessions((current) =>
+              current.some((item) => item.id === completedSession.id)
+                ? current.map((item) =>
+                    item.id === completedSession.id ? completedSession : item,
+                  )
+                : [...current, completedSession],
+            );
+            setCompletedTemplateIds((current) =>
+              current.includes(finishedWorkoutId)
+                ? current
+                : [...current, finishedWorkoutId],
+            );
+            setWorkouts((current) =>
+              current.map((item) =>
+                item.id === finishedWorkoutId
+                  ? { ...item, execution: undefined }
+                  : item,
+              ),
+            );
+            setSelectedSessionId(completedSession.id);
+            setSummaryReturnTo("workouts");
+            setWorkoutId("");
+            setExerciseId("");
+            navigate("sessionSummary", "forward");
+          })
+          .catch(() => {
+            setFinishError("La séance n’a pas pu être enregistrée. Réessayez.");
+          });
+      },
+    });
   };
   const abandonWorkout = () => {
     if (!workout || !execution?.sessionId) return;
@@ -1075,7 +1120,15 @@ export default function App() {
   const isWorkoutDetail = screen === "detail" && !!workout;
   const isActiveWorkoutDetail =
     isWorkoutDetail && workoutId === activeWorkout?.id;
-  const isOverlayOpen = catalogOpen || !!dialog || !!confirmation || pickerOpen;
+  const isOverlayOpen =
+    catalogOpen ||
+    !!dialog ||
+    !!confirmation ||
+    pickerOpen ||
+    screen === "sessionSummary";
+  const completedSessionCount = sessions.filter(
+    (session) => session.status === "completed",
+  ).length;
   const hasActiveWorkout = !!activeWorkout?.execution;
   const preparedWorkouts = workouts.filter(
     (item) => item.id !== activeWorkout?.id,
@@ -1123,6 +1176,18 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: reducedMotion ? "instant" : "smooth" });
   };
 
+  const openHistory = () => {
+    navigate("history", "forward");
+    void refreshSessions().catch(() => setSessionsLoaded(true));
+  };
+  const openSessionSummary = (session: WorkoutSession) => {
+    setSelectedSessionId(session.id);
+    setSummaryReturnTo("history");
+    navigate("sessionSummary", "forward");
+  };
+  const returnFromSummary = () =>
+    navigate(summaryReturnTo === "history" ? "history" : "workouts", "back");
+
   const pageMotionClass = screenTransition ? ` page-${screenTransition}` : "";
   const clearPageMotion = (event: AnimationEvent<HTMLElement>) => {
     if (
@@ -1163,11 +1228,19 @@ export default function App() {
         ) : (
           <>
             <button
-              aria-label="Retour aux séances"
+              aria-label={
+                screen === "history"
+                  ? "Retour à l’entraînement"
+                  : screen === "sessionSummary" && summaryReturnTo === "history"
+                    ? "Retour à l’historique"
+                    : "Retour aux séances"
+              }
               className="link"
               onPointerUp={(event) => event.currentTarget.blur()}
               onClick={() => {
                 if (screen === "workouts") navigate("list", "back");
+                else if (screen === "history") navigate("list", "back");
+                else if (screen === "sessionSummary") returnFromSummary();
                 else if (screen === "preview") navigate("workouts", "back");
                 else if (screen === "detail" && workout && !workout.execution)
                   navigate(
@@ -1182,7 +1255,15 @@ export default function App() {
               <Icon name="arrow-left" size={19} />
               <span className="sr-only">Retour</span>
             </button>
-            <h1>{screen === "workouts" ? "Mes séances" : workout?.name}</h1>
+            <h1>
+              {screen === "workouts"
+                ? "Mes séances"
+                : screen === "history"
+                  ? "Historique"
+                  : screen === "sessionSummary"
+                    ? "Bilan"
+                    : workout?.name}
+            </h1>
             {isWorkoutDetail && (
               <div className="control-actions">
                 <button
@@ -1229,16 +1310,20 @@ export default function App() {
               </span>
               <Icon name="chevron-right" size={18} />
             </button>
-            <section
-              className="dashboard-tile future-tile"
-              aria-label="Calendrier bientôt disponible"
+            <button
+              className="dashboard-tile future-tile history-tile"
+              aria-label={`Ouvrir Historique, ${completedSessionCount} séance${completedSessionCount > 1 ? "s" : ""}`}
+              onClick={openHistory}
             >
               <span className="future-tile-icon" aria-hidden="true">
                 <Icon name="calendar" size={30} />
               </span>
-              <small>Bientôt</small>
-              <strong>Calendrier</strong>
-            </section>
+              <small>
+                {completedSessionCount} séance
+                {completedSessionCount > 1 ? "s" : ""}
+              </small>
+              <strong>Historique</strong>
+            </button>
             <section
               className="dashboard-tile future-tile"
               aria-label="Performances bientôt disponibles"
@@ -1316,6 +1401,35 @@ export default function App() {
             </section>
           )}
         </section>
+      )}
+      {screen === "history" && (
+        <SessionHistory
+          sessions={sessions}
+          loading={!sessionsLoaded}
+          motionClass={pageMotionClass}
+          onOpenSession={openSessionSummary}
+        />
+      )}
+      {screen === "sessionSummary" && (
+        <>
+          {sessions.find((session) => session.id === selectedSessionId) ? (
+            <SessionSummary
+              session={sessions.find(
+                (session) => session.id === selectedSessionId,
+              )!}
+              sessions={sessions}
+              motionClass={pageMotionClass}
+              onReturn={returnFromSummary}
+            />
+          ) : (
+            <section className={`session-summary-empty${pageMotionClass}`}>
+              <h2>Bilan indisponible</h2>
+              <button className="primary" onClick={returnFromSummary}>
+                RETOUR
+              </button>
+            </section>
+          )}
+        </>
       )}
       {screen === "preview" && workout && (
         <section
@@ -1560,6 +1674,11 @@ export default function App() {
                 ) : execution.status === "completed" ? (
                   <p className="execution-resume">Séance terminée</p>
                 ) : null}
+                {finishError && (
+                  <p className="session-storage-error" role="alert">
+                    {finishError}
+                  </p>
+                )}
                 {execution && (
                   <WorkoutProgress
                     execution={execution}

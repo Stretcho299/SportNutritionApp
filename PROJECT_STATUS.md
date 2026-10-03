@@ -23,8 +23,8 @@ implémentée dans l’application. Les spikes Ciqual et Open Food Facts dans
 ## Baseline stable
 
 - Branche stable : `main`.
-- État : les issues #61/#62 et #63/#64 sont livrées dans `main`; l’issue #65 est active.
-- Commit de référence : `4563b9c8e4fde204d38da2439243b4aab4f1a031`.
+- État : les issues #61/#62, #63/#64 et #65/#66 sont livrées dans `main`; l’issue #67 est active.
+- Commit de référence : `688dd7561ba5ebb2dbdef46ee92e67f9f4560f19`.
 - CI de référence : Web CI post-merge #110 réussie sur `99c2a5230914818741da5d0e96528eef84af1806`. Le job Ubuntu / Node 20 exécute format, lint, Vitest et build; il ne lance pas Playwright.
 - Référence Vitest de la PR #58 : 127/127. `npm run lint` conserve un avertissement Fast Refresh préexistant dans `src/OrientationGuard.tsx`, sans erreur.
 - Validation Playwright de la PR #58 : scénarios ciblés mouvement Chromium et WebKit 12/12 à 320 et 390 px. La suite complète n’a pas été relancée pour son dernier diff ; le run précédent était à 143/146, les cas restants ayant réussi au rejeu documenté.
@@ -201,7 +201,7 @@ stabilisées restent gelées : BottomSheet, clavier/visualViewport,
 lifecycle, stockage, cascade KG/REPS/REPOS, glass/lens, offsets et
 `100lvh`/`100dvh`, sauf nécessité directement démontrée.
 
-### Issues #52 reportée ; #55/#56, #57/#58, #59/#60, #61/#62 et #63/#64 livrées ; passe active #65
+### Issues #52 reportée ; #55/#56 à #65/#66 livrées ; passe active #67
 
 [Issue #52 — évaluer les retours haptiques pour la PWA](https://github.com/Stretcho299/SportNutritionApp/issues/52) est **CLOSED / not planned** pour la PWA actuelle. WebKit sur iPhone ne fournit pas la Web Vibration API standard utilisée par l’expérimentation : `navigator.vibrate` est absent dans le WebKit local et l’essai physique de la PWA standalone n’a produit aucune vibration.
 
@@ -225,21 +225,25 @@ Les issues #61/#62 sont livrées dans `main@f48d837cbc40caa968f8262aa94c33417edf
 
 Les issues #63/#64 sont livrées dans `main@4563b9c8e4fde204d38da2439243b4aab4f1a031` : la palette sombre + orange est centralisée dans des primitives et des rôles sémantiques, avec le rendu de référence préservé. La personnalisation utilisateur Sombre/Clair + accent reste future. `docs/theme-tokens.md` décrit le contrat des tokens.
 
-L’issue #65 est active : le Catalogue 2.0 devient une page mobile plein écran et dense. La sélection conserve les règles d’ajout/remplacement et les feuilles de configuration et formulaires custom existantes. Favoris/Récents restent futurs.
+Les issues #65/#66 sont livrées dans `main@688dd7561ba5ebb2dbdef46ee92e67f9f4560f19` : le Catalogue 2.0 est une page mobile plein écran, dense, avec recherche, filtres muscle/matériel et onglets Catalogue/Mes exercices. L’ajout, le remplacement et la gestion custom conservent leurs règles et formulaires validés.
+
+L’issue #67 est active : fin de séance vers un Bilan immédiat, consultation des sessions terminées depuis Historique, et métriques dérivées exclusivement des snapshots et exécutions persistés dans `WorkoutStore.sessions`. Le stockage reste IndexedDB v2, sans nouvelle source historique.
 
 ### Étapes futures
 
-Après le Catalogue 2.0, la personnalisation utilisateur Sombre/Clair + accent reste une passe ultérieure. Les autres axes ci-dessous restent futurs; aucun ordre après le Catalogue 2.0 n’est confirmé :
+Après Bilan + Historique, les axes suivants restent futurs :
 
 - Favoris et exercices récents dans le catalogue.
-- Résumé enrichi de fin de séance et consultation UI de l’historique. L’écran
-  affiche déjà « Séance terminée », mais les données de sessions n’ont pas
-  encore de bilan détaillé ni d’expérience d’historique dédiée.
+- Harmonisation de l’accent orange.
+- Personnalisation utilisateur Sombre/Clair + accent.
+- Profil et objectifs.
 - Statistiques agrégées et progression dans le temps. La progression de la
   séance en cours existe déjà.
+- Programmes.
+- Onboarding.
 - Calendrier et trophées.
-- Bilan et historique enrichis, carte musculaire, Preview enrichie et Performances
-  à partir des snapshots autonomes.
+- Carte musculaire, Preview enrichie et Performances à partir des snapshots
+  autonomes.
 - Supersets, trisets et circuits.
 - Module Nutrition. Aucune recherche alimentaire n’est intégrée; les documents
   Ciqual/Open Food Facts sont des spikes exploratoires.

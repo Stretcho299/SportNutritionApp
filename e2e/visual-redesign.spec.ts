@@ -295,19 +295,19 @@ for (const width of [390, 320]) {
     const sessionsTile = page.getByRole("button", {
       name: "Ouvrir Mes séances",
     });
-    const calendarTile = page.getByRole("region", {
-      name: "Calendrier bientôt disponible",
+    const historyTile = page.getByRole("button", {
+      name: /Ouvrir Historique/,
     });
     const sessionsBounds = await sessionsTile.boundingBox();
-    const calendarBounds = await calendarTile.boundingBox();
+    const historyBounds = await historyTile.boundingBox();
     expect(sessionsBounds!.width).toBeGreaterThan(width - 40);
-    expect(sessionsBounds!.height).toBeGreaterThan(calendarBounds!.height);
-    expect(calendarBounds!.y).toBeGreaterThan(
+    expect(sessionsBounds!.height).toBeGreaterThan(historyBounds!.height);
+    expect(historyBounds!.y).toBeGreaterThan(
       sessionsBounds!.y + sessionsBounds!.height,
     );
-    expect(
-      Math.abs(sessionsBounds!.width - calendarBounds!.width),
-    ).toBeLessThan(2);
+    expect(Math.abs(sessionsBounds!.width - historyBounds!.width)).toBeLessThan(
+      2,
+    );
     await screenshot(page, info, "dashboard");
     const tileBox = await sessionsTile.boundingBox();
     await page.mouse.move(
@@ -789,10 +789,10 @@ for (const width of [390, 320]) {
       .getByRole("alertdialog", { name: "Terminer la séance ?" })
       .getByRole("button", { name: "Terminer" })
       .click();
-    await expect(
-      page.getByRole("button", { name: "Démarrer la séance" }),
-    ).toBeVisible();
+    await expect(page.locator(".session-summary")).toBeVisible();
     await screenshot(page, info, "completed");
+    await page.getByLabel("Retour aux séances").click();
+    await expect(page.locator(".sessions-library")).toBeVisible();
     await page.reload();
     await page.getByRole("button", { name: "Ouvrir Mes séances" }).click();
     await page.locator(".workout-card").click();
