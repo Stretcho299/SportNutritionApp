@@ -41,7 +41,7 @@ async function addExercise(page: Page, name: string) {
     .getByRole("button", { name: "Ajouter un exercice", exact: true })
     .click();
   await page
-    .getByRole("dialog", { name: "Catalogue d’exercices" })
+    .getByRole("region", { name: "Catalogue d’exercices" })
     .getByRole("button", { name: "+ Créer un exercice personnalisé" })
     .click();
   const custom = page.getByRole("dialog", {
@@ -862,10 +862,15 @@ for (const width of [390, 320]) {
       await actions
         .getByRole("button", { name: "Ajouter un exercice" })
         .click();
-      const catalog = page.getByRole("dialog", {
+      const catalog = page.getByRole("region", {
         name: "Catalogue d’exercices",
       });
-      await expectSheetAtViewportBottom(page);
+      await expect(catalog).toBeVisible();
+      await expect(catalog).toHaveCSS("position", "fixed");
+      const catalogBounds = await catalog.boundingBox();
+      expect(catalogBounds).not.toBeNull();
+      expect(catalogBounds!.y).toBeLessThanOrEqual(1);
+      expect(catalogBounds!.height).toBeGreaterThanOrEqual(480);
       await catalog
         .getByRole("button", { name: "+ Créer un exercice personnalisé" })
         .click();

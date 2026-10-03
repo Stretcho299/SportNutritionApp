@@ -4,6 +4,10 @@ const officialName = "Développé couché à la barre";
 const customName = "Presse de test";
 const renamedCustomName = "Presse de test modifiée";
 
+function catalogPage(page: Page) {
+  return page.getByRole("region", { name: "Catalogue d’exercices" });
+}
+
 type StoredExercise = {
   id: string;
   name: string;
@@ -197,9 +201,7 @@ for (const width of [320, 390]) {
       .first()
       .click();
     await expect(change).toBeDisabled();
-    await expect(
-      page.getByRole("dialog", { name: "Changer l’exercice" }),
-    ).toHaveCount(0);
+    await expect(catalogPage(page)).toHaveCount(0);
     await region.getByRole("button", { name: "Mettre fin au repos" }).click();
     await page
       .getByRole("alertdialog", { name: "Mettre fin au repos ?" })
@@ -209,9 +211,7 @@ for (const width of [320, 390]) {
       /status-performed/,
     );
     await expect(change).toBeDisabled();
-    await expect(
-      page.getByRole("dialog", { name: "Changer l’exercice" }),
-    ).toHaveCount(0);
+    await expect(catalogPage(page)).toHaveCount(0);
   });
 
   test(`changes a custom occurrence instead of editing its definition during execution at ${width}px`, async ({
@@ -219,7 +219,7 @@ for (const width of [320, 390]) {
   }) => {
     await page.setViewportSize({ width, height: 844 });
     await prepareEmptyWorkout(page);
-    const catalog = page.getByRole("dialog", { name: "Catalogue d’exercices" });
+    const catalog = catalogPage(page);
     await catalog
       .getByRole("button", { name: "+ Créer un exercice personnalisé" })
       .click();
@@ -255,9 +255,10 @@ async function prepareEmptyWorkout(page: Page) {
   await form.getByRole("button", { name: "Enregistrer" }).click();
   await page.locator(".workout-card").click();
   await page.getByRole("button", { name: "Ajouter un exercice" }).click();
+  await expect(catalogPage(page)).toBeVisible();
   await expect(
     page.getByRole("dialog", { name: "Catalogue d’exercices" }),
-  ).toBeVisible();
+  ).toHaveCount(0);
 }
 
 async function openCatalog(page: Page) {
@@ -266,17 +267,17 @@ async function openCatalog(page: Page) {
     .getByRole("dialog", { name: "Actions de la séance" })
     .getByRole("button", { name: "Ajouter un exercice" })
     .click();
-  return page.getByRole("dialog", { name: "Catalogue d’exercices" });
+  return catalogPage(page);
 }
 
 async function openCustomActions(page: Page, name: string) {
-  const catalog = page.getByRole("dialog", { name: "Catalogue d’exercices" });
+  const catalog = catalogPage(page);
   await catalog.getByRole("button", { name: `Options ${name}` }).click();
   return catalog.getByRole("menu", { name: `Actions ${name}` });
 }
 
 async function addResult(page: Page, name: string) {
-  const catalog = page.getByRole("dialog", { name: "Catalogue d’exercices" });
+  const catalog = catalogPage(page);
   await catalog
     .getByRole("list", { name: "Résultats du catalogue" })
     .getByRole("button", { name: new RegExp(name) })
@@ -286,11 +287,13 @@ async function addResult(page: Page, name: string) {
   await expect(form.getByText(name, { exact: true })).toBeVisible();
   await form.getByRole("button", { name: "Enregistrer" }).click();
   await expect(form).toHaveCount(0);
+  await expect(catalog).toHaveCount(0);
+  expect(await page.evaluate(() => document.body.style.overflow)).toBe("");
 }
 
 async function replaceCurrentWith(page: Page, name: string) {
   await page.getByRole("button", { name: "Changer l’exercice" }).click();
-  const catalog = page.getByRole("dialog", { name: "Changer l’exercice" });
+  const catalog = catalogPage(page);
   await expect(catalog).toBeVisible();
   await catalog
     .getByRole("list", { name: "Résultats du catalogue" })
@@ -382,14 +385,199 @@ async function expectNoHorizontalOverflow(page: Page) {
   ).toBe(true);
 }
 
+async function setCatalogEquipment(
+  page: Page,
+  catalog: ReturnType<typeof catalogPage>,
+  value: string,
+) {
+  await catalog.getByRole("button", { name: "Filtres avancés" }).click();
+  const filters = page.getByRole("dialog", { name: "Filtres" });
+  await filters
+    .getByRole("combobox", { name: "Filtrer par matériel" })
+    .selectOption(value);
+  await filters.getByRole("button", { name: "Afficher les résultats" }).click();
+}
+
 for (const width of [320, 390]) {
+  test(`full-screen catalog stays dense, sticky and bounded at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await prepareEmptyWorkout(page);
+    const catalog = catalogPage(page);
+    await expect(catalog).toBeVisible();
+    await expect(
+      page.getByRole("dialog", { name: "Catalogue d’exercices" }),
+    ).toHaveCount(0);
+    await expect(
+      catalog.getByRole("heading", { name: "Exercices" }),
+    ).toBeVisible();
+    await expect(page.locator(".bottom-navigation")).toHaveCSS(
+      "visibility",
+      "hidden",
+    );
+
+    const resultScroller = catalog.locator(".catalog-results");
+    const visibleRows = await resultScroller.evaluate((scroller) => {
+      const viewport = scroller.getBoundingClientRect();
+      return Array.from(
+        scroller.querySelectorAll(".catalog-section-list > li"),
+      ).filter((row) => {
+        const bounds = row.getBoundingClientRect();
+        return bounds.bottom > viewport.top && bounds.top < viewport.bottom;
+      }).length;
+    });
+    expect(visibleRows).toBeGreaterThanOrEqual(6);
+
+    const search = catalog.getByRole("searchbox", {
+      name: "Rechercher un exercice",
+    });
+    const searchTop = (await search.boundingBox())?.y;
+    await search.focus();
+    await resultScroller.evaluate((element) => {
+      (element as HTMLElement).scrollTop = 180;
+    });
+    await expect(search).toBeFocused();
+    expect(Math.abs((await search.boundingBox())!.y - searchTop!)).toBeLessThan(
+      1,
+    );
+    const windowScrollTop = await page.evaluate(() => window.scrollY);
+    await page.setViewportSize({ width, height: 480 });
+    await expect
+      .poll(async () => (await catalog.boundingBox())?.height ?? 0)
+      .toBeLessThanOrEqual(480);
+    const resizedFooter = await catalog
+      .locator(".catalog-footer")
+      .boundingBox();
+    expect(resizedFooter!.y + resizedFooter!.height).toBeLessThanOrEqual(480);
+    await expect(search).toBeVisible();
+    const createButton = catalog.getByRole("button", {
+      name: "+ Créer un exercice personnalisé",
+    });
+    await expect(createButton).toBeVisible();
+    const resizedCreateBounds = await createButton.boundingBox();
+    expect(
+      resizedCreateBounds!.y + resizedCreateBounds!.height,
+    ).toBeLessThanOrEqual(480);
+    await page.setViewportSize({ width, height: 844 });
+    await expect
+      .poll(async () => Math.round((await catalog.boundingBox())?.height ?? 0))
+      .toBe(844);
+    expect(await page.evaluate(() => window.scrollY)).toBe(windowScrollTop);
+
+    const muscleChips = catalog.getByRole("group", {
+      name: "Filtrer par muscle",
+    });
+    const chipMetrics = await muscleChips.evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+    }));
+    expect(chipMetrics.scrollWidth).toBeGreaterThan(chipMetrics.clientWidth);
+    await muscleChips.evaluate((element) => {
+      element.scrollLeft = element.scrollWidth;
+    });
+    await expectNoHorizontalOverflow(page);
+    await muscleChips.evaluate((element) => {
+      element.scrollLeft = 0;
+    });
+    await catalog.getByRole("tab", { name: "Mes exercices" }).click();
+    await expect(catalog.getByText("Aucun exercice trouvé")).toBeVisible();
+    await catalog.getByRole("tab", { name: "Tous" }).click();
+    await muscleChips.getByRole("button", { name: "Pectoraux" }).click();
+    await setCatalogEquipment(page, catalog, "halteres");
+    await expect(
+      catalog.getByRole("button", { name: "Retirer le filtre Haltères" }),
+    ).toBeVisible();
+    await catalog.getByRole("button", { name: "Réinitialiser" }).click();
+    await expect(
+      catalog.getByRole("button", { name: "Retirer le filtre Haltères" }),
+    ).toHaveCount(0);
+    await expect(
+      catalog.getByRole("button", { name: "+ Créer un exercice personnalisé" }),
+    ).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test(`configuration can return to the same catalog search at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await prepareEmptyWorkout(page);
+    const catalog = catalogPage(page);
+    const search = catalog.getByRole("searchbox", {
+      name: "Rechercher un exercice",
+    });
+    await search.fill("Bench press");
+    const resultScroller = catalog.locator(".catalog-results");
+    const initialScrollTop = await resultScroller.evaluate(
+      (element) => (element as HTMLElement).scrollTop,
+    );
+    const selected = catalog
+      .getByRole("list", { name: "Résultats du catalogue" })
+      .getByRole("button", { name: new RegExp(officialName) });
+    await selected.tap();
+    const form = page.getByRole("dialog", { name: "Exercice" });
+    await form.getByRole("button", { name: "Changer" }).tap();
+    await expect(catalog).toBeVisible();
+    await expect(search).toHaveValue("Bench press");
+    await expect(selected).toBeVisible();
+    expect(
+      await resultScroller.evaluate(
+        (element) => (element as HTMLElement).scrollTop,
+      ),
+    ).toBe(initialScrollTop);
+
+    await selected.tap();
+    await expect(form).toBeVisible();
+    await page.locator(".sheet-backdrop").tap({ position: { x: 4, y: 4 } });
+    await expect(form).toHaveCount(0);
+    await expect(catalog).toBeVisible();
+    await expect(search).toHaveValue("Bench press");
+    await expect(resultScroller).toBeVisible();
+  });
+
+  test(`add catalog back returns to the empty preparation at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await prepareEmptyWorkout(page);
+    await catalogPage(page).getByRole("button", { name: "Retour" }).tap();
+    await expect(catalogPage(page)).toHaveCount(0);
+    await expect(
+      page.getByRole("heading", { name: "Aucun exercice" }),
+    ).toBeVisible();
+    expect(await page.evaluate(() => document.body.style.overflow)).toBe("");
+    expect((await readWorkouts(page)).templates[0].exercises).toHaveLength(0);
+  });
+
+  test(`replace catalog back returns to preparation without changing data at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await prepareEmptyWorkout(page);
+    await addResult(page, officialName);
+    const before = await readWorkouts(page);
+    await page.getByRole("button", { name: "Changer l’exercice" }).tap();
+    const catalog = catalogPage(page);
+    await expect(
+      catalog.getByRole("heading", { name: "Changer l’exercice" }),
+    ).toBeVisible();
+    await catalog.getByRole("button", { name: "Retour" }).tap();
+    await expect(catalog).toHaveCount(0);
+    await expect(
+      page.getByRole("heading", { name: officialName }),
+    ).toBeVisible();
+    expect((await readWorkouts(page)).templates[0].exercises).toEqual(
+      before.templates[0].exercises,
+    );
+  });
+
   test(`a direct panel change clears a pending sheet close at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 844 });
     await prepareEmptyWorkout(page);
-    await page
-      .getByRole("dialog", { name: "Catalogue d’exercices" })
+    await catalogPage(page)
       .getByRole("list", { name: "Résultats du catalogue" })
       .getByRole("button", { name: new RegExp(officialName) })
       .click();
@@ -398,9 +586,7 @@ for (const width of [320, 390]) {
     await backdrop.click({ position: { x: 4, y: 4 } });
     await expect(backdrop).toHaveClass(/is-closing/);
     await form.getByRole("button", { name: "Changer" }).dispatchEvent("click");
-    const catalog = page.getByRole("dialog", {
-      name: "Catalogue d’exercices",
-    });
+    const catalog = catalogPage(page);
     await expect(catalog).toBeVisible();
     await expect(page.locator(".sheet-backdrop.is-closing")).toHaveCount(0);
     await page.waitForTimeout(240);
@@ -412,7 +598,7 @@ for (const width of [320, 390]) {
   }) => {
     await page.setViewportSize({ width, height: 844 });
     await prepareEmptyWorkout(page);
-    const catalog = page.getByRole("dialog", { name: "Catalogue d’exercices" });
+    const catalog = catalogPage(page);
     const customCta = catalog.getByRole("button", {
       name: "+ Créer un exercice personnalisé",
     });
@@ -447,9 +633,7 @@ for (const width of [320, 390]) {
     await chooseSetCount(page, "5");
     await chooseRest(page, "3", "0");
     await form.getByRole("button", { name: "Changer" }).tap();
-    const secondCatalog = page.getByRole("dialog", {
-      name: "Catalogue d’exercices",
-    });
+    const secondCatalog = catalogPage(page);
     await secondCatalog
       .getByRole("searchbox", { name: "Rechercher un exercice" })
       .tap();
@@ -543,9 +727,7 @@ for (const width of [320, 390]) {
     const before = await readWorkouts(page);
     const original = before.templates[0].exercises[0];
     await page.getByRole("button", { name: "Changer l’exercice" }).tap();
-    const replaceCatalog = page.getByRole("dialog", {
-      name: "Changer l’exercice",
-    });
+    const replaceCatalog = catalogPage(page);
     await replaceCatalog
       .getByRole("list", { name: "Résultats du catalogue" })
       .getByRole("button", { name: /Élévations latérales aux haltères/ })
@@ -586,7 +768,7 @@ for (const width of [320, 390]) {
   }) => {
     await page.setViewportSize({ width, height: 844 });
     await prepareEmptyWorkout(page);
-    const catalog = page.getByRole("dialog", { name: "Catalogue d’exercices" });
+    const catalog = catalogPage(page);
     await catalog
       .getByRole("button", { name: "+ Créer un exercice personnalisé" })
       .click();
@@ -668,7 +850,7 @@ for (const width of [320, 390]) {
   }) => {
     await page.setViewportSize({ width, height: 844 });
     await prepareEmptyWorkout(page);
-    const catalog = page.getByRole("dialog", { name: "Catalogue d’exercices" });
+    const catalog = catalogPage(page);
     const results = catalog.getByRole("list", {
       name: "Résultats du catalogue",
     });
@@ -682,15 +864,14 @@ for (const width of [320, 390]) {
     ).toBeVisible();
     await search.fill("Développé couché");
     await catalog
-      .getByRole("combobox", { name: "Filtrer par muscle" })
-      .selectOption("pectoraux");
-    await catalog
-      .getByRole("combobox", { name: "Filtrer par matériel" })
-      .selectOption("barre");
+      .getByRole("group", { name: "Filtrer par muscle" })
+      .getByRole("button", { name: "Pectoraux" })
+      .click();
+    await setCatalogEquipment(page, catalog, "barre");
     const result = results.getByRole("button", {
       name: /Développé couché à la barre/,
     });
-    await expect(result).toContainText("Grand pectoral");
+    await expect(result).toContainText("Pectoraux");
     await expect(result).toContainText("Barre");
     await expectNoHorizontalOverflow(page);
     await addResult(page, officialName);
@@ -734,7 +915,7 @@ for (const width of [320, 390]) {
   }) => {
     await page.setViewportSize({ width, height: 844 });
     await prepareEmptyWorkout(page);
-    let catalog = page.getByRole("dialog", { name: "Catalogue d’exercices" });
+    let catalog = catalogPage(page);
     await catalog
       .getByRole("button", { name: /Créer un exercice personnalisé/ })
       .click();
@@ -771,11 +952,10 @@ for (const width of [320, 390]) {
     ]);
     await search.fill("presse");
     await catalog
-      .getByRole("combobox", { name: "Filtrer par muscle" })
-      .selectOption("jambes");
-    await catalog
-      .getByRole("combobox", { name: "Filtrer par matériel" })
-      .selectOption("machine");
+      .getByRole("group", { name: "Filtrer par muscle" })
+      .getByRole("button", { name: "Jambes" })
+      .click();
+    await setCatalogEquipment(page, catalog, "machine");
     await expect(
       catalog.getByRole("heading", { name: "Mes exercices" }),
     ).toBeVisible();
@@ -786,7 +966,7 @@ for (const width of [320, 390]) {
       .locator(".catalog-section")
       .evaluateAll((sections) =>
         sections.map((section) => ({
-          title: section.querySelector("h3")?.textContent,
+          title: section.querySelector("h2")?.textContent,
           visibleCount: Number(
             section.querySelector(".catalog-section-heading span")?.textContent,
           ),
@@ -816,11 +996,12 @@ for (const width of [320, 390]) {
     ).toBeVisible();
     await search.fill(customName);
     await catalog
-      .getByRole("combobox", { name: "Filtrer par muscle" })
-      .selectOption("");
+      .getByRole("group", { name: "Filtrer par muscle" })
+      .getByRole("button", { name: "Tous les muscles" })
+      .click();
     await catalog
-      .getByRole("combobox", { name: "Filtrer par matériel" })
-      .selectOption("");
+      .getByRole("button", { name: "Retirer le filtre Machine" })
+      .click();
     const initialCustomMenu = await openCustomActions(page, customName);
     await expect(
       initialCustomMenu.getByRole("menuitem", {
@@ -923,7 +1104,7 @@ for (const width of [320, 390]) {
   }) => {
     await page.setViewportSize({ width, height: 844 });
     await prepareEmptyWorkout(page);
-    const catalog = page.getByRole("dialog", { name: "Catalogue d’exercices" });
+    const catalog = catalogPage(page);
     await catalog
       .getByRole("button", { name: "+ Créer un exercice personnalisé" })
       .click();

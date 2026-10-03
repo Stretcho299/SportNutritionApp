@@ -114,12 +114,14 @@ for (const width of [320, 390]) {
     await expect(page.locator(".workout-preparation, .empty")).toBeVisible();
     await page.getByRole("button", { name: "Ajouter un exercice" }).click();
 
-    const catalog = page.getByRole("dialog", { name: "Catalogue d’exercices" });
+    const catalog = page.getByRole("region", { name: "Catalogue d’exercices" });
     await expect(catalog).toBeVisible();
-    const catalogResult = catalog.locator(".catalog-result").first();
-    await expect(catalogResult).toBeVisible();
+    const catalogResultVisual = catalog
+      .locator(".catalog-exercise-visual")
+      .first();
+    await expect(catalogResultVisual).toBeVisible();
     expect(
-      await catalogResult.evaluate(
+      await catalogResultVisual.evaluate(
         (element) => getComputedStyle(element).backgroundColor,
       ),
     ).not.toBe("rgba(0, 0, 0, 0)");
