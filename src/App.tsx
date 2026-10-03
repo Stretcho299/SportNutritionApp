@@ -2329,6 +2329,19 @@ export default function App() {
   );
 }
 
+const maxWorkoutSwipeOvershoot = 18;
+const workoutSwipeDamping = 70;
+
+function getResistedWorkoutSwipeOffset(rawOffset: number, revealWidth: number) {
+  const distance = Math.max(0, -rawOffset);
+  if (distance <= revealWidth) return -distance;
+
+  const overshoot = distance - revealWidth;
+  const resistedOvershoot =
+    maxWorkoutSwipeOvershoot * (1 - Math.exp(-overshoot / workoutSwipeDamping));
+  return -(revealWidth + resistedOvershoot);
+}
+
 function WorkoutRow({
   workout,
   variant = "compact",
@@ -2411,9 +2424,9 @@ function WorkoutRow({
           }
         }
         if (active.mode !== "horizontal") return;
-        const nextOffset = Math.max(
-          -revealWidth,
-          Math.min(0, active.baseOffset + dx),
+        const nextOffset = getResistedWorkoutSwipeOffset(
+          active.baseOffset + dx,
+          revealWidth,
         );
         setDragOffsetX(nextOffset);
       }}

@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 async function createWorkout(page: Page, name: string) {
   await page.getByRole("button", { name: "Créer une séance" }).click();
@@ -37,17 +37,6 @@ async function createWorkoutAndOpen(page: Page, name: string) {
   await createWorkout(page, name);
   await page.locator(".workout-card").filter({ hasText: name }).click();
   await expect(page.locator(".workout-preparation, .empty")).toBeVisible();
-}
-
-async function swipeCard(page: Page, card: Locator, distance: number) {
-  const bounds = await card.locator(".workout-card").boundingBox();
-  expect(bounds).not.toBeNull();
-  const x = bounds!.x + bounds!.width * 0.78;
-  const y = bounds!.y + bounds!.height / 2;
-  await page.mouse.move(x, y);
-  await page.mouse.down();
-  await page.mouse.move(Math.max(1, x + distance), y, { steps: 5 });
-  await page.mouse.up();
 }
 
 for (const width of [320, 390]) {
@@ -117,8 +106,32 @@ for (const width of [320, 390]) {
     await page.mouse.up();
     await expect(card).not.toHaveClass(/open/);
 
-    await swipeCard(page, card, -220);
+    const dragBounds = await cardButton.boundingBox();
+    expect(dragBounds).not.toBeNull();
+    const dragStartX = dragBounds!.x + dragBounds!.width * 0.78;
+    const dragStartY = dragBounds!.y + dragBounds!.height / 2;
+    await page.mouse.move(dragStartX, dragStartY);
+    await page.mouse.down();
+    await page.mouse.move(Math.max(1, dragStartX - 220), dragStartY, {
+      steps: 5,
+    });
+    const overshootTransform = await cardButton.evaluate(
+      (element) => (element as HTMLElement).style.transform,
+    );
+    const overshootOffset = Number(
+      overshootTransform.match(/translateX\((-?[\d.]+)px\)/)?.[1],
+    );
+    expect(overshootOffset).toBeLessThan(-102);
+    expect(overshootOffset).toBeGreaterThan(-122);
+    await page.mouse.up();
     await expect(card).toHaveClass(/open/);
+    await expect
+      .poll(() =>
+        cardButton.evaluate(
+          (element) => (element as HTMLElement).style.transform,
+        ),
+      )
+      .toBe("translateX(-102px)");
     await expect(
       card.getByRole("button", { name: "Supprimer Push" }),
     ).toBeVisible();

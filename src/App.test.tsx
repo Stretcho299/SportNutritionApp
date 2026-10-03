@@ -849,13 +849,19 @@ it("tracks workout swipes, preserves vertical movement, and deletes immediately"
   await create("Push");
   await create("Pull");
   let card = screen.getByText("Push").closest("li")!;
-  let cardButton = card.querySelector(".workout-card")!;
+  let cardButton = card.querySelector<HTMLElement>(".workout-card")!;
   fireEvent.pointerDown(card, {
     pointerId: 1,
     button: 0,
     clientX: 160,
     clientY: 100,
   });
+  fireEvent.pointerMove(card, {
+    pointerId: 1,
+    clientX: 70,
+    clientY: 102,
+  });
+  expect(cardButton).toHaveStyle({ transform: "translateX(-90px)" });
   fireEvent.pointerMove(card, {
     pointerId: 1,
     clientX: 140,
@@ -915,7 +921,7 @@ it("tracks workout swipes, preserves vertical movement, and deletes immediately"
   fireEvent.click(screen.getByRole("button", { name: "Retour aux séances" }));
   await waitForMotion();
   card = screen.getByText("Push").closest("li")!;
-  cardButton = card.querySelector(".workout-card")!;
+  cardButton = card.querySelector<HTMLElement>(".workout-card")!;
 
   fireEvent.pointerDown(card, {
     pointerId: 3,
@@ -945,16 +951,46 @@ it("tracks workout swipes, preserves vertical movement, and deletes immediately"
   });
   fireEvent.pointerMove(card, {
     pointerId: 4,
-    clientX: 80,
+    clientX: 38,
     clientY: 100,
   });
+  const offsetAt20pxOvershoot = Number(
+    cardButton.style.transform.match(/translateX\((-?[\d.]+)px\)/)?.[1],
+  );
+  expect(offsetAt20pxOvershoot).toBeLessThan(-102);
+  expect(offsetAt20pxOvershoot).toBeGreaterThan(-122);
+  fireEvent.pointerMove(card, {
+    pointerId: 4,
+    clientX: 18,
+    clientY: 100,
+  });
+  const offsetAt40pxOvershoot = Number(
+    cardButton.style.transform.match(/translateX\((-?[\d.]+)px\)/)?.[1],
+  );
+  expect(offsetAt40pxOvershoot).toBeLessThan(-102);
+  expect(-offsetAt40pxOvershoot - 102).toBeLessThan(
+    (-offsetAt20pxOvershoot - 102) * 2,
+  );
+  fireEvent.pointerMove(card, {
+    pointerId: 4,
+    clientX: -22,
+    clientY: 100,
+  });
+  const offsetAt80pxOvershoot = Number(
+    cardButton.style.transform.match(/translateX\((-?[\d.]+)px\)/)?.[1],
+  );
+  expect(-offsetAt80pxOvershoot - 102).toBeLessThan(
+    (-offsetAt40pxOvershoot - 102) * 2,
+  );
   fireEvent.pointerUp(card, {
     pointerId: 4,
     button: 0,
-    clientX: 80,
+    clientX: -22,
     clientY: 100,
   });
   expect(card).toHaveClass("open");
+  expect(cardButton).toHaveStyle({ transform: "translateX(-102px)" });
+  expect(screen.getByText("Push")).toBeInTheDocument();
   expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Supprimer Push" }));
   expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
