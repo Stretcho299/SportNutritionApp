@@ -11,7 +11,16 @@ async function addExercise(
     .getByRole("dialog", { name: "Actions de la séance" })
     .getByRole("button", { name: "Ajouter un exercice", exact: true })
     .click();
-  await page.getByRole("textbox", { name: "Nom" }).fill(name);
+  const catalog = page.getByRole("dialog", { name: "Catalogue d’exercices" });
+  await catalog
+    .getByRole("button", { name: "+ Créer un exercice personnalisé" })
+    .click();
+  const custom = page.getByRole("dialog", {
+    name: "Créer un exercice personnalisé",
+  });
+  await custom.getByRole("textbox", { name: "Nom" }).fill(name);
+  await custom.getByRole("button", { name: "Enregistrer" }).click();
+  await expect(custom).toHaveCount(0);
   if (count !== "3")
     await choosePickerValue(page, "Nombre de séries initiales", Number(count));
   if (rest !== "150")
@@ -148,8 +157,14 @@ async function noOverflow(page: Page) {
     "[role=dialog]",
   ]) {
     for (const element of await page.locator(selector).all()) {
+      const geometry = await element.evaluate((el) => ({
+        scrollWidth: el.scrollWidth,
+        clientWidth: el.clientWidth,
+        className: el.className,
+      }));
       expect(
-        await element.evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
+        geometry.scrollWidth <= geometry.clientWidth + 1,
+        `${selector} (${geometry.className}): ${geometry.scrollWidth}px scroll / ${geometry.clientWidth}px client`,
       ).toBe(true);
     }
   }
@@ -443,7 +458,7 @@ for (const width of [390, 320]) {
     );
     await screenshot(page, info, "picker-weight");
     await flickWheel(page, weightWheel);
-    await page.locator(".picker-backdrop").click({ position: { x: 4, y: 4 } });
+    await weightPicker.getByRole("heading", { name: "Charge (kg)" }).click();
     await expect(weightPicker).toBeVisible();
     await dragHandle(page, weightPicker, 120);
     await expect(weightPicker).toHaveCount(0);
@@ -452,7 +467,9 @@ for (const width of [390, 320]) {
     const repetitionsPicker = page.getByRole("dialog", {
       name: "Choisir Répétitions",
     });
-    await page.locator(".picker-backdrop").click({ position: { x: 4, y: 4 } });
+    await repetitionsPicker
+      .getByRole("heading", { name: "Répétitions" })
+      .click();
     await expect(repetitionsPicker).toBeVisible();
     await dragHandle(page, repetitionsPicker, 120);
     await expect(repetitionsPicker).toHaveCount(0);
@@ -555,8 +572,9 @@ for (const width of [390, 320]) {
       .getByRole("dialog", { name: "Actions de la séance" })
       .getByRole("button", { name: "Ajouter un exercice", exact: true })
       .click();
-    await page.getByRole("textbox", { name: "Nom" }).fill("Mobilité");
-    const shortSheet = page.getByRole("dialog", { name: "Exercice" });
+    const shortSheet = page.getByRole("dialog", {
+      name: "Catalogue d’exercices",
+    });
     const shortHandle = shortSheet.getByRole("button", {
       name: "Fermer le panneau",
     });

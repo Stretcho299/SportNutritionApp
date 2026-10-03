@@ -194,7 +194,9 @@ export function BottomSheet({
       style={style}
       data-keyboard-open={viewport.keyboardOpen}
       onClick={(event) => {
-        if (event.target === event.currentTarget) event.stopPropagation();
+        if (event.target !== event.currentTarget) return;
+        event.stopPropagation();
+        onClose();
       }}
       onWheel={(event) => {
         if (event.target === event.currentTarget) event.preventDefault();

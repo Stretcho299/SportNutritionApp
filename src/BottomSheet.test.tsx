@@ -14,7 +14,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("keeps the sheet open when its backdrop is clicked", () => {
+it("closes when the backdrop itself is clicked", () => {
   const onClose = vi.fn();
   render(
     <BottomSheet title="Test" onClose={onClose}>
@@ -25,7 +25,22 @@ it("keeps the sheet open when its backdrop is clicked", () => {
   const backdrop = document.querySelector<HTMLElement>(".sheet-backdrop")!;
   fireEvent.click(backdrop);
 
-  expect(screen.getByRole("dialog", { name: "Test" })).toBeInTheDocument();
+  expect(onClose).toHaveBeenCalledTimes(1);
+});
+
+it("does not close when clicks bubble from the sheet or its controls", () => {
+  const onClose = vi.fn();
+  render(
+    <BottomSheet title="Test" onClose={onClose}>
+      <button type="button">Valider</button>
+      <input aria-label="Nom" />
+    </BottomSheet>,
+  );
+
+  fireEvent.click(screen.getByRole("dialog", { name: "Test" }));
+  fireEvent.click(screen.getByRole("button", { name: "Valider" }));
+  fireEvent.click(screen.getByRole("textbox", { name: "Nom" }));
+
   expect(onClose).not.toHaveBeenCalled();
 });
 

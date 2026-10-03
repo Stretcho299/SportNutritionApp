@@ -1,6 +1,12 @@
 import { IDBFactory } from "fake-indexeddb";
 import {
+  createCustomExercise,
+  officialExercises,
+  updateCustomExercise,
+} from "../exercises/catalog";
+import {
   activateExecutedExercise,
+  canReplaceExecutedExercise,
   abandonWorkoutSession,
   addExercise,
   addExerciseToExecution,
@@ -23,6 +29,10 @@ import {
   reorder,
   saveWorkouts,
   saveWorkoutStore,
+  saveCustomDefinitions,
+  saveCustomDefinitionAndUpdateTemplates,
+  updateCustomDefinitionInStore,
+  replaceExerciseDefinition,
   skipExecutedExercise,
   startExecutedSetRest,
   startWorkoutExecution,
@@ -35,6 +45,385 @@ import {
 
 beforeEach(() => vi.stubGlobal("indexedDB", new IDBFactory()));
 afterEach(() => vi.unstubAllGlobals());
+
+it("keeps definition snapshots in templates and sessions after a custom definition is deleted", async () => {
+  const custom = createCustomExercise({
+    name: "Tirage personnel",
+    primaryMuscle: "grand_dorsal",
+    equipment: ["poulie"],
+  });
+  await saveCustomDefinitions([custom]);
+  const workout = addExercise(createWorkout("Dos"), custom.name, 2, 60, custom);
+  const session = createWorkoutSession(workout, 1234);
+  await saveWorkoutStore({
+    version: 2,
+    templates: [workout],
+    sessions: [session],
+    customDefinitions: [custom],
+  });
+  await saveCustomDefinitions([]);
+  const stored = await loadWorkoutStore();
+  expect(stored.customDefinitions).toEqual([]);
+  expect(stored.templates[0].exercises[0].definitionSnapshot).toEqual(custom);
+  expect(stored.sessions[0].snapshot.exercises[0].definitionSnapshot).toEqual(
+    custom,
+  );
+  expect(stored.sessions[0].snapshot.exercises[0].name).toBe(
+    "Tirage personnel",
+  );
+});
+
+it("keeps a just-created custom definition when a localStorage workout is saved immediately", async () => {
+  vi.stubGlobal("indexedDB", undefined);
+  localStorage.clear();
+  const custom = createCustomExercise({
+    name: "Row local",
+    primaryMuscle: "grand_dorsal",
+  });
+  void saveCustomDefinitions([custom]);
+  await saveWorkouts([
+    addExercise(createWorkout("Dos"), custom.name, 1, 30, custom),
+  ]);
+  const stored = await loadWorkoutStore();
+  expect(stored.customDefinitions).toEqual([custom]);
+  expect(stored.templates[0].exercises[0].definitionSnapshot).toEqual(custom);
+});
+
+it("freezes official muscle metadata when a session starts", () => {
+  const definition = officialExercises[0];
+  const workout = addExercise(
+    createWorkout("Push"),
+    definition.name,
+    3,
+    90,
+    definition,
+  );
+  const session = createWorkoutSession(workout, 1234);
+  workout.exercises[0].definitionSnapshot!.muscleTargets[0].muscle = "biceps";
+  expect(
+    session.snapshot.exercises[0].definitionSnapshot?.muscleTargets[0].muscle,
+  ).toBe("grand_pectoral");
+  expect(session.snapshot.exercises[0].exerciseDefinitionId).toBe(
+    definition.id,
+  );
+  expect(session.snapshot.exercises[0].definitionSnapshot?.illustrationId).toBe(
+    definition.illustrationId,
+  );
+});
+
+it("replaces an occurrence definition while preserving planned structure and clearing old values and notes", () => {
+  const bench = officialExercises.find(
+    (definition) => definition.id === "official:bench-press-barbell",
+  )!;
+  const shoulder = officialExercises.find(
+    (definition) => definition.id === "official:lateral-raise-dumbbell",
+  )!;
+  const workout = addExercise(createWorkout("Push"), bench.name, 3, 90, bench);
+  const occurrence = workout.exercises[0];
+  occurrence.position = 4;
+  occurrence.permanentNote = "Note propre au développé";
+  occurrence.plannedSets[0] = {
+    ...occurrence.plannedSets[0],
+    weightKg: 42.5,
+    repetitions: 8,
+    restSeconds: 135,
+  };
+  workout.sessionNotes = { [occurrence.id]: "Note de l'ancienne séance" };
+
+  const replaced = replaceExerciseDefinition(workout, occurrence.id, shoulder);
+  const next = replaced.exercises[0];
+  expect(next).toMatchObject({
+    id: occurrence.id,
+    position: 4,
+    name: shoulder.name,
+    exerciseDefinitionId: shoulder.id,
+    definitionSnapshot: shoulder,
+  });
+  expect(next.permanentNote).toBeUndefined();
+  expect(next.plannedSets).toHaveLength(3);
+  expect(next.plannedSets[0]).toMatchObject({
+    id: occurrence.plannedSets[0].id,
+    position: occurrence.plannedSets[0].position,
+    weightKg: null,
+    repetitions: null,
+    restSeconds: 135,
+  });
+  expect(replaced.sessionNotes).toEqual({});
+});
+
+it("allows replacement only before an executed exercise has work or rest", () => {
+  const workout = addExercise(createWorkout("Push"), "Bench", 3, 90);
+  const id = workout.exercises[0].id;
+  const active = startWorkoutExecution(workout, 1000);
+  const upcoming = {
+    ...active,
+    exercises: active.exercises.map((exercise) => ({
+      ...exercise,
+      status: "upcoming" as const,
+      sets: exercise.sets.map((set) => ({
+        ...set,
+        status: "upcoming" as const,
+      })),
+    })),
+  };
+  expect(canReplaceExecutedExercise(upcoming, id)).toBe(true);
+  expect(canReplaceExecutedExercise(active, id)).toBe(true);
+  for (const status of ["performed", "skipped", "resting"] as const) {
+    const changed = {
+      ...active,
+      exercises: active.exercises.map((exercise) => ({
+        ...exercise,
+        sets: exercise.sets.map((set, index) =>
+          index === 0 ? { ...set, status } : set,
+        ),
+      })),
+    };
+    expect(canReplaceExecutedExercise(changed, id)).toBe(false);
+  }
+  expect(
+    canReplaceExecutedExercise({ ...active, status: "completed" }, id),
+  ).toBe(false);
+  expect(canReplaceExecutedExercise(active, "missing")).toBe(false);
+});
+
+it("replaces an active occurrence, execution and snapshot without changing completed history", async () => {
+  const bench = officialExercises.find(
+    (item) => item.id === "official:bench-press-barbell",
+  )!;
+  const shoulder = officialExercises.find(
+    (item) => item.id === "official:lateral-raise-dumbbell",
+  )!;
+  const workout = addExercise(createWorkout("Push"), bench.name, 3, 90, bench);
+  const original = workout.exercises[0];
+  original.position = 4;
+  original.permanentNote = "Ancien mouvement";
+  original.plannedSets[0] = {
+    ...original.plannedSets[0],
+    weightKg: 45,
+    repetitions: 8,
+    restSeconds: 135,
+  };
+  const session = createWorkoutSession(workout, 1000);
+  const current: Workout = {
+    ...workout,
+    execution: session.execution,
+    sessionNotes: { [original.id]: "Note de séance" },
+  };
+  await saveWorkouts([current]);
+  const completed = {
+    ...session,
+    id: "past",
+    status: "completed" as const,
+    completedAt: 900,
+    execution: {
+      ...session.execution,
+      sessionId: "past",
+      status: "completed" as const,
+      completedAt: 900,
+    },
+  };
+  const abandoned = {
+    ...session,
+    id: "abandoned",
+    status: "abandoned" as const,
+    abandonedAt: 950,
+    execution: { ...session.execution, sessionId: "abandoned" },
+  };
+  const before = await loadWorkoutStore();
+  await saveWorkoutStore({
+    ...before,
+    sessions: [completed, abandoned, ...before.sessions],
+  });
+  const replaced = replaceExerciseDefinition(current, original.id, shoulder);
+  expect(replaced.exercises[0]).toMatchObject({
+    id: original.id,
+    position: 4,
+    name: shoulder.name,
+    exerciseDefinitionId: shoulder.id,
+    definitionSnapshot: shoulder,
+  });
+  expect(replaced.exercises[0].permanentNote).toBeUndefined();
+  expect(replaced.sessionNotes).toEqual({});
+  expect(replaced.exercises[0].plannedSets.map((set) => set.id)).toEqual(
+    original.plannedSets.map((set) => set.id),
+  );
+  expect(
+    replaced.exercises[0].plannedSets.map((set) => set.restSeconds),
+  ).toEqual(original.plannedSets.map((set) => set.restSeconds));
+  expect(
+    replaced.exercises[0].plannedSets.every(
+      (set) => set.weightKg === null && set.repetitions === null,
+    ),
+  ).toBe(true);
+  expect(replaced.execution?.exercises[0].status).toBe("active");
+  expect(
+    replaced.execution?.exercises[0].sets.map((set) => set.status),
+  ).toEqual(session.execution.exercises[0].sets.map((set) => set.status));
+  expect(replaced.execution?.exercises[0].sets.map((set) => set.setId)).toEqual(
+    original.plannedSets.map((set) => set.id),
+  );
+  expect(
+    replaced.execution?.exercises[0].sets.every(
+      (set) => set.weightKg === null && set.repetitions === null,
+    ),
+  ).toBe(true);
+  await saveWorkouts([replaced]);
+  const stored = await loadWorkoutStore();
+  expect(
+    stored.sessions.find((item) => item.id === session.id)?.snapshot
+      .exercises[0],
+  ).toMatchObject({
+    name: shoulder.name,
+    exerciseDefinitionId: shoulder.id,
+    definitionSnapshot: shoulder,
+  });
+  expect(
+    stored.sessions.find((item) => item.id === session.id)?.snapshot
+      .exercises[0].plannedSets,
+  ).toEqual(replaced.exercises[0].plannedSets);
+  expect(
+    stored.sessions.find((item) => item.id === "past")?.snapshot.exercises[0],
+  ).toMatchObject({
+    name: bench.name,
+    exerciseDefinitionId: bench.id,
+    definitionSnapshot: bench,
+  });
+  expect(
+    stored.sessions.find((item) => item.id === "abandoned")?.snapshot
+      .exercises[0],
+  ).toMatchObject({
+    name: bench.name,
+    exerciseDefinitionId: bench.id,
+    definitionSnapshot: bench,
+  });
+  expect(
+    replaceExerciseDefinition(
+      {
+        ...current,
+        execution: {
+          ...current.execution!,
+          exercises: [
+            {
+              ...current.execution!.exercises[0],
+              sets: [
+                {
+                  ...current.execution!.exercises[0].sets[0],
+                  status: "performed",
+                },
+                ...current.execution!.exercises[0].sets.slice(1),
+              ],
+            },
+          ],
+        },
+      },
+      original.id,
+      shoulder,
+    ),
+  ).toMatchObject({ exercises: [{ name: bench.name }] });
+});
+
+it("updates custom definitions and template occurrences without changing historical snapshots", async () => {
+  const original = createCustomExercise({
+    name: "Presse perso",
+    primaryMuscle: "grand_pectoral",
+    secondaryMuscles: ["triceps"],
+  });
+  const workout = addExercise(
+    createWorkout("Push"),
+    original.name,
+    2,
+    75,
+    original,
+  );
+  const occurrence = workout.exercises[0];
+  occurrence.position = 3;
+  occurrence.permanentNote = "Garder la prise";
+  occurrence.plannedSets[0] = {
+    ...occurrence.plannedSets[0],
+    weightKg: 32,
+    repetitions: 10,
+    restSeconds: 100,
+  };
+  const session = createWorkoutSession(workout, 1234);
+  const originalHistoricalSnapshot = structuredClone(session.snapshot);
+  const secondTemplate = addExercise(
+    createWorkout("Push B"),
+    original.name,
+    1,
+    45,
+    original,
+  );
+  const store = {
+    version: 2 as const,
+    templates: [workout, secondTemplate],
+    sessions: [session],
+    customDefinitions: [original],
+  };
+  await saveWorkoutStore(store);
+
+  const updated = updateCustomExercise(original, {
+    name: "Presse convergente",
+    primaryMuscle: "grand_pectoral",
+    secondaryMuscles: ["triceps", "deltoide_anterieur"],
+    equipment: ["machine"],
+  });
+  const pureResult = updateCustomDefinitionInStore(store, updated);
+  expect(pureResult.sessions[0].snapshot).toEqual(originalHistoricalSnapshot);
+  await saveCustomDefinitionAndUpdateTemplates(updated);
+
+  const saved = await loadWorkoutStore();
+  expect(saved.customDefinitions).toEqual([updated]);
+  const savedOccurrence = saved.templates[0].exercises[0];
+  expect(savedOccurrence).toMatchObject({
+    id: occurrence.id,
+    position: 3,
+    name: "Presse convergente",
+    exerciseDefinitionId: original.id,
+    definitionSnapshot: updated,
+    permanentNote: "Garder la prise",
+  });
+  expect(savedOccurrence.plannedSets).toEqual(occurrence.plannedSets);
+  expect(saved.templates[1].exercises[0]).toMatchObject({
+    name: "Presse convergente",
+    exerciseDefinitionId: original.id,
+    definitionSnapshot: updated,
+  });
+  expect(saved.sessions[0].snapshot).toEqual(originalHistoricalSnapshot);
+  expect(saved.sessions[0].snapshot.exercises[0].name).toBe("Presse perso");
+});
+
+it("keeps legacy occurrences unassociated when custom definitions are updated", () => {
+  const legacy = addExercise(createWorkout("Push"), "Presse perso");
+  const custom = createCustomExercise({
+    name: "Presse perso",
+    primaryMuscle: "grand_pectoral",
+  });
+  const updated = updateCustomExercise(custom, { name: "Presse nouvelle" });
+  const store = updateCustomDefinitionInStore(
+    {
+      version: 2,
+      templates: [legacy],
+      sessions: [],
+      customDefinitions: [custom],
+    },
+    updated,
+  );
+  expect(store.templates[0].exercises[0].exerciseDefinitionId).toBeUndefined();
+  expect(store.templates[0].exercises[0].name).toBe("Presse perso");
+});
+
+it("preserves legacy names without linking them to official IDs during v2 loading", async () => {
+  const workout = addExercise(
+    createWorkout("Ancien"),
+    "Développé couché",
+    1,
+    90,
+  );
+  await saveWorkoutStore({ version: 2, templates: [workout], sessions: [] });
+  const stored = await loadWorkoutStore();
+  expect(stored.templates[0].exercises[0].name).toBe("Développé couché");
+  expect(stored.templates[0].exercises[0].exerciseDefinitionId).toBeUndefined();
+});
 
 it("round-trips blank and subsequently edited sets through IndexedDB", async () => {
   const workout = addExercise(createWorkout("Push"), "Bench", 4, 120);

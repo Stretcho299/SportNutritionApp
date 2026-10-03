@@ -1,3 +1,5 @@
+import type { ExerciseDefinition } from "../exercises/catalog";
+
 export type PlannedSet = {
   id: string;
   position: number;
@@ -8,6 +10,8 @@ export type PlannedSet = {
 export type Exercise = {
   id: string;
   name: string;
+  exerciseDefinitionId?: string;
+  definitionSnapshot?: ExerciseDefinition;
   position: number;
   plannedSets: PlannedSet[];
   defaultRestSeconds?: number;
@@ -42,7 +46,105 @@ export type WorkoutStore = {
   version: 2;
   templates: WorkoutTemplate[];
   sessions: WorkoutSession[];
+  customDefinitions?: ExerciseDefinition[];
 };
+
+export function replaceExerciseDefinition(
+  workout: Workout,
+  exerciseId: string,
+  definition: ExerciseDefinition,
+): Workout {
+  if (!workout.exercises.some((exercise) => exercise.id === exerciseId))
+    return workout;
+  if (
+    workout.execution &&
+    !canReplaceExecutedExercise(workout.execution, exerciseId)
+  )
+    return workout;
+  return {
+    ...workout,
+    ...(workout.execution
+      ? {
+          execution: {
+            ...workout.execution,
+            exercises: workout.execution.exercises.map((exercise) =>
+              exercise.exerciseId === exerciseId
+                ? {
+                    ...exercise,
+                    sets: exercise.sets.map((set) => ({
+                      ...set,
+                      weightKg: null,
+                      repetitions: null,
+                    })),
+                  }
+                : exercise,
+            ),
+          },
+        }
+      : {}),
+    exercises: workout.exercises.map((exercise) => {
+      if (exercise.id !== exerciseId) return exercise;
+      return {
+        ...exercise,
+        permanentNote: undefined,
+        name: definition.name,
+        exerciseDefinitionId: definition.id,
+        definitionSnapshot: clone(definition),
+        plannedSets: exercise.plannedSets.map((set) => ({
+          ...set,
+          weightKg: null,
+          repetitions: null,
+        })),
+      };
+    }),
+    ...(workout.sessionNotes
+      ? {
+          sessionNotes: Object.fromEntries(
+            Object.entries(workout.sessionNotes).filter(
+              ([id]) => id !== exerciseId,
+            ),
+          ),
+        }
+      : {}),
+  };
+}
+
+export function updateCustomDefinitionInWorkout(
+  workout: WorkoutTemplate,
+  definition: ExerciseDefinition,
+): WorkoutTemplate {
+  return {
+    ...workout,
+    exercises: workout.exercises.map((exercise) =>
+      exercise.exerciseDefinitionId === definition.id
+        ? {
+            ...exercise,
+            name: definition.name,
+            definitionSnapshot: clone(definition),
+          }
+        : exercise,
+    ),
+  };
+}
+
+export function updateCustomDefinitionInStore(
+  store: WorkoutStore,
+  definition: ExerciseDefinition,
+): WorkoutStore {
+  return {
+    ...store,
+    customDefinitions: (store.customDefinitions ?? []).some(
+      (item) => item.id === definition.id,
+    )
+      ? (store.customDefinitions ?? []).map((item) =>
+          item.id === definition.id ? clone(definition) : item,
+        )
+      : [...(store.customDefinitions ?? []), clone(definition)],
+    templates: store.templates.map((template) =>
+      updateCustomDefinitionInWorkout(template, definition),
+    ),
+  };
+}
 export const defaultInitialSetCount = 3;
 export const defaultRestSeconds = 150;
 export const legacyDefaultRestSeconds = 90;
@@ -68,6 +170,7 @@ export const addExercise = (
   name: string,
   initialSetCount = defaultInitialSetCount,
   restSeconds = defaultRestSeconds,
+  definition?: ExerciseDefinition,
 ): Workout => {
   if (!Number.isSafeInteger(initialSetCount) || initialSetCount <= 0)
     throw new RangeError(
@@ -80,6 +183,12 @@ export const addExercise = (
       {
         id: id(),
         name,
+        ...(definition
+          ? {
+              exerciseDefinitionId: definition.id,
+              definitionSnapshot: clone(definition),
+            }
+          : {}),
         position: w.exercises.length,
         defaultRestSeconds: restSeconds,
         plannedSets: Array.from({ length: initialSetCount }, (_, position) =>
@@ -175,6 +284,7 @@ const migrateStore = (raw: unknown): WorkoutStore => {
       version: 2,
       templates: store.templates ?? [],
       sessions: store.sessions ?? [],
+      customDefinitions: store.customDefinitions ?? [],
     };
   }
   if (!Array.isArray(raw)) return emptyStore();
@@ -240,6 +350,7 @@ export async function saveWorkoutStore(store: WorkoutStore) {
     version: 2,
     templates: store.templates,
     sessions: store.sessions,
+    customDefinitions: store.customDefinitions ?? [],
   };
   if (!globalThis.indexedDB) {
     localStorage.setItem(key, JSON.stringify(normalized));
@@ -284,9 +395,13 @@ const mergeSessionSnapshot = (
       (item) => item.id === exercise.id,
     );
     if (!previousExercise) return clone(exercise);
+    const replaced =
+      previousExercise.exerciseDefinitionId !== exercise.exerciseDefinitionId ||
+      previousExercise.name !== exercise.name;
     return {
       ...exercise,
       plannedSets: exercise.plannedSets.map((set) => {
+        if (replaced) return set;
         const previousSet = previousExercise.plannedSets.find(
           (item) => item.id === set.id,
         );
@@ -383,7 +498,12 @@ async function persistWorkouts(workouts: Workout[]) {
     if (index >= 0) sessions[index] = session;
     else sessions.push(session);
   }
-  const nextStore = { version: 2 as const, templates, sessions };
+  const nextStore = {
+    version: 2 as const,
+    templates,
+    sessions,
+    customDefinitions: existing.customDefinitions ?? [],
+  };
   if (!globalThis.indexedDB) {
     await saveWorkoutStore(nextStore);
     return;
@@ -396,6 +516,36 @@ let saveWorkoutsQueue: Promise<void> = Promise.resolve();
 export function saveWorkouts(workouts: Workout[]) {
   if (!globalThis.indexedDB) return persistWorkouts(workouts);
   saveWorkoutsQueue = saveWorkoutsQueue.then(() => persistWorkouts(workouts));
+  return saveWorkoutsQueue;
+}
+
+export function saveCustomDefinitions(definitions: ExerciseDefinition[]) {
+  if (!globalThis.indexedDB) {
+    const store = migrateStore(JSON.parse(localStorage.getItem(key) ?? "[]"));
+    localStorage.setItem(
+      key,
+      JSON.stringify({ ...store, customDefinitions: clone(definitions) }),
+    );
+    return Promise.resolve();
+  }
+  saveWorkoutsQueue = saveWorkoutsQueue.then(async () => {
+    const store = await loadWorkoutStore();
+    await saveWorkoutStore({ ...store, customDefinitions: clone(definitions) });
+  });
+  return saveWorkoutsQueue;
+}
+
+export function saveCustomDefinitionAndUpdateTemplates(
+  definition: ExerciseDefinition,
+) {
+  if (!globalThis.indexedDB) {
+    const store = migrateStore(JSON.parse(localStorage.getItem(key) ?? "[]"));
+    return saveWorkoutStore(updateCustomDefinitionInStore(store, definition));
+  }
+  saveWorkoutsQueue = saveWorkoutsQueue.then(async () => {
+    const store = await loadWorkoutStore();
+    await saveWorkoutStore(updateCustomDefinitionInStore(store, definition));
+  });
   return saveWorkoutsQueue;
 }
 
@@ -424,6 +574,25 @@ export type WorkoutExecution = {
   completedAt?: number;
   exercises: ExecutedExercise[];
   archivedExercises?: ExecutedExercise[];
+};
+export const canReplaceExecutedExercise = (
+  execution: WorkoutExecution,
+  exerciseId: string,
+): boolean => {
+  if (execution.status !== "inProgress") return false;
+  const exercise = execution.exercises.find(
+    (item) => item.exerciseId === exerciseId,
+  );
+  return Boolean(
+    exercise &&
+    (exercise.status === "upcoming" || exercise.status === "active") &&
+    exercise.sets.every(
+      (set) =>
+        set.status !== "performed" &&
+        set.status !== "skipped" &&
+        set.status !== "resting",
+    ),
+  );
 };
 const isTerminalSet = (set: ExecutedSet) =>
   set.status === "performed" || set.status === "skipped";

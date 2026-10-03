@@ -46,6 +46,15 @@ async function saveSheet(page: Page, title: string, expectedName: string) {
   await expect(sheet).toHaveCount(0);
 }
 
+async function saveExerciseSheet(page: Page, expectedName: string) {
+  const sheet = page.getByRole("dialog", { name: "Exercice" });
+  await expect(
+    sheet.getByRole("region", { name: "Exercice sélectionné" }),
+  ).toContainText(expectedName);
+  await sheet.getByRole("button", { name: "Enregistrer", exact: true }).click();
+  await expect(sheet).toHaveCount(0);
+}
+
 async function dragDismissSheet(page: Page) {
   const handle = page.getByRole("button", { name: "Fermer le panneau" });
   await handle.scrollIntoViewIfNeeded();
@@ -59,16 +68,30 @@ async function dragDismissSheet(page: Page) {
   await page.mouse.up();
 }
 
-async function addExercise(page: Page, name: string, count = "1") {
+async function openCustomExercise(page: Page, name: string) {
   await page.getByRole("button", { name: /Gérer les exercices/i }).click();
   await page
     .getByRole("dialog", { name: /Actions de la séance/i })
     .getByRole("button", { name: /Ajouter un exercice/i })
     .click();
-  await page.getByRole("textbox", { name: "Nom" }).fill(name);
+  const catalog = page.getByRole("dialog", { name: "Catalogue d’exercices" });
+  await catalog
+    .getByRole("button", { name: "+ Créer un exercice personnalisé" })
+    .click();
+  const custom = page.getByRole("dialog", {
+    name: "Créer un exercice personnalisé",
+  });
+  await custom.getByRole("textbox", { name: "Nom" }).fill(name);
+  await custom.getByRole("button", { name: "Enregistrer" }).click();
+  await expect(custom).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Exercice" })).toBeVisible();
+}
+
+async function addExercise(page: Page, name: string, count = "1", rest = 30) {
+  await openCustomExercise(page, name);
   await chooseValue(page, "Nombre de séries initiales", Number(count));
-  await chooseValue(page, "Repos par défaut", 30);
-  await saveSheet(page, "Exercice", name);
+  await chooseValue(page, "Repos par défaut", rest);
+  await saveExerciseSheet(page, name);
 }
 
 async function expectPickerSave(picker: Locator) {
@@ -222,15 +245,7 @@ async function prepareWorkout(
   await saveSheet(page, "Séance", workoutName);
   await page.locator(".workout-card").click();
   await expect(page.locator(".workout-preparation, .empty")).toBeVisible();
-  await page.getByRole("button", { name: /Gérer les exercices/i }).click();
-  await page
-    .getByRole("dialog", { name: /Actions de la séance/i })
-    .getByRole("button", { name: /Ajouter un exercice/i })
-    .click();
-  await page.getByRole("textbox", { name: "Nom" }).fill("Exercice A");
-  await chooseValue(page, "Nombre de séries initiales", Number(setCount));
-  await chooseValue(page, "Repos par défaut", 90);
-  await saveSheet(page, "Exercice", "Exercice A");
+  await addExercise(page, "Exercice A", setCount, 90);
 }
 
 test("keeps exercise options distinct and reachable beside finish at phone widths", async ({
@@ -253,7 +268,7 @@ test("keeps exercise options distinct and reachable beside finish at phone width
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 844 });
     const options = page.getByRole("button", {
-      name: "Modifier l’exercice",
+      name: "Changer l’exercice",
     });
     const finish = page.getByRole("button", { name: "Terminer l’exercice" });
     await expect(options).toBeVisible();
@@ -288,13 +303,15 @@ test("keeps exercise options distinct and reachable beside finish at phone width
     expect(geometry.overlap).toBe(false);
   }
 
-  await page.getByRole("button", { name: "Modifier l’exercice" }).click();
-  await expect(page.getByRole("dialog", { name: "Exercice" })).toBeVisible();
-  await saveSheet(
-    page,
-    "Exercice",
-    "Développé incliné avec haltères et prise neutre",
-  );
+  await page.getByRole("button", { name: "Changer l’exercice" }).click();
+  const replacementCatalog = page.getByRole("dialog", {
+    name: "Changer l’exercice",
+  });
+  await expect(replacementCatalog).toBeVisible();
+  await replacementCatalog
+    .getByRole("button", { name: "Fermer le panneau" })
+    .press("Enter");
+  await expect(replacementCatalog).toHaveCount(0);
   await page.getByRole("button", { name: "Terminer l’exercice" }).click();
   await expect(
     page.getByRole("alertdialog", { name: "Mettre fin à cet exercice ?" }),
@@ -330,15 +347,7 @@ test("does not activate the next exercise when deleting an upcoming set", async 
   page,
 }) => {
   await prepareWorkout(page);
-  await page.getByRole("button", { name: /Gérer les exercices/i }).click();
-  await page
-    .getByRole("dialog", { name: /Actions de la séance/i })
-    .getByRole("button", { name: /Ajouter un exercice/i })
-    .click();
-  await page.getByRole("textbox", { name: "Nom" }).fill("Exercice B");
-  await chooseValue(page, "Nombre de séries initiales", 1);
-  await chooseValue(page, "Repos par défaut", 90);
-  await saveSheet(page, "Exercice", "Exercice B");
+  await addExercise(page, "Exercice B", "1", 90);
   await page.getByRole("button", { name: /Démarrer la séance/i }).click();
   const aRegion = page.getByRole("region", { name: "Séries de Exercice A" });
   await aRegion
@@ -364,15 +373,7 @@ test("starts from the selected exercise and keeps other tabs upcoming", async ({
 }) => {
   await prepareWorkout(page, "2");
   for (const name of ["Exercice B", "Exercice C"]) {
-    await page.getByRole("button", { name: /Gérer les exercices/i }).click();
-    await page
-      .getByRole("dialog", { name: /Actions de la séance/i })
-      .getByRole("button", { name: /Ajouter un exercice/i })
-      .click();
-    await page.getByRole("textbox", { name: "Nom" }).fill(name);
-    await chooseValue(page, "Nombre de séries initiales", 2);
-    await chooseValue(page, "Repos par défaut", 90);
-    await saveSheet(page, "Exercice", name);
+    await addExercise(page, name, "2", 90);
   }
 
   const tabs = page.getByRole("list", { name: "Exercices" }).locator("li");
@@ -1736,7 +1737,9 @@ test("persists permanent and session exercise notes independently", async ({
     name: "Note permanente",
   });
   await permanentDraft.fill("Brouillon à annuler");
-  await page.locator(".sheet-backdrop").click({ position: { x: 4, y: 4 } });
+  await resumedNotes
+    .getByRole("heading", { name: "Notes de l’exercice" })
+    .click();
   await expect(resumedNotes).toBeVisible();
   await expect(permanentDraft).toHaveValue("Brouillon à annuler");
   await expect(
@@ -1796,7 +1799,7 @@ test("persists permanent and session exercise notes independently", async ({
   expect(store.sessions[1].sessionNotes).toEqual({});
 });
 
-test("keeps picker sheets open on backdrop taps and blocks the app behind them", async ({
+test("closes picker sheets on backdrop taps without activating the app behind them", async ({
   page,
 }) => {
   await prepareWorkout(page, "1");
@@ -1812,7 +1815,7 @@ test("keeps picker sheets open on backdrop taps and blocks the app behind them",
   const backdropHit = await page.evaluate(
     ({ x, y }) => {
       const target = document.elementFromPoint(x, y);
-      return Boolean(target?.closest(".sheet-backdrop"));
+      return target?.classList.contains("sheet-backdrop") ?? false;
     },
     {
       x: actionBounds.x + actionBounds.width / 2,
@@ -1824,15 +1827,15 @@ test("keeps picker sheets open on backdrop taps and blocks the app behind them",
     actionBounds.x + actionBounds.width / 2,
     actionBounds.y + actionBounds.height / 2,
   );
-  await expect(picker).toBeVisible();
+  await expect(picker).toHaveCount(0);
   await expect(
     page.getByRole("dialog", { name: "Actions de la séance" }),
   ).toHaveCount(0);
-  await page.locator(".sheet-backdrop").click({ position: { x: 4, y: 4 } });
+  await page.getByRole("button", { name: "Charge (kg)" }).click();
   await expect(picker).toBeVisible();
-  await picker
-    .getByRole("button", { name: "ENREGISTRER", exact: true })
-    .click();
+  await picker.getByRole("heading", { name: "Charge (kg)" }).click();
+  await expect(picker).toBeVisible();
+  await page.locator(".sheet-backdrop").click({ position: { x: 4, y: 4 } });
   await expect(picker).toHaveCount(0);
 
   const viewport = await page
@@ -2116,7 +2119,7 @@ test("keeps Notes above the iOS keyboard when innerHeight shrinks on the first e
   await field.fill("Brouillon clavier");
   await expect(field).toBeFocused();
   await expect(field).toHaveValue("Brouillon clavier");
-  await page.locator(".sheet-backdrop").click({ position: { x: 4, y: 4 } });
+  await field.click();
   await expect(notes).toBeVisible();
   await expect(page.locator(".bottom-navigation")).toHaveCSS(
     "visibility",

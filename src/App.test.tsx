@@ -78,7 +78,9 @@ function openOrganizeMenu() {
 }
 async function createExercise(name: string, count = 1, rest = 90) {
   fireEvent.click(within(openAddMenu()).getByText("Ajouter un exercice"));
+  fireEvent.click(screen.getByText("+ Créer un exercice personnalisé"));
   fireEvent.change(screen.getByLabelText("Nom"), { target: { value: name } });
+  fireEvent.click(screen.getByText("Enregistrer"));
   await chooseValue("Nombre de séries initiales", count);
   await chooseValue("Repos par défaut", rest);
   fireEvent.click(screen.getByText("Enregistrer"));
@@ -188,7 +190,7 @@ it("shows a new workout without zones 1, 2 and 3", async () => {
   expect(screen.queryByText("Options avancées")).not.toBeInTheDocument();
   expect(screen.queryByText("+ Ajouter une série")).not.toBeInTheDocument();
   fireEvent.click(screen.getByText("Ajouter un exercice"));
-  expect(screen.getByLabelText("Nom")).toBeInTheDocument();
+  expect(screen.getByLabelText("Rechercher un exercice")).toBeInTheDocument();
 });
 
 it("opens forms without input autofocus and locks the background", async () => {
@@ -224,7 +226,7 @@ it("opens forms without input autofocus and locks the background", async () => {
   fireEvent.click(backdrop);
   expect(dialog).toBeInTheDocument();
   expect(document.body).toHaveStyle({ position: "fixed", overflow: "hidden" });
-  await dismissSheetAndWait();
+  await waitForMotion();
   expect(
     screen.queryByRole("dialog", { name: "Séance" }),
   ).not.toBeInTheDocument();
@@ -590,9 +592,7 @@ it("keeps sets in their natural order and renumbers them after deletion", async 
   expect(storedWorkouts()[0].exercises.map((item) => item.name)).toEqual([
     "Row",
   ]);
-  const rowActions = screen.getByLabelText(
-    "Modifier l’exercice",
-  ).parentElement!;
+  const rowActions = document.querySelector<HTMLElement>(".exercise-menu")!;
   fireEvent.click(
     within(rowActions).getByRole("button", { name: "Supprimer" }),
   );
@@ -604,14 +604,14 @@ it("keeps sets in their natural order and renumbers them after deletion", async 
   expect(
     screen.getByRole("heading", { name: "Aucun exercice" }),
   ).toBeInTheDocument();
-});
+}, 10_000);
 
 it("selects a remaining exercise after deletion and restores the empty state after the last", async () => {
   await openEmptyWorkout();
   await createExercise("Squat");
   await createExercise("Row");
   const removeSelected = () => {
-    const actions = screen.getByLabelText("Modifier l’exercice").parentElement!;
+    const actions = document.querySelector<HTMLElement>(".exercise-menu")!;
     fireEvent.click(within(actions).getByRole("button", { name: "Supprimer" }));
   };
   removeSelected();
@@ -661,6 +661,11 @@ it("creates N blank sets with the requested rest and preserves blanks after relo
 it("offers only valid initial set counts through the native wheel picker", async () => {
   await openEmptyWorkout();
   fireEvent.click(within(openAddMenu()).getByText("Ajouter un exercice"));
+  fireEvent.click(screen.getByText("+ Créer un exercice personnalisé"));
+  fireEvent.change(screen.getByLabelText("Nom"), {
+    target: { value: "Squat" },
+  });
+  fireEvent.click(screen.getByText("Enregistrer"));
   expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
   fireEvent.click(screen.getByLabelText("Nombre de séries initiales"));
   const picker = screen.getByRole("dialog", {
@@ -1215,6 +1220,11 @@ it("hides the active capsule while a picker or confirmation is open", async () =
       screen.getByRole("dialog", { name: "Actions de la séance" }),
     ).getByText("Ajouter un exercice"),
   );
+  fireEvent.click(screen.getByText("+ Créer un exercice personnalisé"));
+  fireEvent.change(screen.getByLabelText("Nom"), {
+    target: { value: "Squat" },
+  });
+  fireEvent.click(screen.getByText("Enregistrer"));
   expect(screen.getByRole("dialog", { name: "Exercice" })).toBeVisible();
   expect(
     screen.queryByRole("button", { name: "Reprendre la séance Push" }),
