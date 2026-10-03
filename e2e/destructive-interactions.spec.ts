@@ -219,6 +219,7 @@ for (const width of [320, 390]) {
       .getByRole("dialog", { name: "Actions de la séance" })
       .getByRole("button", { name: "Ajouter un exercice", exact: true })
       .click();
+    await page.getByRole("tab", { name: "Mes exercices" }).click();
     await page.getByRole("button", { name: "Options Custom Danger" }).click();
     const customDelete = page.getByRole("menuitem", {
       name: "Supprimer Custom Danger",

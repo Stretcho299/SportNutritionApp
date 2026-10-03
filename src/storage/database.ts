@@ -388,9 +388,8 @@ export async function loadWorkouts(): Promise<Workout[]> {
 const mergeSessionSnapshot = (
   previous: WorkoutTemplate,
   current: Workout,
-): WorkoutTemplate => ({
-  ...previous,
-  exercises: current.exercises.map((exercise) => {
+): WorkoutTemplate => {
+  const exercises = current.exercises.map((exercise) => {
     const previousExercise = previous.exercises.find(
       (item) => item.id === exercise.id,
     );
@@ -415,8 +414,22 @@ const mergeSessionSnapshot = (
           : set;
       }),
     };
-  }),
-});
+  });
+  const currentIds = new Set(exercises.map((exercise) => exercise.id));
+  const archivedIds = new Set(
+    (current.execution?.archivedExercises ?? []).map(
+      (exercise) => exercise.exerciseId,
+    ),
+  );
+  for (const exercise of previous.exercises) {
+    if (archivedIds.has(exercise.id) && !currentIds.has(exercise.id))
+      exercises.push(clone(exercise));
+  }
+  return {
+    ...previous,
+    exercises: exercises.sort((a, b) => a.position - b.position),
+  };
+};
 
 const syncTemplateWorkValues = (
   previous: WorkoutTemplate,
@@ -1016,3 +1029,46 @@ export const completeWorkoutExecution = (
   execution.status === "readyToFinish"
     ? { ...execution, status: "completed", completedAt: now }
     : execution;
+
+export function completeWorkoutSession(
+  sessionId: string,
+  now = Date.now(),
+): Promise<WorkoutSession> {
+  let result: WorkoutSession | undefined;
+  saveWorkoutsQueue = saveWorkoutsQueue.then(async () => {
+    const store = await loadWorkoutStore();
+    const session = store.sessions.find((item) => item.id === sessionId);
+    if (!session) throw new Error("Séance introuvable");
+    if (session.status === "completed") {
+      result = session;
+      return;
+    }
+    if (session.status !== "readyToFinish")
+      throw new Error("Seule une séance prête peut être terminée");
+
+    const execution = completeWorkoutExecution(session.execution, now);
+    const completed: WorkoutSession = {
+      ...session,
+      status: "completed",
+      completedAt: execution.completedAt ?? now,
+      execution,
+    };
+    const templates = store.templates.map((template) =>
+      template.id === session.templateId
+        ? syncTemplateWorkValues(template, execution)
+        : template,
+    );
+    await saveWorkoutStore({
+      ...store,
+      templates,
+      sessions: store.sessions.map((item) =>
+        item.id === sessionId ? completed : item,
+      ),
+    });
+    result = completed;
+  });
+  return saveWorkoutsQueue.then(() => {
+    if (!result) throw new Error("La séance terminée n’a pas été enregistrée");
+    return result;
+  });
+}

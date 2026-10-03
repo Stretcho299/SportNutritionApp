@@ -13,6 +13,7 @@ import {
   addSet,
   addSetToExecution,
   completeWorkoutExecution,
+  completeWorkoutSession,
   createWorkout,
   createWorkoutSession,
   defaultInitialSetCount,
@@ -936,6 +937,108 @@ it("archives performed sets when their exercise is removed", () => {
   expect(execution.archivedExercises?.[0].sets).toEqual(
     expect.arrayContaining([expect.objectContaining({ status: "performed" })]),
   );
+});
+
+it("keeps archived exercise metadata in the active session snapshot without restoring its template occurrence", async () => {
+  const benchDefinition = officialExercises.find(
+    (definition) => definition.id === "official:bench-press-barbell",
+  )!;
+  let workout = addExercise(
+    createWorkout("Push"),
+    benchDefinition.name,
+    2,
+    30,
+    benchDefinition,
+  );
+  const bench = workout.exercises[0];
+  bench.permanentNote = "Banc position 4";
+  workout = addExercise(workout, "Row", 1, 30);
+  const session = createWorkoutSession(workout, 1_000);
+  await saveWorkouts([{ ...workout, execution: session.execution }]);
+  let execution = startExecutedSetRest(
+    session.execution,
+    bench.id,
+    bench.plannedSets[0].id,
+    1_000,
+  );
+  execution = finishExecutedRest(execution);
+  execution = removeExecutedExercise(execution, bench.id);
+  const currentWorkout: Workout = {
+    ...workout,
+    exercises: workout.exercises
+      .filter((exercise) => exercise.id !== bench.id)
+      .map((exercise, position) => ({ ...exercise, position })),
+    execution,
+    sessionNotes: { [bench.id]: "Bonne stabilité" },
+  };
+
+  await saveWorkouts([currentWorkout]);
+  const stored = await loadWorkoutStore();
+  const storedSession = stored.sessions[0];
+  expect(stored.templates[0].exercises.map((exercise) => exercise.id)).toEqual([
+    workout.exercises[1].id,
+  ]);
+  expect(storedSession.execution.archivedExercises?.[0].exerciseId).toBe(
+    bench.id,
+  );
+  expect(storedSession.snapshot.exercises).toContainEqual(
+    expect.objectContaining({
+      id: bench.id,
+      name: benchDefinition.name,
+      exerciseDefinitionId: benchDefinition.id,
+      definitionSnapshot: benchDefinition,
+      permanentNote: "Banc position 4",
+    }),
+  );
+  expect(storedSession.sessionNotes).toEqual({ [bench.id]: "Bonne stabilité" });
+});
+
+it("completes a session once and leaves its historical snapshot unchanged after template edits", async () => {
+  let template = addExercise(createWorkout("Push"), "Bench", 1, 30);
+  const originalSnapshot = createWorkoutSession(template, 1_000);
+  let execution = startExecutedSetRest(
+    originalSnapshot.execution,
+    template.exercises[0].id,
+    template.exercises[0].plannedSets[0].id,
+    1_000,
+  );
+  execution = finishExecutedRest(execution);
+  const readySession = {
+    ...originalSnapshot,
+    status: "readyToFinish" as const,
+    execution,
+  };
+  await saveWorkoutStore({
+    version: 2,
+    templates: [template],
+    sessions: [readySession],
+  });
+
+  const completed = await completeWorkoutSession(readySession.id, 2_000);
+  const repeated = await completeWorkoutSession(readySession.id, 3_000);
+  template = {
+    ...template,
+    name: "Push modifié",
+    exercises: template.exercises.map((exercise) => ({
+      ...exercise,
+      name: "Bench récent",
+      plannedSets: exercise.plannedSets.map((set) => ({
+        ...set,
+        weightKg: 90,
+      })),
+    })),
+  };
+  await saveWorkouts([template]);
+
+  const stored = await loadWorkoutStore();
+  expect(completed.completedAt).toBe(2_000);
+  expect(repeated.completedAt).toBe(2_000);
+  expect(stored.sessions).toHaveLength(1);
+  expect(stored.sessions[0].completedAt).toBe(2_000);
+  expect(stored.sessions[0].snapshot).toEqual(originalSnapshot.snapshot);
+  expect(stored.sessions[0].snapshot.exercises[0].name).toBe("Bench");
+  expect(stored.templates[0].name).toBe("Push modifié");
+  expect(stored.templates[0].exercises[0].plannedSets[0].weightKg).toBe(90);
 });
 
 it("reopens a ready session when a new exercise is added", () => {

@@ -481,45 +481,108 @@ for (const width of [320, 390]) {
       .getByRole("button", { name: "Lancer le repos" })
       .click();
     await page.getByRole("button", { name: "Terminer la séance" }).click();
+    const summaryForwardCount = await motionEventCount(
+      page,
+      "animationend",
+      "session-summary",
+      "page-forward-in",
+    );
+    const summaryForwardStartCount = await motionEventCount(
+      page,
+      "animationstart",
+      "session-summary",
+      "page-forward-in",
+    );
     await page
       .getByRole("alertdialog", { name: "Terminer la séance ?" })
       .getByRole("button", { name: "Terminer" })
       .click();
     await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    const summary = page.locator(".session-summary");
+    const detailToSummaryMotion = await expectPageMotion(
+      page,
+      summary,
+      "forward",
+    );
+    await waitForMotionStart(
+      page,
+      "session-summary",
+      "page-forward-in",
+      summaryForwardStartCount,
+    );
+    await waitForMotionEnd(
+      page,
+      "session-summary",
+      "page-forward-in",
+      summaryForwardCount,
+    );
 
-    const previewBackCount = await motionEventCount(
+    const summaryToSessionsBackCount = await motionEventCount(
       page,
       "animationend",
-      "workout-preview",
+      "sessions-library",
       "page-back-in",
     );
-    const previewBackStartCount = await motionEventCount(
+    const summaryToSessionsBackStartCount = await motionEventCount(
       page,
       "animationstart",
-      "workout-preview",
+      "sessions-library",
       "page-back-in",
     );
     await page.getByLabel("Retour aux séances").click();
-    const preview = page.locator(".workout-preview");
-    await expect(preview).toBeVisible();
-    const detailToPreviewBackMotion = await expectPageMotion(
+    const summaryReturnedWorkouts = page.locator(".sessions-library");
+    const summaryToSessionsBackMotion = await expectPageMotion(
       page,
-      preview,
+      summaryReturnedWorkouts,
       "back",
     );
     await expectNoHorizontalOverflow(page);
     await waitForMotionStart(
       page,
-      "workout-preview",
+      "sessions-library",
       "page-back-in",
-      previewBackStartCount,
+      summaryToSessionsBackStartCount,
+    );
+    await waitForMotionEnd(
+      page,
+      "sessions-library",
+      "page-back-in",
+      summaryToSessionsBackCount,
+    );
+    expectMirroredPageMotion(
+      detailToSummaryMotion,
+      summaryToSessionsBackMotion,
+    );
+
+    const sessionsToPreviewForwardCount = await motionEventCount(
+      page,
+      "animationend",
+      "workout-preview",
+      "page-forward-in",
+    );
+    const sessionsToPreviewForwardStartCount = await motionEventCount(
+      page,
+      "animationstart",
+      "workout-preview",
+      "page-forward-in",
+    );
+    await page.locator(".workout-card").click();
+    const completedPreview = page.locator(".workout-preview");
+    await expectPageMotion(page, completedPreview, "forward");
+    await expectNoHorizontalOverflow(page);
+    await waitForMotionStart(
+      page,
+      "workout-preview",
+      "page-forward-in",
+      sessionsToPreviewForwardStartCount,
     );
     await waitForMotionEnd(
       page,
       "workout-preview",
-      "page-back-in",
-      previewBackCount,
+      "page-forward-in",
+      sessionsToPreviewForwardCount,
     );
+
     const previewToSessionsBackCount = await motionEventCount(
       page,
       "animationend",
@@ -550,37 +613,36 @@ for (const width of [320, 390]) {
       "page-back-in",
       previewToSessionsBackCount,
     );
-    const sessionsToPreviewForwardCount = await motionEventCount(
+
+    const repeatedSessionsToPreviewForwardCount = await motionEventCount(
       page,
       "animationend",
       "workout-preview",
       "page-forward-in",
     );
-    const sessionsToPreviewForwardStartCount = await motionEventCount(
+    const repeatedSessionsToPreviewForwardStartCount = await motionEventCount(
       page,
       "animationstart",
       "workout-preview",
       "page-forward-in",
     );
     await page.locator(".workout-card").click();
-    const completedPreview = page.locator(".workout-preview");
     const sessionsToPreviewForwardMotion = await expectPageMotion(
       page,
       completedPreview,
       "forward",
     );
-    await expectNoHorizontalOverflow(page);
     await waitForMotionStart(
       page,
       "workout-preview",
       "page-forward-in",
-      sessionsToPreviewForwardStartCount,
+      repeatedSessionsToPreviewForwardStartCount,
     );
     await waitForMotionEnd(
       page,
       "workout-preview",
       "page-forward-in",
-      sessionsToPreviewForwardCount,
+      repeatedSessionsToPreviewForwardCount,
     );
     expectMirroredPageMotion(
       sessionsToPreviewForwardMotion,
@@ -600,15 +662,7 @@ for (const width of [320, 390]) {
     );
     await page.getByRole("button", { name: "PRÉPARER LA SÉANCE" }).click();
     const detail = page.locator(".workout-preparation");
-    const previewToDetailForwardMotion = await expectPageMotion(
-      page,
-      detail,
-      "forward",
-    );
-    expectMirroredPageMotion(
-      previewToDetailForwardMotion,
-      detailToPreviewBackMotion,
-    );
+    await expectPageMotion(page, detail, "forward");
     await expectNoHorizontalOverflow(page);
     const header = page.locator(".workout-control");
     expect(
