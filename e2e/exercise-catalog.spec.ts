@@ -94,7 +94,7 @@ for (const width of [320, 390]) {
     await addResult(page, officialName);
     const catalog = await openCatalog(page);
     await catalog
-      .getByRole("list", { name: "Résultats du catalogue" })
+      .locator(".catalog-results")
       .getByRole("button", { name: /Squat à la barre/ })
       .click();
     await page
@@ -279,7 +279,7 @@ async function openCustomActions(page: Page, name: string) {
 async function addResult(page: Page, name: string) {
   const catalog = catalogPage(page);
   await catalog
-    .getByRole("list", { name: "Résultats du catalogue" })
+    .locator(".catalog-results")
     .getByRole("button", { name: new RegExp(name) })
     .first()
     .click();
@@ -296,7 +296,7 @@ async function replaceCurrentWith(page: Page, name: string) {
   const catalog = catalogPage(page);
   await expect(catalog).toBeVisible();
   await catalog
-    .getByRole("list", { name: "Résultats du catalogue" })
+    .locator(".catalog-results")
     .getByRole("button", { name: new RegExp(name) })
     .first()
     .click();
@@ -386,16 +386,23 @@ async function expectNoHorizontalOverflow(page: Page) {
 }
 
 async function setCatalogEquipment(
-  page: Page,
   catalog: ReturnType<typeof catalogPage>,
   value: string,
 ) {
-  await catalog.getByRole("button", { name: "Filtres avancés" }).click();
-  const filters = page.getByRole("dialog", { name: "Filtres" });
-  await filters
-    .getByRole("combobox", { name: "Filtrer par matériel" })
-    .selectOption(value);
-  await filters.getByRole("button", { name: "Afficher les résultats" }).click();
+  const label =
+    value === ""
+      ? "Tout matériel"
+      : value === "poids_du_corps"
+        ? "Poids du corps"
+        : value === "smith"
+          ? "Smith machine"
+          : value === "halteres"
+            ? "Haltères"
+            : value.charAt(0).toUpperCase() + value.slice(1);
+  await catalog
+    .getByRole("group", { name: "Filtrer par matériel" })
+    .getByRole("button", { name: label, exact: true })
+    .click();
 }
 
 for (const width of [320, 390]) {
@@ -412,6 +419,15 @@ for (const width of [320, 390]) {
     await expect(
       catalog.getByRole("heading", { name: "Exercices" }),
     ).toBeVisible();
+    await expect(catalog.getByRole("heading", { name: "Exercices" })).toHaveCSS(
+      "font-size",
+      "18px",
+    );
+    await expect(catalog.locator(".catalog-section-heading")).toHaveCount(0);
+    await expect(catalog.locator(".catalog-section")).toHaveCount(0);
+    await expect(
+      catalog.getByRole("tab", { name: "Catalogue" }),
+    ).toHaveAttribute("aria-selected", "true");
     await expect(page.locator(".bottom-navigation")).toHaveCSS(
       "visibility",
       "hidden",
@@ -421,7 +437,7 @@ for (const width of [320, 390]) {
     const visibleRows = await resultScroller.evaluate((scroller) => {
       const viewport = scroller.getBoundingClientRect();
       return Array.from(
-        scroller.querySelectorAll(".catalog-section-list > li"),
+        scroller.querySelectorAll(":scope > li:not(.catalog-empty)"),
       ).filter((row) => {
         const bounds = row.getBoundingClientRect();
         return bounds.bottom > viewport.top && bounds.top < viewport.bottom;
@@ -473,6 +489,36 @@ for (const width of [320, 390]) {
       scrollWidth: element.scrollWidth,
     }));
     expect(chipMetrics.scrollWidth).toBeGreaterThan(chipMetrics.clientWidth);
+    const equipmentChips = catalog.getByRole("group", {
+      name: "Filtrer par matériel",
+    });
+    await expect(equipmentChips.getByRole("button")).toHaveCount(7);
+    for (const equipmentName of [
+      "Tout matériel",
+      "Barre",
+      "Haltères",
+      "Poulie",
+      "Machine",
+      "Smith machine",
+      "Poids du corps",
+    ]) {
+      await expect(
+        equipmentChips.getByRole("button", {
+          name: equipmentName,
+          exact: true,
+        }),
+      ).toBeVisible();
+    }
+    await expect(
+      equipmentChips.getByRole("button", { name: "Poids du corps" }),
+    ).toContainText("P. du corps");
+    const equipmentMetrics = await equipmentChips.evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+    }));
+    expect(equipmentMetrics.scrollWidth).toBeGreaterThan(
+      equipmentMetrics.clientWidth,
+    );
     await muscleChips.evaluate((element) => {
       element.scrollLeft = element.scrollWidth;
     });
@@ -481,17 +527,49 @@ for (const width of [320, 390]) {
       element.scrollLeft = 0;
     });
     await catalog.getByRole("tab", { name: "Mes exercices" }).click();
-    await expect(catalog.getByText("Aucun exercice trouvé")).toBeVisible();
-    await catalog.getByRole("tab", { name: "Tous" }).click();
-    await muscleChips.getByRole("button", { name: "Pectoraux" }).click();
-    await setCatalogEquipment(page, catalog, "halteres");
     await expect(
-      catalog.getByRole("button", { name: "Retirer le filtre Haltères" }),
+      catalog.getByText("Aucun exercice personnalisé"),
     ).toBeVisible();
-    await catalog.getByRole("button", { name: "Réinitialiser" }).click();
+    await catalog.getByRole("tab", { name: "Catalogue" }).click();
+    await muscleChips.getByRole("button", { name: "Pectoraux" }).click();
+    await setCatalogEquipment(catalog, "halteres");
     await expect(
-      catalog.getByRole("button", { name: "Retirer le filtre Haltères" }),
+      catalog
+        .locator(".catalog-results")
+        .getByRole("button", { name: /Développé couché aux haltères/ }),
+    ).toBeVisible();
+    await expect(
+      catalog
+        .locator(".catalog-results")
+        .getByRole("button", { name: /Développé couché à la barre/ }),
     ).toHaveCount(0);
+    await expect(
+      equipmentChips.getByRole("button", { name: "Haltères" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("dialog", { name: "Filtres" })).toHaveCount(0);
+    await expect(
+      catalog.getByRole("button", { name: "+ Filtres" }),
+    ).toHaveCount(0);
+    await expect(
+      catalog.getByRole("button", { name: "Réinitialiser" }),
+    ).toHaveCount(0);
+    await muscleChips.getByRole("button", { name: "Dos", exact: true }).click();
+    await setCatalogEquipment(catalog, "poulie");
+    await expect(
+      catalog
+        .locator(".catalog-results")
+        .getByRole("button", { name: /Tirage vertical à la poulie/ }),
+    ).toBeVisible();
+    await expect(
+      catalog
+        .locator(".catalog-results")
+        .getByRole("button", { name: /Développé couché/ }),
+    ).toHaveCount(0);
+    await muscleChips.getByRole("button", { name: "Tous les muscles" }).click();
+    await setCatalogEquipment(catalog, "");
+    await expect(
+      equipmentChips.getByRole("button", { name: "Tout matériel" }),
+    ).toHaveAttribute("aria-pressed", "true");
     await expect(
       catalog.getByRole("button", { name: "+ Créer un exercice personnalisé" }),
     ).toBeVisible();
@@ -513,7 +591,7 @@ for (const width of [320, 390]) {
       (element) => (element as HTMLElement).scrollTop,
     );
     const selected = catalog
-      .getByRole("list", { name: "Résultats du catalogue" })
+      .locator(".catalog-results")
       .getByRole("button", { name: new RegExp(officialName) });
     await selected.tap();
     const form = page.getByRole("dialog", { name: "Exercice" });
@@ -559,9 +637,16 @@ for (const width of [320, 390]) {
     const before = await readWorkouts(page);
     await page.getByRole("button", { name: "Changer l’exercice" }).tap();
     const catalog = catalogPage(page);
-    await expect(
-      catalog.getByRole("heading", { name: "Changer l’exercice" }),
-    ).toBeVisible();
+    const heading = catalog.getByRole("heading", {
+      name: "Changer l’exercice",
+    });
+    await expect(heading).toBeVisible();
+    await expect(heading).toHaveCSS("font-size", "18px");
+    expect(
+      await heading.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
     await catalog.getByRole("button", { name: "Retour" }).tap();
     await expect(catalog).toHaveCount(0);
     await expect(
@@ -578,7 +663,7 @@ for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 844 });
     await prepareEmptyWorkout(page);
     await catalogPage(page)
-      .getByRole("list", { name: "Résultats du catalogue" })
+      .locator(".catalog-results")
       .getByRole("button", { name: new RegExp(officialName) })
       .click();
     const form = page.getByRole("dialog", { name: "Exercice" });
@@ -623,7 +708,7 @@ for (const width of [320, 390]) {
     await expect(customCta).toBeVisible();
     expect((await customCta.boundingBox())?.y).toBe(ctaBounds?.y);
     await catalog
-      .getByRole("list", { name: "Résultats du catalogue" })
+      .locator(".catalog-results")
       .getByRole("button", { name: new RegExp(officialName) })
       .tap();
     const form = page.getByRole("dialog", { name: "Exercice" });
@@ -641,7 +726,7 @@ for (const width of [320, 390]) {
       .getByRole("searchbox", { name: "Rechercher un exercice" })
       .fill("Élévations latérales");
     await secondCatalog
-      .getByRole("list", { name: "Résultats du catalogue" })
+      .locator(".catalog-results")
       .getByRole("button", { name: /Élévations latérales aux haltères/ })
       .tap();
     const secondForm = page.getByRole("dialog", { name: "Exercice" });
@@ -691,7 +776,7 @@ for (const width of [320, 390]) {
     await addResult(page, officialName);
     const catalog = await openCatalog(page);
     await catalog
-      .getByRole("list", { name: "Résultats du catalogue" })
+      .locator(".catalog-results")
       .getByRole("button", { name: /Squat à la barre/ })
       .click();
     await page
@@ -729,7 +814,7 @@ for (const width of [320, 390]) {
     await page.getByRole("button", { name: "Changer l’exercice" }).tap();
     const replaceCatalog = catalogPage(page);
     await replaceCatalog
-      .getByRole("list", { name: "Résultats du catalogue" })
+      .locator(".catalog-results")
       .getByRole("button", { name: /Élévations latérales aux haltères/ })
       .tap();
     await expect(replaceCatalog).toHaveCount(0);
@@ -834,6 +919,7 @@ for (const width of [320, 390]) {
       },
     });
     const updatedCatalog = await openCatalog(page);
+    await updatedCatalog.getByRole("tab", { name: "Mes exercices" }).click();
     await updatedCatalog
       .getByRole("searchbox", { name: "Rechercher un exercice" })
       .fill("Presse convergente");
@@ -851,9 +937,7 @@ for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 844 });
     await prepareEmptyWorkout(page);
     const catalog = catalogPage(page);
-    const results = catalog.getByRole("list", {
-      name: "Résultats du catalogue",
-    });
+    const results = catalog.locator(".catalog-results");
     const search = catalog.getByRole("searchbox", {
       name: "Rechercher un exercice",
     });
@@ -867,7 +951,7 @@ for (const width of [320, 390]) {
       .getByRole("group", { name: "Filtrer par muscle" })
       .getByRole("button", { name: "Pectoraux" })
       .click();
-    await setCatalogEquipment(page, catalog, "barre");
+    await setCatalogEquipment(catalog, "barre");
     const result = results.getByRole("button", {
       name: /Développé couché à la barre/,
     });
@@ -940,54 +1024,41 @@ for (const width of [320, 390]) {
     const search = catalog.getByRole("searchbox", {
       name: "Rechercher un exercice",
     });
+    await catalog.getByRole("tab", { name: "Mes exercices" }).click();
     await search.fill(customName);
     await expect(
-      catalog.getByRole("heading", { name: "Mes exercices" }),
+      catalog.getByRole("list", { name: "Résultats de mes exercices" }),
     ).toBeVisible();
     await expect(
-      catalog.getByRole("heading", { name: "Catalogue" }),
-    ).toHaveCount(0);
-    await expect(catalog.locator(".catalog-section-heading span")).toHaveText([
-      "1",
-    ]);
+      catalog
+        .locator(".catalog-results")
+        .locator(".catalog-result")
+        .filter({ hasText: customName }),
+    ).toBeVisible();
+    await catalog.getByRole("tab", { name: "Catalogue" }).click();
+    await expect(catalog.getByText("Aucun exercice trouvé")).toBeVisible();
+    await search.fill(officialName);
+    await expect(
+      catalog
+        .locator(".catalog-results")
+        .getByRole("button", { name: new RegExp(officialName) }),
+    ).toBeVisible();
+    await catalog.getByRole("tab", { name: "Mes exercices" }).click();
+    await expect(catalog.getByText("Aucun exercice trouvé")).toBeVisible();
     await search.fill("presse");
     await catalog
       .getByRole("group", { name: "Filtrer par muscle" })
       .getByRole("button", { name: "Jambes" })
       .click();
-    await setCatalogEquipment(page, catalog, "machine");
+    await setCatalogEquipment(catalog, "machine");
+    await expect(catalog.locator(".catalog-results > li")).toHaveCount(1);
     await expect(
-      catalog.getByRole("heading", { name: "Mes exercices" }),
+      catalog.locator(".catalog-result").filter({ hasText: customName }),
     ).toBeVisible();
-    await expect(
-      catalog.getByRole("heading", { name: "Catalogue" }),
-    ).toBeVisible();
-    const sectionCounts = await catalog
-      .locator(".catalog-section")
-      .evaluateAll((sections) =>
-        sections.map((section) => ({
-          title: section.querySelector("h2")?.textContent,
-          visibleCount: Number(
-            section.querySelector(".catalog-section-heading span")?.textContent,
-          ),
-          rowCount: section.querySelectorAll(".catalog-section-list > li")
-            .length,
-        })),
-      );
-    const customSection = sectionCounts.find(
-      (section) => section.title === "Mes exercices",
-    );
-    const officialSection = sectionCounts.find(
-      (section) => section.title === "Catalogue",
-    );
-    expect(customSection?.visibleCount).toBe(customSection?.rowCount);
-    expect(officialSection?.visibleCount).toBe(officialSection?.rowCount);
-    const customCount = customSection?.rowCount ?? 0;
-    const officialCount = officialSection?.rowCount ?? 0;
-    expect(customCount).toBe(1);
-    expect(officialCount).toBeGreaterThan(0);
     await search.fill("mouvement-introuvable");
-    await expect(catalog.locator(".catalog-section")).toHaveCount(0);
+    await expect(
+      catalog.locator(".catalog-results > li:not(.catalog-empty)"),
+    ).toHaveCount(0);
     await expect(catalog.getByText("Aucun exercice trouvé")).toBeVisible();
     await expect(
       catalog.getByRole("button", {
@@ -999,9 +1070,7 @@ for (const width of [320, 390]) {
       .getByRole("group", { name: "Filtrer par muscle" })
       .getByRole("button", { name: "Tous les muscles" })
       .click();
-    await catalog
-      .getByRole("button", { name: "Retirer le filtre Machine" })
-      .click();
+    await setCatalogEquipment(catalog, "");
     const initialCustomMenu = await openCustomActions(page, customName);
     await expect(
       initialCustomMenu.getByRole("menuitem", {
@@ -1020,9 +1089,6 @@ for (const width of [320, 390]) {
       .fill(renamedCustomName);
     await editForm.getByRole("button", { name: "Enregistrer" }).click();
     await search.fill(renamedCustomName);
-    await expect(
-      catalog.getByRole("heading", { name: "Catalogue" }),
-    ).toHaveCount(0);
     await expect(
       catalog.getByRole("button", { name: `Options ${renamedCustomName}` }),
     ).toBeVisible();
@@ -1047,9 +1113,10 @@ for (const width of [320, 390]) {
       catalog.getByRole("button", { name: `Options ${renamedCustomName}` }),
     ).toHaveCount(0);
 
+    await catalog.getByRole("tab", { name: "Catalogue" }).click();
     await search.fill("Bench press");
     const official = catalog
-      .locator(".catalog-section-list li")
+      .locator(".catalog-results > li")
       .filter({ hasText: officialName });
     await expect(
       official.getByRole("button", { name: /Options|Modifier|Supprimer/ }),
@@ -1145,6 +1212,7 @@ for (const width of [320, 390]) {
     ).toEqual(targets);
 
     await openCatalog(page);
+    await catalog.getByRole("tab", { name: "Mes exercices" }).click();
     const multiMenu = await openCustomActions(page, "Press multi-muscles");
     await multiMenu
       .getByRole("menuitem", { name: "Modifier Press multi-muscles" })
