@@ -1,5 +1,17 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 
+function normalizeSrgbColorValues(value: string) {
+  return value.replace(
+    /color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\/\s*([\d.]+)\)/g,
+    (_, red: string, green: string, blue: string, alpha: string) => {
+      const channels = [red, green, blue].map((channel) =>
+        Math.round(Number(channel) * 255),
+      );
+      return `rgba(${channels.join(", ")}, ${Number(alpha).toFixed(2)})`;
+    },
+  );
+}
+
 async function capture(page: Page, info: TestInfo, name: string) {
   const path = info.outputPath(`${name}.png`);
   await page.screenshot({
@@ -304,6 +316,9 @@ for (const width of [390, 320]) {
       const alphaMatch = background.match(
         /rgba\([^,]+,\s*[^,]+,\s*[^,]+,\s*([^)]+)\)/,
       );
+      const srgbAlphaMatch = background.match(
+        /color\(srgb\s+[\d.]+\s+[\d.]+\s+[\d.]+\s*\/\s*([\d.]+)\)/,
+      );
       return {
         hostBottom: host.bottom,
         hostHeight: host.height,
@@ -326,7 +341,9 @@ for (const width of [390, 320]) {
           height: capsule.height,
           radius: surfaceStyle.borderRadius,
           background,
-          alpha: alphaMatch ? Number.parseFloat(alphaMatch[1]) : 1,
+          alpha: Number.parseFloat(
+            alphaMatch?.[1] ?? srgbAlphaMatch?.[1] ?? "1",
+          ),
           backdropFilter: surfaceStyle.backdropFilter,
           webkitBackdropFilter: surfaceStyle.webkitBackdropFilter,
           lensBackgroundImage: lensStyle.backgroundImage,
@@ -393,10 +410,11 @@ for (const width of [390, 320]) {
     }
     if (!geometry.supportsBackdrop && !geometry.supportsWebkitBackdrop)
       expect(geometry.capsule.alpha).toBeCloseTo(0.96, 2);
-    expect(geometry.capsule.lensBackgroundImage).toContain("rgba(23, 23, 27");
-    expect(geometry.capsule.lensBackgroundImage).toMatch(
-      /rgba\(23, 23, 27, 0\.17\)/,
+    const lensBackground = normalizeSrgbColorValues(
+      geometry.capsule.lensBackgroundImage,
     );
+    expect(lensBackground).toContain("rgba(23, 23, 27");
+    expect(lensBackground).toMatch(/rgba\(23, 23, 27, 0\.17\)/);
 
     await page.evaluate(() =>
       document.documentElement.style.setProperty(

@@ -16,8 +16,15 @@ const themeTokens = [...themeCss.matchAll(/^\s*(--[\w-]+):/gm)].map(
   (match) => match[1],
 );
 
-function tokenValue(token: string) {
+function tokenDefinition(token: string) {
   return themeCss.match(new RegExp(`${token}:\\s*([^;]+);`))?.[1].trim();
+}
+
+function tokenValue(token: string, seen: string[] = []): string | undefined {
+  if (seen.includes(token)) return undefined;
+  const value = tokenDefinition(token);
+  const alias = value?.match(/^var\((--[\w-]+)\)$/);
+  return alias ? tokenValue(alias[1], [...seen, token]) : value;
 }
 
 function isOrangeAccent(hex: string) {
@@ -85,6 +92,53 @@ describe("semantic theme token contract", () => {
     expect(tokenValue("--danger-border")).toBe("#8c3035");
     expect(tokenValue("--success")).toBe("#a8d8ba");
     expect(themeCss).not.toMatch(/--(?:danger|success):\s*var\(--accent\)/);
+    expect(tokenDefinition("--danger")).toMatch(/^var\(--palette-danger-/);
+    expect(tokenDefinition("--success")).toMatch(/^var\(--palette-success-/);
+    expect(tokenDefinition("--accent")).toMatch(/^var\(--palette-accent-/);
+  });
+
+  it("keeps generic palette primitives beneath semantic roles", () => {
+    const paletteTokens = themeTokens.filter((token) =>
+      /^--palette-(?:neutral|accent|earth|success|danger|cool)-\d{3}$/.test(
+        token,
+      ),
+    );
+
+    expect(paletteTokens.length).toBeGreaterThan(0);
+    for (const role of [
+      "--background",
+      "--surface",
+      "--surface-raised",
+      "--surface-inset",
+      "--line",
+      "--line-strong",
+      "--text",
+      "--muted",
+      "--accent",
+      "--success",
+      "--danger",
+    ]) {
+      expect(tokenDefinition(role)).toMatch(/^var\(--palette-/);
+    }
+  });
+
+  it("keeps component names exceptional in the palette", () => {
+    const componentTerms = [
+      "workout",
+      "catalog",
+      "exercise",
+      "set-block",
+      "bottom-navigation",
+      "dashboard",
+      "picker",
+      "rest",
+      "capsule",
+    ];
+    const componentTokens = themeTokens.filter((token) =>
+      componentTerms.some((term) => token.includes(term)),
+    );
+
+    expect(componentTokens.length).toBeLessThanOrEqual(5);
   });
 
   it("preserves the primary workout CTA gradient endpoint as an accent token", () => {
