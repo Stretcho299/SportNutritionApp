@@ -11,7 +11,7 @@ async function addExercise(
     .getByRole("dialog", { name: "Actions de la séance" })
     .getByRole("button", { name: "Ajouter un exercice", exact: true })
     .click();
-  const catalog = page.getByRole("dialog", { name: "Catalogue d’exercices" });
+  const catalog = page.getByRole("region", { name: "Catalogue d’exercices" });
   await catalog
     .getByRole("button", { name: "+ Créer un exercice personnalisé" })
     .click();
@@ -559,30 +559,40 @@ for (const width of [390, 320]) {
     expect(navBounds!.y + navBounds!.height).toBeCloseTo(844 + visualOffset, 0);
   });
 
-  test(`mobile short viewport bottom sheet at ${width}px`, async ({
+  test(`mobile short viewport catalog and custom sheet at ${width}px`, async ({
     page,
   }, info) => {
     await page.setViewportSize({ width, height: 844 });
     await page.goto("/");
     await createWorkoutAndOpenPreparation(page, "Force · Haut du corps");
-    // A short screen (e.g. keyboard) must allow page scrolling to all controls.
+    // The catalogue occupies the viewport; its create action stays reachable.
     await page.setViewportSize({ width, height: 480 });
     await page.getByRole("button", { name: "Gérer les exercices" }).click();
     await page
       .getByRole("dialog", { name: "Actions de la séance" })
       .getByRole("button", { name: "Ajouter un exercice", exact: true })
       .click();
-    const shortSheet = page.getByRole("dialog", {
+    const catalog = page.getByRole("region", {
       name: "Catalogue d’exercices",
     });
-    const shortHandle = shortSheet.getByRole("button", {
-      name: "Fermer le panneau",
-    });
-    await shortHandle.scrollIntoViewIfNeeded();
-    await expect(shortHandle).toBeInViewport();
-    await screenshot(page, info, "exercise-sheet-short-viewport");
+    await expect(catalog).toBeVisible();
+    await expect(
+      catalog.getByRole("button", { name: "+ Créer un exercice personnalisé" }),
+    ).toBeInViewport();
+    await screenshot(page, info, "exercise-catalog-short-viewport");
     await noOverflow(page);
-    await page.locator(".sheet-backdrop").dispatchEvent("pointerdown");
+    await catalog
+      .getByRole("button", { name: "+ Créer un exercice personnalisé" })
+      .click();
+    const customSheet = page.getByRole("dialog", {
+      name: "Créer un exercice personnalisé",
+    });
+    await expect(customSheet).toBeVisible();
+    const customBounds = await customSheet.boundingBox();
+    expect(customBounds).not.toBeNull();
+    expect(customBounds!.y + customBounds!.height).toBeCloseTo(480, 0);
+    await page.locator(".sheet-backdrop").click({ position: { x: 4, y: 4 } });
+    await expect(customSheet).toHaveCount(0);
   });
 
   test(`mobile persistent execution at ${width}px`, async ({ page }, info) => {

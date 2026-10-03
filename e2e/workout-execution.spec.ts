@@ -74,7 +74,7 @@ async function openCustomExercise(page: Page, name: string) {
     .getByRole("dialog", { name: /Actions de la séance/i })
     .getByRole("button", { name: /Ajouter un exercice/i })
     .click();
-  const catalog = page.getByRole("dialog", { name: "Catalogue d’exercices" });
+  const catalog = page.getByRole("region", { name: "Catalogue d’exercices" });
   await catalog
     .getByRole("button", { name: "+ Créer un exercice personnalisé" })
     .click();
@@ -304,13 +304,11 @@ test("keeps exercise options distinct and reachable beside finish at phone width
   }
 
   await page.getByRole("button", { name: "Changer l’exercice" }).click();
-  const replacementCatalog = page.getByRole("dialog", {
-    name: "Changer l’exercice",
+  const replacementCatalog = page.getByRole("region", {
+    name: "Catalogue d’exercices",
   });
   await expect(replacementCatalog).toBeVisible();
-  await replacementCatalog
-    .getByRole("button", { name: "Fermer le panneau" })
-    .press("Enter");
+  await replacementCatalog.getByRole("button", { name: "Retour" }).click();
   await expect(replacementCatalog).toHaveCount(0);
   await page.getByRole("button", { name: "Terminer l’exercice" }).click();
   await expect(

@@ -44,7 +44,7 @@ async function addExercise(page: Page, name: string) {
     .getByRole("button", { name: "Ajouter un exercice", exact: true })
     .click();
   await page
-    .getByRole("dialog", { name: "Catalogue d’exercices" })
+    .getByRole("region", { name: "Catalogue d’exercices" })
     .getByRole("button", { name: "+ Créer un exercice personnalisé" })
     .click();
   const custom = page.getByRole("dialog", {

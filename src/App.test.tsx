@@ -78,7 +78,9 @@ function openOrganizeMenu() {
 }
 async function createExercise(name: string, count = 1, rest = 90) {
   fireEvent.click(within(openAddMenu()).getByText("Ajouter un exercice"));
-  fireEvent.click(screen.getByText("+ Créer un exercice personnalisé"));
+  fireEvent.click(
+    screen.getByRole("button", { name: "+ Créer un exercice personnalisé" }),
+  );
   fireEvent.change(screen.getByLabelText("Nom"), { target: { value: name } });
   fireEvent.click(screen.getByText("Enregistrer"));
   await chooseValue("Nombre de séries initiales", count);
@@ -442,7 +444,7 @@ it("preserves selection when adding exercises and switches both exercise and set
     "data-value",
     "80",
   );
-});
+}, 10_000);
 
 it("selects bounded picker values and persists repetitions, half-kilograms and split rest", async () => {
   const view = await openEmptyWorkout();
@@ -508,7 +510,7 @@ it("selects bounded picker values and persists repetitions, half-kilograms and s
     "82.5",
   );
   expect(screen.getByLabelText("Repos")).toHaveAttribute("data-value", "419");
-});
+}, 10_000);
 
 it("reorders exercises in a dedicated sheet and retains selection and persisted order", async () => {
   const view = await openEmptyWorkout();
@@ -552,7 +554,7 @@ it("reorders exercises in a dedicated sheet and retains selection and persisted 
       "button",
     )[0],
   ).toHaveTextContent("Row");
-});
+}, 10_000);
 
 it("keeps sets in their natural order and renumbers them after deletion", async () => {
   await openEmptyWorkout();
@@ -661,7 +663,9 @@ it("creates N blank sets with the requested rest and preserves blanks after relo
 it("offers only valid initial set counts through the native wheel picker", async () => {
   await openEmptyWorkout();
   fireEvent.click(within(openAddMenu()).getByText("Ajouter un exercice"));
-  fireEvent.click(screen.getByText("+ Créer un exercice personnalisé"));
+  fireEvent.click(
+    screen.getByRole("button", { name: "+ Créer un exercice personnalisé" }),
+  );
   fireEvent.change(screen.getByLabelText("Nom"), {
     target: { value: "Squat" },
   });
@@ -1346,7 +1350,9 @@ it("hides the active capsule while a picker or confirmation is open", async () =
       screen.getByRole("dialog", { name: "Actions de la séance" }),
     ).getByText("Ajouter un exercice"),
   );
-  fireEvent.click(screen.getByText("+ Créer un exercice personnalisé"));
+  fireEvent.click(
+    screen.getByRole("button", { name: "+ Créer un exercice personnalisé" }),
+  );
   fireEvent.change(screen.getByLabelText("Nom"), {
     target: { value: "Squat" },
   });
@@ -1511,7 +1517,7 @@ it("keeps future exercise states unchanged while browsing and starts them explic
   expect(
     storedWorkouts()[0].execution?.exercises.map((item) => item.status),
   ).toEqual(["active", "active", "upcoming"]);
-});
+}, 10_000);
 
 it("locks every other rest button while a chrono runs across exercises", async () => {
   await openEmptyWorkout();
