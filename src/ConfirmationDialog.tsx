@@ -6,6 +6,7 @@ export type ConfirmationRequest = {
   description: string;
   cancelLabel?: string;
   confirmLabel: string;
+  destructive?: boolean;
   onConfirm: () => void;
 };
 
@@ -42,7 +43,7 @@ export function ConfirmationDialog({
       }}
     >
       <section
-        className="confirmation-dialog"
+        className={`confirmation-dialog${request.destructive ? " is-destructive" : ""}`}
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="confirmation-title"
@@ -80,7 +81,7 @@ export function ConfirmationDialog({
             {request.cancelLabel ?? "Annuler"}
           </button>
           <button
-            className="confirmation-submit"
+            className={`confirmation-submit${request.destructive ? " danger" : ""}`}
             onClick={() => finish(request.onConfirm)}
           >
             {request.confirmLabel}

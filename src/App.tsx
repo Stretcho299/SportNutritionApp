@@ -290,6 +290,7 @@ export default function App() {
       title: "Supprimer cet exercice personnalisé ?",
       description: `« ${definition.name} » disparaîtra du catalogue. Les séances et exercices déjà ajoutés seront conservés.`,
       confirmLabel: "Supprimer",
+      destructive: true,
       onConfirm: () => {
         updateCustomDefinitions(
           deleteCustomExercise(customDefinitions, definition.id),
@@ -682,20 +683,13 @@ export default function App() {
   };
   const removeWorkout = (id: string) => {
     const target = workouts.find((item) => item.id === id);
-    if (target)
-      requestConfirmation({
-        title: "Supprimer cette séance ?",
-        description: `« ${target.name} » et toutes ses données seront supprimés définitivement.`,
-        confirmLabel: "Supprimer",
-        onConfirm: () => {
-          update(workouts.filter((item) => item.id !== id));
-          if (workoutId === id) {
-            setWorkoutId("");
-            setExerciseId("");
-            navigate("list", "back");
-          }
-        },
-      });
+    if (!target) return;
+    update(workouts.filter((item) => item.id !== id));
+    if (workoutId === id) {
+      setWorkoutId("");
+      setExerciseId("");
+      navigate("list", "back");
+    }
   };
   const removeExercise = () => {
     if (!workout || !exercise) return;
@@ -736,6 +730,7 @@ export default function App() {
         title: "Supprimer cet exercice ?",
         description: `« ${exercise.name} » contient des valeurs ou une progression qui seront supprimées.`,
         confirmLabel: "Supprimer",
+        destructive: true,
         onConfirm: remove,
       });
     else remove();
@@ -883,6 +878,7 @@ export default function App() {
             ? `« ${exercise.name} » sera supprimé de la séance.`
             : "Les répétitions, la charge et le repos de cette série seront supprimés.",
         confirmLabel: "Supprimer",
+        destructive: true,
         onConfirm: remove,
       });
     else remove();
@@ -1468,7 +1464,9 @@ export default function App() {
                         <span>Terminer l’exercice</span>
                       </button>
                     ) : (
-                      <button onClick={removeExercise}>Supprimer</button>
+                      <button className="danger" onClick={removeExercise}>
+                        Supprimer
+                      </button>
                     )}
                   </div>
                 </section>
@@ -1695,7 +1693,10 @@ export default function App() {
                           executionSet(s.id)?.status !== "performed" &&
                           executionSet(s.id)?.status !== "skipped")) && (
                         <div className="order">
-                          <button onClick={() => removeSet(s.id)}>
+                          <button
+                            className="danger"
+                            onClick={() => removeSet(s.id)}
+                          >
                             <Icon name="trash" size={15} />
                             <span>Supprimer</span>
                           </button>
@@ -2014,6 +2015,7 @@ export default function App() {
                                     <button
                                       type="button"
                                       role="menuitem"
+                                      className="danger"
                                       aria-label={`Supprimer ${definition.name}`}
                                       onClick={() => {
                                         setCustomMenuId(null);
@@ -2339,14 +2341,21 @@ function WorkoutRow({
   onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const startX = useRef<number | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [dragOffsetX, setDragOffsetX] = useState(0);
+  const gesture = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    startTime: number;
+    baseOffset: number;
+    mode: "pending" | "horizontal" | "vertical";
+  } | null>(null);
   const moved = useRef(false);
-  const move = (clientX: number) => {
-    if (startX.current === null) return;
-    const distance = clientX - startX.current;
-    if (Math.abs(distance) > 8) moved.current = true;
-    if (distance < -36) setOpen(true);
-    if (distance > 36) setOpen(false);
+  const revealWidth = 102;
+  const settle = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    setDragOffsetX(nextOpen ? -revealWidth : 0);
   };
   const executionSets = workout.execution?.exercises.flatMap(
     (exercise) => exercise.sets,
@@ -2360,18 +2369,76 @@ function WorkoutRow({
     workout.execution?.status === "readyToFinish";
   return (
     <li
-      className={"workout-swipe" + (open ? " open" : "")}
+      className={
+        "workout-swipe" +
+        (open ? " open" : "") +
+        (dragging ? " is-dragging" : "")
+      }
       onPointerDown={(event) => {
-        startX.current = event.clientX;
+        if (event.button !== 0) return;
+        gesture.current = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          startTime: event.timeStamp,
+          baseOffset: open ? -revealWidth : 0,
+          mode: "pending",
+        };
         moved.current = false;
       }}
-      onPointerMove={(event) => move(event.clientX)}
+      onPointerMove={(event) => {
+        const active = gesture.current;
+        if (!active || active.pointerId !== event.pointerId) return;
+        const dx = event.clientX - active.startX;
+        const dy = event.clientY - active.startY;
+        if (active.mode === "pending") {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) < 8) return;
+          if (Math.abs(dy) > Math.abs(dx)) {
+            active.mode = "vertical";
+            moved.current = true;
+            return;
+          }
+          if (Math.abs(dx) < Math.abs(dy) * 1.15) return;
+          active.mode = "horizontal";
+          moved.current = true;
+          setDragging(true);
+          if (typeof event.currentTarget.setPointerCapture === "function") {
+            try {
+              event.currentTarget.setPointerCapture(event.pointerId);
+            } catch {
+              // Pointer capture may be unavailable in test environments.
+            }
+          }
+        }
+        if (active.mode !== "horizontal") return;
+        const nextOffset = Math.max(
+          -revealWidth,
+          Math.min(0, active.baseOffset + dx),
+        );
+        setDragOffsetX(nextOffset);
+      }}
       onPointerUp={(event) => {
-        move(event.clientX);
-        startX.current = null;
+        const active = gesture.current;
+        if (!active || active.pointerId !== event.pointerId) return;
+        if (active.mode === "horizontal") {
+          const dx = event.clientX - active.startX;
+          const elapsed = Math.max(1, event.timeStamp - active.startTime);
+          const velocityX = dx / elapsed;
+          const offset = Math.max(
+            -revealWidth,
+            Math.min(0, active.baseOffset + dx),
+          );
+          const flickOpen = dx < -32 && velocityX < -0.55;
+          const flickClosed = dx > 32 && velocityX > 0.55;
+          settle(flickOpen || (!flickClosed && offset <= -revealWidth * 0.42));
+          setDragging(false);
+        }
+        gesture.current = null;
       }}
       onPointerCancel={() => {
-        startX.current = null;
+        gesture.current = null;
+        setDragging(false);
+        settle(open);
       }}
     >
       <button
@@ -2387,13 +2454,14 @@ function WorkoutRow({
       </button>
       <button
         className={`row workout-card workout-card-${variant}${isActive ? " workout-card-active" : ""}`}
+        style={{ transform: `translateX(${dragOffsetX}px)` }}
         onClick={() => {
           if (moved.current) {
             moved.current = false;
             return;
           }
           if (open) {
-            setOpen(false);
+            settle(false);
             return;
           }
           onOpen();

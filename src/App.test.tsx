@@ -835,7 +835,7 @@ it("shows an active series and advances it when its rest ends", async () => {
   });
 });
 
-it("reveals a confirmed workout deletion action after a horizontal swipe", async () => {
+it("tracks workout swipes, preserves vertical movement, and deletes immediately", async () => {
   render(<App />);
   fireEvent.click(
     await screen.findByRole("button", { name: "Ouvrir Mes séances" }),
@@ -848,36 +848,116 @@ it("reveals a confirmed workout deletion action after a horizontal swipe", async
   };
   await create("Push");
   await create("Pull");
-  const card = screen.getByText("Push").closest("li")!;
-  fireEvent.pointerDown(card, { clientX: 160 });
-  fireEvent.pointerMove(card, { clientX: 80 });
-  fireEvent.pointerUp(card, { clientX: 80 });
+  let card = screen.getByText("Push").closest("li")!;
+  let cardButton = card.querySelector(".workout-card")!;
+  fireEvent.pointerDown(card, {
+    pointerId: 1,
+    button: 0,
+    clientX: 160,
+    clientY: 100,
+  });
+  fireEvent.pointerMove(card, {
+    pointerId: 1,
+    clientX: 140,
+    clientY: 102,
+  });
+  expect(cardButton).toHaveStyle({ transform: "translateX(-20px)" });
+  fireEvent.pointerUp(card, {
+    pointerId: 1,
+    button: 0,
+    clientX: 140,
+    clientY: 102,
+  });
+  expect(card).not.toHaveClass("open");
+
+  fireEvent.pointerDown(card, {
+    pointerId: 2,
+    button: 0,
+    clientX: 160,
+    clientY: 100,
+  });
+  fireEvent.pointerMove(card, {
+    pointerId: 2,
+    clientX: 100,
+    clientY: 100,
+  });
+  expect(cardButton).toHaveStyle({ transform: "translateX(-60px)" });
+  fireEvent.pointerUp(card, {
+    pointerId: 2,
+    button: 0,
+    clientX: 100,
+    clientY: 100,
+  });
   expect(card).toHaveClass("open");
-  const cardButton = card.querySelector(".workout-card")!;
-  fireEvent.pointerDown(cardButton, { clientX: 80 });
-  fireEvent.pointerUp(cardButton, { clientX: 80 });
+  fireEvent.click(cardButton);
+  expect(card).toHaveClass("open");
+  fireEvent.pointerDown(cardButton, {
+    pointerId: 5,
+    button: 0,
+    clientX: 100,
+    clientY: 100,
+  });
+  fireEvent.pointerUp(cardButton, {
+    pointerId: 5,
+    button: 0,
+    clientX: 100,
+    clientY: 100,
+  });
   fireEvent.click(cardButton);
   expect(card).not.toHaveClass("open");
   expect(
     screen.getByRole("heading", { name: "Mes séances", level: 1 }),
   ).toBeInTheDocument();
-  fireEvent.pointerDown(card, { clientX: 160 });
-  fireEvent.pointerMove(card, { clientX: 80 });
-  fireEvent.pointerUp(card, { clientX: 80 });
-  fireEvent.click(screen.getByRole("button", { name: "Supprimer Push" }));
-  const deleteDialog = screen.getByRole("alertdialog", {
-    name: "Supprimer cette séance ?",
+  fireEvent.click(cardButton);
+  expect(
+    screen.getByRole("heading", { name: "Push", level: 1 }),
+  ).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Retour aux séances" }));
+  await waitForMotion();
+  card = screen.getByText("Push").closest("li")!;
+  cardButton = card.querySelector(".workout-card")!;
+
+  fireEvent.pointerDown(card, {
+    pointerId: 3,
+    button: 0,
+    clientX: 160,
+    clientY: 100,
   });
-  await clickAndWaitForMotion(
-    within(deleteDialog).getByRole("button", { name: "Annuler" }),
-  );
-  expect(screen.getByText("Push")).toBeInTheDocument();
+  fireEvent.pointerMove(card, {
+    pointerId: 3,
+    clientX: 160,
+    clientY: 40,
+  });
+  fireEvent.pointerUp(card, {
+    pointerId: 3,
+    button: 0,
+    clientX: 160,
+    clientY: 40,
+  });
+  expect(card).not.toHaveClass("open");
+  expect(cardButton).toHaveStyle({ transform: "translateX(0px)" });
+
+  fireEvent.pointerDown(card, {
+    pointerId: 4,
+    button: 0,
+    clientX: 160,
+    clientY: 100,
+  });
+  fireEvent.pointerMove(card, {
+    pointerId: 4,
+    clientX: 80,
+    clientY: 100,
+  });
+  fireEvent.pointerUp(card, {
+    pointerId: 4,
+    button: 0,
+    clientX: 80,
+    clientY: 100,
+  });
+  expect(card).toHaveClass("open");
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Supprimer Push" }));
-  await clickAndWaitForMotion(
-    within(
-      screen.getByRole("alertdialog", { name: "Supprimer cette séance ?" }),
-    ).getByRole("button", { name: "Supprimer" }),
-  );
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
   expect(screen.queryByText("Push")).not.toBeInTheDocument();
   expect(storedWorkouts().map((workout) => workout.name)).toEqual(["Pull"]);
 });
@@ -1194,8 +1274,18 @@ it("hides the active capsule while a picker or confirmation is open", async () =
   fireEvent.click(screen.getByText("Enregistrer"));
   await waitForMotion();
   fireEvent.click(screen.getByRole("button", { name: "Supprimer Pull" }));
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  expect(screen.queryByText("Pull")).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Reprendre la séance Push" }),
+  ).toBeVisible();
+
+  fireEvent.click(
+    screen.getByRole("button", { name: "Reprendre la séance Push" }),
+  );
+  fireEvent.click(screen.getByText("Terminer l’exercice"));
   const confirmation = screen.getByRole("alertdialog", {
-    name: "Supprimer cette séance ?",
+    name: "Mettre fin à cet exercice ?",
   });
   expect(
     screen.queryByRole("button", { name: "Reprendre la séance Push" }),
@@ -1203,13 +1293,13 @@ it("hides the active capsule while a picker or confirmation is open", async () =
   await clickAndWaitForMotion(
     within(confirmation).getByRole("button", { name: "Annuler" }),
   );
+  fireEvent.click(screen.getByLabelText("Retour aux séances"));
   expect(
     screen.getByRole("button", { name: "Reprendre la séance Push" }),
   ).toBeVisible();
-  fireEvent.click(screen.getByText("Pull").closest("button")!);
-  expect(
+  fireEvent.click(
     screen.getByRole("button", { name: "Reprendre la séance Push" }),
-  ).toBeVisible();
+  );
 
   fireEvent.click(screen.getByLabelText("Gérer les exercices"));
   expect(

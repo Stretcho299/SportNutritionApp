@@ -1,6 +1,6 @@
 # État du projet SportNutritionApp
 
-Dernière mise à jour : 1er octobre 2026
+Dernière mise à jour : 3 octobre 2026
 
 Ce document est la source de vérité de continuité pour le produit, son
 architecture, ses invariants et sa roadmap. En cas de divergence, vérifier
@@ -24,8 +24,8 @@ implémentée dans l’application. Les spikes Ciqual et Open Food Facts dans
 
 - Branche stable : `main`.
 - État : l’issue #57 est fermée et la PR #58 est mergée dans `main`, au 1er octobre 2026.
-- Commit de référence : `99c2a5230914818741da5d0e96528eef84af1806`.
-- CI de référence : Web CI post-merge #110 réussie sur ce commit. Le job Ubuntu / Node 20 exécute format, lint, Vitest et build; il ne lance pas Playwright.
+- Commit de référence : `d0c53bf611e5c7173ad31d5f985726af509c084d`.
+- CI de référence : Web CI post-merge #110 réussie sur `99c2a5230914818741da5d0e96528eef84af1806`. Le job Ubuntu / Node 20 exécute format, lint, Vitest et build; il ne lance pas Playwright.
 - Référence Vitest de la PR #58 : 127/127. `npm run lint` conserve un avertissement Fast Refresh préexistant dans `src/OrientationGuard.tsx`, sans erreur.
 - Validation Playwright de la PR #58 : scénarios ciblés mouvement Chromium et WebKit 12/12 à 320 et 390 px. La suite complète n’a pas été relancée pour son dernier diff ; le run précédent était à 143/146, les cas restants ayant réussi au rejeu documenté.
 
@@ -201,7 +201,7 @@ stabilisées restent gelées : BottomSheet, clavier/visualViewport,
 lifecycle, stockage, cascade KG/REPS/REPOS, glass/lens, offsets et
 `100lvh`/`100dvh`, sauf nécessité directement démontrée.
 
-### Issue #52 reportée ; #55/#56 et #57/#58 livrées ; passe active #59
+### Issue #52 reportée ; #55/#56, #57/#58 et #59/#60 livrées ; passe active #61
 
 [Issue #52 — évaluer les retours haptiques pour la PWA](https://github.com/Stretcho299/SportNutritionApp/issues/52) est **CLOSED / not planned** pour la PWA actuelle. WebKit sur iPhone ne fournit pas la Web Vibration API standard utilisée par l’expérimentation : `navigator.vibrate` est absent dans le WebKit local et l’essai physique de la PWA standalone n’a produit aucune vibration.
 
@@ -213,7 +213,7 @@ La correction capture un timestamp unique dans `startRest`, synchronise immédia
 
 [Issue #57 — unifier le mouvement des écrans et la continuité visuelle](https://github.com/Stretcho299/SportNutritionApp/issues/57) et #58 sont livrées dans `main@99c2a5230914818741da5d0e96528eef84af1806`.
 
-[Issue #59 — fondation catalogue d'exercices](https://github.com/Stretcho299/SportNutritionApp/issues/59) est la passe active. Elle ajoute un catalogue officiel local de 69 exercices consultables, un registre d'exercices personnalisés créables/modifiables/supprimables et deux niveaux de taxonomie musculaire. Les occurrences dans les templates et snapshots de sessions embarquent une copie de la définition au moment de l'ajout; les anciennes occurrences libres restent sans association automatique. La base IndexedDB reste en version 2 avec un champ optionnel `customDefinitions` dans l'enveloppe. Voir `docs/exercise-catalog-sources.md` pour les références et licences.
+[Issue #59 — fondation catalogue d'exercices](https://github.com/Stretcho299/SportNutritionApp/issues/59) et sa [PR #60](https://github.com/Stretcho299/SportNutritionApp/pull/60) sont livrées dans `main@d0c53bf611e5c7173ad31d5f985726af509c084d`. Elles ajoutent un catalogue officiel local de 69 exercices consultables, un registre d'exercices personnalisés créables/modifiables/supprimables et deux niveaux de taxonomie musculaire. Les occurrences dans les templates et snapshots de sessions embarquent une copie de la définition au moment de l'ajout; les anciennes occurrences libres restent sans association automatique. La base IndexedDB reste en version 2 avec un champ optionnel `customDefinitions` dans l'enveloppe. Voir `docs/exercise-catalog-sources.md` pour les références et licences.
 
 La sélection catalogue distingue explicitement l’ajout et le remplacement. En préparation, remplacer un officiel conserve l’occurrence, sa position, ses séries et leurs repos, et efface ses anciennes charges/répétitions et notes. Modifier une définition custom propage son nom et son snapshot vers les occurrences de tous les templates, sans réécrire les sessions historiques. Les exercices officiels portent aussi un identifiant d’illustration local optionnel ; l’icône haltère reste le fallback jusqu’à une passe dédiée aux assets et licences.
 
@@ -221,9 +221,11 @@ Pendant une séance active, un exercice peut être remplacé tant qu’aucune de
 
 Le catalogue présente désormais les exercices personnels et officiels dans deux sections filtrées indépendamment par la même recherche. Chaque résultat réserve un emplacement visuel réutilisable avec l’icône haltère en fallback ; les assets réels restent reportés à une passe dédiée aux illustrations et licences.
 
+L’issue #61 est active. La suppression d’une séance suit le geste jusqu’à révéler « Supprimer »; le tap sur ce bouton supprime immédiatement sans confirmation. Le reorder de la timeline garde une destination atteignable hors viewport pendant un seul maintien avec auto-scroll.
+
 ### Étapes futures
 
-La passe active est l’issue #59 sur le catalogue local. Les autres axes ci-dessous restent futurs; aucun ordre après cette
+La passe active est l’issue #61 sur les interactions destructives et le reorder. Les autres axes ci-dessous restent futurs; aucun ordre après cette
 passe n’est confirmé :
 
 - Résumé enrichi de fin de séance et consultation UI de l’historique. L’écran
